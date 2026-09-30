@@ -218,6 +218,7 @@ def test_not_enough_data_does_not_resolve(rw, ws):
 
 
 def test_done_recommendation_is_left_for_measurement(rw, ws):
+    rw.execute("INSERT INTO workspace_settings (workspace_id, target_cpa) VALUES (%s, 3000)", (ws["ws"],))  # review
     snap = sync(rw, ws)
     audit(rw, ws, "d1")
     rec, finding = rw.execute("""SELECT r.id, r.finding_id FROM recommendations r JOIN issues i ON i.id = r.issue_id
@@ -225,7 +226,7 @@ def test_done_recommendation_is_left_for_measurement(rw, ws):
     rw.execute("""INSERT INTO recommendation_events (recommendation_id, type, actor_user_id, finding_id, execution_date,
                                                      created_at)
                   VALUES (%s, 'done', %s, %s, %s, %s)""", (rec, ws["user"], finding, EXECUTED, EVENT_AT))
-    snapshot_like(rw, ws, ws["account"], snap, eval_cost=38400, eval_conv=10)
+    snapshot_like(rw, ws, ws["account"], snap, eval_cost=30000, eval_conv=10)  # CPA = цели: проблемы нет
     audit(rw, ws, "d2")
     assert events(rw, ws) == ["done"] and open_issues(rw, ws) == 1      # закроет замер, не resolved
 

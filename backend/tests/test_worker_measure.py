@@ -29,6 +29,9 @@ def long_subscription(rw, ws):
     """Окна замера считаются от часов БД — подписка должна покрывать их независимо от даты прогона."""
     rw.execute("UPDATE subscriptions SET current_period_end = now() + interval '1 year' WHERE workspace_id = %s",
                (ws["ws"],))
+    # целевой CPA задан: вывод предлагает изменение (review) — только на нём возможен 'done' и замер.
+    # Без цели вывод — inspect_only («проверить»): там 'checked', замера нет (test_safety_policy.py)
+    rw.execute("INSERT INTO workspace_settings (workspace_id, target_cpa) VALUES (%s, 3000)", (ws["ws"],))
 
 
 def recommendation(rw, ws):
@@ -89,7 +92,6 @@ def audited(rw, ws):
 # --- Главный сценарий: −15% → −25% → done(−25%) → замер именно −25% ------------------------------
 
 def test_measurement_follows_the_version_that_was_done(rw, ws):
-    rw.execute("INSERT INTO workspace_settings (workspace_id, target_cpa) VALUES (%s, 3000)", (ws["ws"],))
     snap = sync(rw, ws)
     audit(rw, ws, "d1")                                                     # CPA 5 250 → −15%
     rec, finding_a = recommendation(rw, ws)

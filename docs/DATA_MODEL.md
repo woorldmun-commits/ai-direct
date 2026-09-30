@@ -184,7 +184,7 @@ PK (`user_id`, `workspace_id`), `role` — в MVP только `owner` (`admin`/
 
 **Точность `execution_date` гарантирует приложение, не БД.** API пишет `done` с одним моментом события `event_at`: `created_at = event_at`, `execution_date = execution_date(event_at)` (`ZoneInfo("Europe/Moscow")`). CHECK в БД — только санитарная вторая линия: `execution_date` в пределах ±1 дня от UTC-даты `created_at`. Ошибку на соседний день он не ловит (для 30.09 21:30 UTC верно 01.10, но 30.09 тоже пройдёт — `test_execution_date_db_check_is_sanity_only`). От этой даты зависят окна замера, поэтому писать `done` в обход `execution_date()` нельзя.
 
-Ссылки на объекты — колонками с составными FK, не в JSON: (`finding_id`, `issue_id`) → `findings`, (`explanation_id`, `finding_id`) → `explanations`, (`result_id`, `recommendation_id`, `finding_id`) → `recommendation_results`. `finding_id` обязателен ровно у `seen_again` · `done` · `measured`; `explanation_id` — у `seen_again`; `result_id` — у `measured`. Триггер: `done` допустим только над выводом, который показывали (исходный вывод рекомендации или пришедший через `seen_again`). В `payload` остаются только данные без идентичности (`until` у `postponed`).
+Ссылки на объекты — колонками с составными FK, не в JSON: (`finding_id`, `issue_id`) → `findings`, (`explanation_id`, `finding_id`) → `explanations`, (`result_id`, `recommendation_id`, `finding_id`) → `recommendation_results`. `finding_id` обязателен ровно у `seen_again` · `done` · `checked` · `measured`; `explanation_id` — у `seen_again`; `result_id` — у `measured`. Триггер: `done` и `checked` допустимы только над выводом, который показывали, и только по его `action_level` (§8.3) (исходный вывод рекомендации или пришедший через `seen_again`). В `payload` остаются только данные без идентичности (`until` у `postponed`).
 
 ### `recommendation_results` [A]
 `id`, `recommendation_id`, `issue_id` (триггер), `finding_id` — замеренная версия действия, `measurement_id` (триггер: замер последнего `done`; FK (`measurement_id`, `recommendation_id`, `finding_id`)), `snapshot_id` (NULL только у `insufficient` без данных), `release_id`, `before` / `after` jsonb `{имя: Value}`, `saved` jsonb `Value` (`estimated`, с формулой; только при `effect`), `verdict` (`effect` · `no_effect` · `not_confirmed` — CPA снизился, но конверсий меньше · `insufficient`), `effect` jsonb (наблюдаемое изменение и причина вердикта), `created_at`. Триггер: `finding_id` результата = `finding_id` последнего `done`.
@@ -251,16 +251,18 @@ PK (`user_id`, `workspace_id`), `role` — в MVP только `owner` (`admin`/
 ```
 new ──▶ postponed ──(дата)──▶ new
  │
- ├──▶ rejected (с причиной, опционально)
- ├──▶ done (пользователь отметил «Выполнено»)
- │        └──(+7 дней, задача verify)──▶ measured {effect | no_effect | insufficient}
+ ├──▶ rejected («Не буду», с причиной, опционально)
+ ├──▶ checked («Проверил» — только при action_level = inspect_only; изменений не было, замера нет)
+ ├──▶ done («Я сделал это» — только при review / change)
+ │        └──(+7 дней, задача verify)──▶ measured {effect | not_confirmed | no_effect | insufficient}
  └──▶ resolved (проблема исчезла в следующем аудите без действий пользователя)
 ```
+Что человек может сделать — зависит от уровня, который разрешила политика безопасности (ARCHITECTURE.md §4.1): `inspect_only` → «Проверил» · «Позже»; `review` / `change` → «Я сделал это» · «Не буду» · «Позже». Триггер отклоняет `done` над `inspect_only`-выводом и `checked` над остальными. Замер «Сэкономлено» создаётся только по `done`, поэтому после «Проверил» его не бывает — без отдельного флага допуска к замеру. В MVP изменения выполняются вручную и backend не может проверить, что настройку действительно поменяли, — поэтому кнопка честно называется «Я сделал это», а не «Выполнено». v2.0: исполнение через Direct API — события `applied` / `apply_failed`, замер после `applied`.
 Служебные события, не меняющие статус: `seen_again` (проблема подтвердилась новым аудитом), `measurement_skipped` (замер невозможен: подписка/подключение неактивны).
 
 **Пересчёт действия без новой рекомендации.** Аудит #1: CPA 5 000 → «снизить на 15%»; аудит #2: CPA 7 000 → «снизить на 25%». Проблема та же, рекомендация та же. Каждый аудит создаёт новый неизменяемый `finding` (со своим `action`) и `explanation` к нему; событие `seen_again` с колонками `finding_id`, `explanation_id` связывает их с рекомендацией. UI показывает последний вывод — история не переписывается. Отдельный тип события `recalculated` не нужен: это `seen_again`, у которого изменился `action`.
 
-**Что именно выполнил человек.** `done.finding_id` обязателен (CHECK) и должен быть выводом этой же проблемы, который показывали (FK + триггер): пользователь нажал «Выполнено», глядя на конкретную версию действия (−15% или −25%). Именно её замеряет `verify`.
+**Что именно выполнил человек.** `done.finding_id` обязателен (CHECK) и должен быть выводом этой же проблемы, который показывали (FK + триггер): пользователь нажал «Я сделал это», глядя на конкретную версию действия (−15% или −25%). Именно её замеряет `verify`.
 
 **Разделение источников истины:** схема БД — для инвариантов; код — для бизнес-расчётов; события — для истории.
 v2.0 добавит между `new` и `done`: `approved → applying → applied | apply_failed` и `rolled_back` — отдельными типами событий, без изменения схемы.

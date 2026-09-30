@@ -11,7 +11,7 @@ from app.audit.templates import explain
 from test_rule_high_cpa import NO_TARGET, TARGET, audit, only, snap
 from test_direct_sync import root  # noqa: F401 — фикстура
 from test_metrika_sync import metrika  # noqa: F401 — фикстура
-from test_schema import chain, one, value  # noqa: F401 — фикстура
+from test_schema import EVENT_AT, EXECUTED, chain, one, value  # noqa: F401 — фикстура
 from test_worker_audit import audit as worker_audit, fresh, sync  # noqa: F401 — fresh: autouse-фикстура
 from test_worker_sync import ws  # noqa: F401 — фикстура
 
@@ -103,3 +103,53 @@ def test_audit_stores_policy_decision_and_explains_it(rw, ws):
     assert row[:6] == ("high_cpa_target@1", "safety_policy@1", "decrease_bid", "change", "review",
                        ["data_sufficiency_medium", "strategy_unknown"])            # 8 конверсий — medium
     assert "проверьте перед изменением" in row[6]
+
+
+# --- «Проверил» ≠ «Я сделал это»: замер «Сэкономлено» — только после изменения ------------------------
+
+def recommendation_after_audit(rw, ws, target=None):
+    if target:
+        rw.execute("INSERT INTO workspace_settings (workspace_id, target_cpa) VALUES (%s, %s)", (ws["ws"], target))
+    sync(rw, ws)
+    worker_audit(rw, ws, "outcome")
+    return rw.execute("""SELECT r.id, r.finding_id, f.action_level FROM recommendations r
+                         JOIN issues i ON i.id = r.issue_id JOIN findings f ON f.id = r.finding_id
+                         WHERE i.workspace_id = %s ORDER BY r.id DESC LIMIT 1""", (ws["ws"],)).fetchone()
+
+
+def human(rw, ws, rec, finding, type_):
+    rw.execute("""INSERT INTO recommendation_events (recommendation_id, type, actor_user_id, finding_id, execution_date,
+                                                     created_at) VALUES (%s, %s, %s, %s, %s, %s)""",
+               (rec, type_, ws["user"], finding, EXECUTED if type_ == "done" else None, EVENT_AT))
+
+
+def measurements(rw, rec):
+    return one(rw, "SELECT count(*) FROM measurements WHERE recommendation_id = %s", rec)
+
+
+def test_inspect_only_is_checked_and_never_measured(rw, ws):
+    rec, finding, level = recommendation_after_audit(rw, ws)                 # без цели: «проверить причину»
+    assert level == "inspect_only"
+    with pytest.raises(psycopg.errors.IntegrityConstraintViolation, match="done is not allowed"):
+        human(rw, ws, rec, finding, "done")                                  # «сделал» — нечего было делать
+    human(rw, ws, rec, finding, "checked")
+    assert measurements(rw, rec) == 0                                        # «Сэкономлено» после проверки нет
+
+
+def test_suggested_change_is_done_and_measured(rw, ws):
+    rec, finding, level = recommendation_after_audit(rw, ws, target=3000)
+    assert level == "review"
+    with pytest.raises(psycopg.errors.IntegrityConstraintViolation, match="checked is not allowed"):
+        human(rw, ws, rec, finding, "checked")                               # изменение предлагали — не «проверка»
+    human(rw, ws, rec, finding, "done")
+    assert measurements(rw, rec) == 1
+
+
+def test_checked_needs_author_and_version(rw, ws):
+    rec, finding, _ = recommendation_after_audit(rw, ws)
+    with pytest.raises(psycopg.errors.CheckViolation):
+        rw.execute("INSERT INTO recommendation_events (recommendation_id, type, finding_id) VALUES (%s, 'checked', %s)",
+                   (rec, finding))                                           # без автора
+    with pytest.raises(psycopg.errors.CheckViolation):
+        rw.execute("""INSERT INTO recommendation_events (recommendation_id, type, actor_user_id)
+                      VALUES (%s, 'checked', %s)""", (rec, ws["user"]))      # без версии вывода

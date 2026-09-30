@@ -546,12 +546,13 @@ CREATE TABLE recommendation_events (
   recommendation_id bigint NOT NULL,
   issue_id          bigint NOT NULL,
   type              text NOT NULL CHECK (type IN (
-                      -- действия человека
-                      'postponed', 'rejected', 'done',
+                      -- действия человека: done — «Я сделал это» (review/change); checked — «Проверил» (inspect_only:
+                      -- изменений в рекламе не было, поэтому и замера «Сэкономлено» нет); rejected — «Не буду»
+                      'postponed', 'rejected', 'done', 'checked',
                       -- системные
                       'unpostponed', 'seen_again', 'resolved', 'measured', 'measurement_skipped')),
   actor_user_id     bigint REFERENCES users,
-  finding_id        bigint,  -- seen_again: новый вывод · done: выполненная версия · measured: замеренная версия
+  finding_id        bigint,  -- seen_again: новый вывод · done: выполненная версия · checked: проверенная · measured: замеренная
   explanation_id    bigint,  -- seen_again: объяснение к новому выводу
   result_id         bigint,  -- measured
   payload           jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(payload) = 'object'),
@@ -569,12 +570,12 @@ CREATE TABLE recommendation_events (
   FOREIGN KEY (result_id, recommendation_id, finding_id)
     REFERENCES recommendation_results (id, recommendation_id, finding_id),
   -- действия человека — только с автором; системные — только без
-  CHECK ((type IN ('postponed', 'rejected', 'done')) = (actor_user_id IS NOT NULL)),
+  CHECK ((type IN ('postponed', 'rejected', 'done', 'checked')) = (actor_user_id IS NOT NULL)),
   CHECK (type <> 'postponed' OR payload ? 'until'),
   -- пересчёт: новый неизменяемый вывод и объяснение к нему; UI показывает последний
   CHECK ((type = 'seen_again') = (explanation_id IS NOT NULL)),
   -- человек выполнил конкретную версию действия (-15% или -25%) — именно её потом и замеряем
-  CHECK ((type IN ('seen_again', 'done', 'measured')) = (finding_id IS NOT NULL)),
+  CHECK ((type IN ('seen_again', 'done', 'checked', 'measured')) = (finding_id IS NOT NULL)),
   CHECK ((type = 'measured') = (result_id IS NOT NULL))
 );
 CREATE INDEX recommendation_events_current ON recommendation_events (recommendation_id, id DESC);
@@ -649,15 +650,27 @@ CREATE TRIGGER recommendation_events_issue BEFORE INSERT ON recommendation_event
 CREATE TRIGGER recommendation_results_issue BEFORE INSERT ON recommendation_results
   FOR EACH ROW EXECUTE FUNCTION fill_issue_from_recommendation();
 
--- 'done' — только над версией действия, которую человеку показывали: исходной или пришедшей через seen_again.
+-- 'done' и 'checked' — только над версией действия, которую человеку показывали: исходной или пришедшей через
+-- seen_again. И только по уровню, который разрешила политика безопасности (ARCHITECTURE.md §4.1):
+-- inspect_only → только checked (менять ничего не советовали — «сделал» невозможно, замера не будет);
+-- review / change → только done.
 CREATE FUNCTION check_done_finding_was_shown() RETURNS trigger
 LANGUAGE plpgsql AS $$
+DECLARE level text;
 BEGIN
-  IF NEW.type = 'done' AND NEW.finding_id IS NOT NULL AND NOT (
+  IF NEW.type NOT IN ('done', 'checked') OR NEW.finding_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+  IF NOT (
        EXISTS (SELECT 1 FROM recommendations WHERE id = NEW.recommendation_id AND finding_id = NEW.finding_id)
     OR EXISTS (SELECT 1 FROM recommendation_events WHERE recommendation_id = NEW.recommendation_id
                  AND type = 'seen_again' AND finding_id = NEW.finding_id)) THEN
     RAISE EXCEPTION 'finding % was never shown for recommendation %', NEW.finding_id, NEW.recommendation_id
+      USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  SELECT action_level INTO level FROM findings WHERE id = NEW.finding_id;
+  IF (NEW.type = 'done') = (level = 'inspect_only') THEN
+    RAISE EXCEPTION '% is not allowed for finding % with action level %', NEW.type, NEW.finding_id, level
       USING ERRCODE = 'integrity_constraint_violation';
   END IF;
   RETURN NEW;
