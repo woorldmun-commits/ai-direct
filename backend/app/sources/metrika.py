@@ -3,12 +3,14 @@
 
 Метрика — диагностический источник: здоровье счётчика и целей, сверка с конверсиями из отчёта Директа.
 Норматив CPA — отчёт Директа (sources/conversion.py). Источник отдаёт сырой JSON; разбор — sync/metrika_parse.py.
-Реализации: MetrikaFixture. MetrikaApi — вместе с DirectApi, когда будет доступ."""
+Реализации: MetrikaFixture (тесты) и MetrikaApi (api-metrika.yandex.net, только чтение)."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from typing import Protocol
+
+import httpx
 
 from app.sources.conversion import ConversionDefinition
 
@@ -72,3 +74,38 @@ class MetrikaFixture:
 
     def fetch_bytime(self, spec: MetrikaReportSpec) -> str:
         return (self._counter(spec.counter_id) / "bytime.json").read_text(encoding="utf-8")
+
+
+# --- API ------------------------------------------------------------------------------------------------------
+
+API_URL = "https://api-metrika.yandex.net"
+# HTTP-статус → код источника. Токен — тот же API-приложения, что у Директа (права metrika:read).
+_STATUS_CODES = {400: "invalid_request", 401: "access_denied", 403: "access_denied", 404: "counter_not_found"}
+
+
+@dataclass(frozen=True)
+class MetrikaApi:
+    """Management API (счётчики, цели) и Reporting API (/stat/v1/data/bytime) — только чтение, сырой JSON.
+    Ошибки → MetrikaUnavailable с кодом; сеть, 429 и 5xx — report_unavailable (повторит следующая синхронизация)."""
+    http: httpx.Client
+    access_token: str = field(repr=False)
+
+    def _get(self, path: str, params: dict, counter_id: int) -> str:
+        try:
+            r = self.http.get(f"{API_URL}{path}", params=params, timeout=60,
+                              headers={"Authorization": f"OAuth {self.access_token}"})
+        except httpx.TransportError:
+            raise MetrikaUnavailable(counter_id, "report_unavailable") from None
+        if r.status_code == 200:
+            return r.text
+        raise MetrikaUnavailable(counter_id, _STATUS_CODES.get(r.status_code, "report_unavailable"))
+
+    def fetch_goals(self, counter_id: int) -> str:
+        return self._get(f"/management/v1/counter/{counter_id}/goals", {}, counter_id)
+
+    def fetch_bytime(self, spec: MetrikaReportSpec) -> str:
+        return self._get("/stat/v1/data/bytime", {k: v for k, v in spec.params().items() if v}, spec.counter_id)
+
+    def fetch_counters(self) -> str:
+        """Счётчики, доступные токену, — для онбординга (sources/metrika_discovery.py)."""
+        return self._get("/management/v1/counters", {"per_page": "1000", "status": "Active"}, 0)
