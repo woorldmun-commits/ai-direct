@@ -60,8 +60,8 @@ def audit(rw, ws, account, snap, release, issue_key, change_pct):
     else:
         issue_id = issue[0]
     finding = one(rw, """INSERT INTO findings (audit_run_id, issue_id, rule_version, lost, recoverable, data_quality,
-                           evidence, action)
-                         VALUES (%s, %s, 'high_cpa_target@1', %s, %s, 'medium', %s, %s) RETURNING id""",
+                           evidence, action, safety_policy, candidate_level, action_level)
+                         VALUES (%s, %s, 'high_cpa_target@1', %s, %s, 'medium', %s, %s, 'safety_policy@1', 'review', 'review') RETURNING id""",
                   run, issue_id, Jsonb(value(snapshot_id=snap)),
                   Jsonb(value(snapshot_id=snap, calculation_type="estimated", formula="(cpa - target) * conv")),
                   Jsonb({"target_cpa": value(snapshot_id=snap, source="user_input", amount="3000.00")}),

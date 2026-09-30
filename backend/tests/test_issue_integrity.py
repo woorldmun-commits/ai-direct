@@ -24,8 +24,8 @@ def add_finding(rw, chain, issue, change_pct):
                                                 rules_run)
                        VALUES (%s, %s, 'scheduled', gen_random_uuid()::text, '2026-09-30', '{}', '{high_cpa_target@1}')
                        RETURNING id""", chain["ws"], chain["release"])
-    finding = one(rw, """INSERT INTO findings (audit_run_id, issue_id, rule_version, lost, recoverable, data_quality, evidence, action)
-                         VALUES (%s, %s, 'high_cpa_target@1', %s, %s, 'medium', '{}', %s) RETURNING id""",
+    finding = one(rw, """INSERT INTO findings (audit_run_id, issue_id, rule_version, lost, recoverable, data_quality, evidence, action, safety_policy, candidate_level, action_level)
+                         VALUES (%s, %s, 'high_cpa_target@1', %s, %s, 'medium', '{}', %s, 'safety_policy@1', 'review', 'review') RETURNING id""",
                   audit, issue, Jsonb(value()), Jsonb(value()), Jsonb({"type": "decrease_bid", "change_pct": change_pct}))
     expl = one(rw, "INSERT INTO explanations (finding_id, source, text, release_id) VALUES (%s, 'template', 't', %s) RETURNING id",
                finding, chain["release"])

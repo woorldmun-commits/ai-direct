@@ -473,7 +473,16 @@ CREATE TABLE findings (
   data_quality text NOT NULL CHECK (data_quality IN ('high', 'medium', 'low')),
   evidence     jsonb NOT NULL CHECK (evidence_is_valid(evidence)),
   evidence_meta jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(evidence_meta) = 'object'),
-  action       jsonb NOT NULL CHECK (jsonb_typeof(action) = 'object' AND action ? 'type'),
+  action       jsonb NOT NULL CHECK (jsonb_typeof(action) = 'object' AND action ? 'type'),  -- кандидат от правила
+  -- Политика безопасности (app/audit/policy.py): какой уровень действие требует и какой разрешён.
+  -- inspect_only < review < change; политика только понижает, причина понижения — в policy_reasons.
+  safety_policy   text NOT NULL CHECK (safety_policy ~ '^[a-z0-9_]+@[0-9]+$'),
+  candidate_level text NOT NULL CHECK (candidate_level IN ('inspect_only', 'review', 'change')),
+  action_level    text NOT NULL CHECK (action_level IN ('inspect_only', 'review', 'change')),
+  policy_reasons  text[] NOT NULL DEFAULT '{}',
+  CHECK (array_position(array['inspect_only', 'review', 'change'], action_level)
+         <= array_position(array['inspect_only', 'review', 'change'], candidate_level)),
+  CHECK ((action_level = candidate_level) = (cardinality(policy_reasons) = 0)),
   created_at   timestamptz NOT NULL DEFAULT now(),
   UNIQUE (audit_run_id, issue_id),
   UNIQUE (id, issue_id)  -- цель составных FK: вывод принадлежит конкретной проблеме

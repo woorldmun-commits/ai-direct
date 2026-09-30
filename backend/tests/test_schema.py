@@ -68,8 +68,8 @@ def chain(rw):
                               VALUES (%s, %s, %s, 'high_cpa', 'campaign', 12345) RETURNING id""",
                        ids["ws"], ids["account"], ids["issue_key"])
     ids["finding"] = one(rw, """INSERT INTO findings (audit_run_id, issue_id, rule_version, lost, recoverable,
-                                  data_quality, evidence, action)
-                                VALUES (%s, %s, 'high_cpa_target@1', %s, %s, 'medium', %s, %s) RETURNING id""",
+                                  data_quality, evidence, action, safety_policy, candidate_level, action_level)
+                                VALUES (%s, %s, 'high_cpa_target@1', %s, %s, 'medium', %s, %s, 'safety_policy@1', 'review', 'review') RETURNING id""",
                          audit, ids["issue"], Jsonb(value()),
                          Jsonb(value(calculation_type="estimated", formula="(cpa - target) * conv")),
                          Jsonb({"clicks": value(unit="count", amount=487)}),
@@ -173,8 +173,8 @@ def chain_factory_second_finding(rw, chain):
     issue = one(rw, """INSERT INTO issues (workspace_id, direct_account_id, issue_key, issue_type, object_type, object_id)
                        VALUES (%s, %s, %s, 'zero_conv_campaign', 'campaign', 777) RETURNING id""",
                 chain["ws"], chain["account"], key(chain["ws"], "zero_conv", 777))
-    finding = one(rw, """INSERT INTO findings (audit_run_id, issue_id, rule_version, lost, recoverable, data_quality, evidence, action)
-                         VALUES (%s, %s, 'zero_conv_campaign@1', %s, %s, 'high', '{}', '{"type": "pause"}') RETURNING id""",
+    finding = one(rw, """INSERT INTO findings (audit_run_id, issue_id, rule_version, lost, recoverable, data_quality, evidence, action, safety_policy, candidate_level, action_level)
+                         VALUES (%s, %s, 'zero_conv_campaign@1', %s, %s, 'high', '{}', '{"type": "pause"}', 'safety_policy@1', 'review', 'review') RETURNING id""",
                   audit, issue, Jsonb(value()), Jsonb(value()))
     return {"issue": issue, "finding": finding}
 

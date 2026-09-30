@@ -219,7 +219,8 @@ def test_deterministic_and_immutable(s, settings):
 
 
 def test_current_data_quality_does_not_block_action():
-    """1 конверсия при заданном target: качество low, но клиент задал бизнес-цель — действие остаётся."""
+    """1 конверсия при заданном target: правило всё равно предлагает кандидата — понижает его политика
+    безопасности (tests/test_safety_policy.py), а не правило."""
     f = only(audit(snap(eval_cost=5000, eval_conv=1), TARGET))
     assert f.current_data_quality == "low" and f.action["type"] == "decrease_bid"
 
