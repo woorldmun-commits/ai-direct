@@ -211,7 +211,7 @@ PK (`user_id`, `workspace_id`), `role` — в MVP только `owner` (`admin`/
 
 ### `notifications` [O]
 `id`, `workspace_id`, `kind` (`digest` · `correction` · `new_problem` · `critical` · `billing`), `channel` (`telegram` · `email`), `dedup_key` UNIQUE, `digest_id` NULL, `snapshot_id` NULL, `payload` jsonb, `status` (`queued` · `sent` · `failed` · `skipped`), `attempts`, `created_at`, `sent_at`.
-`dedup_key` = `kind:workspace:object:date` — повтор не создаёт второе сообщение.
+`dedup_key` = `kind:workspace:object:date` — повтор не создаёт второе сообщение. `date` — день самого события в поясе данных, не день доставки: повторная доставка outbox-события на следующий день не даёт дубль. Причина `skipped` — `payload.skip_reason` (`subscription_inactive`, `workspace_inactive`, `no_recipient`).
 
 ## 7. Биллинг и бесплатный аудит
 

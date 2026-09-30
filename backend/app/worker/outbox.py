@@ -24,6 +24,7 @@ class OutboxEvent:
     aggregate_type: str
     aggregate_id: int
     payload: Mapping
+    created_at: datetime  # момент события: по нему — дневная дедупликация, а не по моменту доставки
 
 
 class PublishError(Exception):
@@ -48,7 +49,7 @@ def emit(conn: psycopg.Connection, workspace_id: int, event_type: str, aggregate
 
 def _claim(conn: psycopg.Connection, now: datetime, limit: int) -> list[OutboxEvent]:
     with conn.transaction():
-        rows = conn.execute("""SELECT id, workspace_id, event_type, aggregate_type, aggregate_id, payload
+        rows = conn.execute("""SELECT id, workspace_id, event_type, aggregate_type, aggregate_id, payload, created_at
                                FROM outbox_events
                                WHERE delivered_at IS NULL AND available_at <= %s
                                  AND (locked_until IS NULL OR locked_until < %s)
