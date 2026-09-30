@@ -1,4 +1,5 @@
 pydantic>=2
 psycopg[binary]
+cryptography>=43  # AES-GCM для OAuth-токенов подключений
 httpx>=0.27  # Yandex OAuth, API Директа и Метрики; в тестах — MockTransport, без сети
 tzdata  # часовой пояс данных (Europe/Moscow) для срока хранения; в slim-образах системной базы поясов нет
