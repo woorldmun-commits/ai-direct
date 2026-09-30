@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 import psycopg
 from psycopg.types.json import Jsonb
 
-from app.audit.measurement import PARAMS, POLICY, measure_cpa
+from app.audit.measurement import METHODS, measure_cpa
 from app.audit.values import to_value
 from app.rules.domain import Window
 from app.sync.store import load_view
@@ -136,7 +136,7 @@ def run_measurement(conn: psycopg.Connection, measurement_id: int, *, release_id
         return Skipped("measurement_not_found")
     if done := _finished(conn, m):
         return done
-    if m.policy != POLICY:
+    if m.policy not in METHODS:
         return Skipped("no_method_for_policy", m.policy)  # методики для этого семейства ещё нет
     if isinstance(d := guard(Task.MEASURE, load_state(conn, m.workspace_id, None, now)), Skip):
         return _skip(conn, m, d)
@@ -145,7 +145,7 @@ def run_measurement(conn: psycopg.Connection, measurement_id: int, *, release_id
         return Pending("window_open")
     snap = _snapshot(conn, m)
     if snap is None:
-        if today <= m.after.date_to + timedelta(days=PARAMS["final_data_wait_days"]):
+        if today <= m.after.date_to + timedelta(days=METHODS[m.policy]["final_data_wait_days"]):
             return Pending("data_not_final")
         return _write(conn, m, release_id=release_id, now=now, snapshot=None, verdict="insufficient",
                       before={}, after={}, saved=None, effect={"reason": "no_data_for_window"})
@@ -153,11 +153,11 @@ def run_measurement(conn: psycopg.Connection, measurement_id: int, *, release_id
         return _write(conn, m, release_id=release_id, now=now, snapshot=snap, verdict="insufficient",
                       before={}, after={}, saved=None, effect={"reason": "conversion_definition_changed"})
     days = [d for d in load_view(conn, snap[0]).campaign_days if d.campaign_id == m.campaign_id]
-    r = measure_cpa(days, m.before, m.after)
+    r = measure_cpa(days, m.before, m.after, METHODS[m.policy])
 
     def values(facts):
-        return {k: to_value(f, snap[0], snap[1], POLICY).model_dump(mode="json") for k, f in facts.items()}
-    saved = to_value(r.saved, snap[0], snap[1], POLICY).model_dump(mode="json") if r.saved else None
+        return {k: to_value(f, snap[0], snap[1], m.policy).model_dump(mode="json") for k, f in facts.items()}
+    saved = to_value(r.saved, snap[0], snap[1], m.policy).model_dump(mode="json") if r.saved else None
     return _write(conn, m, release_id=release_id, now=now, snapshot=snap, verdict=r.verdict,
                   before=values(r.before), after=values(r.after), saved=saved, effect=dict(r.effect))
 

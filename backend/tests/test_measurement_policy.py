@@ -1,11 +1,12 @@
-"""Методика high_cpa_measure@1 на обычных данных, без БД: «Сэкономлено» — только когда эффект доказан."""
+"""Методика замера high_cpa на обычных данных, без БД: «Сэкономлено» — только когда эффект доказан.
+По умолчанию — текущая high_cpa_measure@2; @1 — историческая, проверяется отдельно."""
 
 from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
 
-from app.audit.measurement import measure_cpa
+from app.audit.measurement import METHODS, measure_cpa
 from app.rules.domain import CampaignDay, Window
 
 DONE = date(2026, 9, 30)
@@ -32,16 +33,28 @@ def test_effect_saved_is_computed_from_volume_actually_achieved():
     assert m.before["cost"].amount == 50000                                # день выполнения не вошёл в окна
 
 
-def test_cheaper_cpa_from_cutting_volume_is_not_savings():
-    """CPA 5 000 → 3 500, но конверсий 10 → 4: снижение CPA за счёт урезанной рекламы — не «Сэкономлено»."""
+def test_cheaper_cpa_with_fewer_conversions_is_not_confirmed_savings():
+    """CPA 5 000 → 3 500, но конверсий 10 → 4: стоимость заявки снизилась, но экономия не подтверждена —
+    заявок стало меньше. Не «без эффекта»: изменение CPA сохраняется и показывается."""
     m = measure_cpa(days(50000, 10, 14000, 4), BEFORE, AFTER)
-    assert (m.verdict, m.saved, m.effect["reason"]) == ("no_effect", None, "conversions_dropped")
-    assert m.effect["cpa_change_pct"] == "-30.0"                            # наблюдаемый эффект сохраняется
+    assert (m.verdict, m.saved, m.effect["reason"]) == ("not_confirmed", None, "conversions_dropped")
+    assert (m.effect["cpa_change_pct"], m.effect["conversions_change_pct"]) == ("-30.0", "-60.0")
 
 
-@pytest.mark.parametrize("after_conv, verdict", [(8, "effect"), (7, "no_effect")])  # граница падения 20%
-def test_conversion_drop_boundary(after_conv, verdict):
-    assert measure_cpa(days(50000, 10, 3000 * after_conv, after_conv), BEFORE, AFTER).verdict == verdict
+@pytest.mark.parametrize("before_conv, after_conv, verdict", [
+    (10, 10, "effect"), (10, 9, "not_confirmed"), (10, 8, "not_confirmed"),  # @2: conv_after ≥ conv_before
+    (100, 90, "not_confirmed"), (100, 101, "effect"),
+])
+def test_conversions_must_not_drop(before_conv, after_conv, verdict):
+    m = measure_cpa(days(5000 * before_conv, before_conv, 3000 * after_conv, after_conv), BEFORE, AFTER)
+    assert m.verdict == verdict
+
+
+@pytest.mark.parametrize("after_conv, verdict", [(8, "effect"), (7, "no_effect")])  # @1: допуск падения 20%
+def test_legacy_v1_keeps_its_own_rule(after_conv, verdict):
+    """Замеры, созданные по @1, пересчитываются только своей методикой — результат не меняется задним числом."""
+    m = measure_cpa(days(50000, 10, 3000 * after_conv, after_conv), BEFORE, AFTER, METHODS["high_cpa_measure@1"])
+    assert m.verdict == verdict
 
 
 @pytest.mark.parametrize("args, verdict, reason", [

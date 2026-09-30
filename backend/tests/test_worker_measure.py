@@ -100,7 +100,7 @@ def test_measurement_follows_the_version_that_was_done(rw, ws):
     assert one(rw, "SELECT action->>'change_pct' FROM findings WHERE id = %s", finding_b) == "-25"
 
     m = done(rw, ws, rec, finding_b)
-    assert m["finding"] == finding_b and m["policy"] == "high_cpa_measure@1"
+    assert m["finding"] == finding_b and m["policy"] == "high_cpa_measure@2"
     # окна — от дня выполнения, который передало приложение; сам день — ни в одном окне
     assert (m["before_from"], m["before_to"]) == (EXECUTED - timedelta(7), EXECUTED - timedelta(1))
     assert (m["after_from"], m["after_to"]) == (EXECUTED + timedelta(1), EXECUTED + timedelta(7))
@@ -113,7 +113,7 @@ def test_measurement_follows_the_version_that_was_done(rw, ws):
     assert finding == finding_b and finding != finding_a
     # «Сэкономлено» воспроизводимо: 10 × (5 000 − 3 500), снимок, окно «после», методика и формула — в Value
     assert (Decimal(saved["amount"]), saved["snapshot_id"], saved["rule_version"]) == \
-        (Decimal("15000.00"), measured_snap, "high_cpa_measure@1")
+        (Decimal("15000.00"), measured_snap, "high_cpa_measure@2")
     assert (saved["period_from"], saved["period_to"]) == (m["after_from"].isoformat(), m["after_to"].isoformat())
     assert saved["formula"] == "conversions_after * (cpa_before - cpa_after)" and snapshot_id == measured_snap
     assert one(rw, "SELECT close_reason FROM issues i JOIN recommendations r ON r.issue_id = i.id WHERE r.id = %s",

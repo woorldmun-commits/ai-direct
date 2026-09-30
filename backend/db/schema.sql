@@ -520,7 +520,7 @@ CREATE TABLE recommendation_results (
   before            jsonb NOT NULL CHECK (evidence_is_valid(before)),
   after             jsonb NOT NULL CHECK (evidence_is_valid(after)),
   saved             jsonb CHECK (saved IS NULL OR (value_is_valid(saved) AND saved->>'calculation_type' = 'estimated')),
-  verdict           text NOT NULL CHECK (verdict IN ('effect', 'no_effect', 'insufficient')),
+  verdict           text NOT NULL CHECK (verdict IN ('effect', 'no_effect', 'not_confirmed', 'insufficient')),
   -- наблюдаемое изменение и причина вердикта (cpa_change_pct, conversions_change_pct, reason); saved — отдельно
   effect            jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(effect) = 'object'),
   created_at        timestamptz NOT NULL DEFAULT now(),
@@ -595,14 +595,14 @@ CREATE TABLE measurements (
 );
 
 -- День выполнения — execution_date события 'done' (его считает приложение в часовом поясе данных).
--- measure@1: 7 дней до дня выполнения и 7 дней после; сам день выполнения не входит ни в одно окно.
+-- measure@2 (текущая; @1 — только для уже созданных замеров): 7 дней до дня выполнения и 7 дней после; сам день выполнения не входит ни в одно окно.
 CREATE FUNCTION create_measurement_on_done() RETURNS trigger
 LANGUAGE plpgsql AS $$
 DECLARE d date := NEW.execution_date;
 BEGIN
   INSERT INTO measurements (done_event_id, recommendation_id, issue_id, finding_id, policy,
                             before_from, before_to, after_from, after_to)
-  SELECT NEW.id, NEW.recommendation_id, NEW.issue_id, NEW.finding_id, i.issue_type || '_measure@1',
+  SELECT NEW.id, NEW.recommendation_id, NEW.issue_id, NEW.finding_id, i.issue_type || '_measure@2',
          d - 7, d - 1, d + 1, d + 7
   FROM issues i
   WHERE i.id = NEW.issue_id;

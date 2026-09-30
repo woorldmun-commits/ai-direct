@@ -1,9 +1,14 @@
 """Методика замера эффекта выполненной рекомендации high_cpa — чистая функция, как правила (ARCHITECTURE.md §5).
 
-observed effect (что произошло) и saved («Сэкономлено», что продукт вправе показать) — разные вещи.
-saved = конверсии_после × (CPA_до − CPA_после): деньги, сэкономленные на фактически полученных конверсиях против
-прежнего CPA. Падение CPA за счёт урезанного объёма рекламы в saved не превращается: при заметном падении конверсий
-или росте CPA saved = NULL. Любое сомнение — NULL, а не оптимистичная оценка."""
+observed effect (что произошло: изменение CPA и конверсий) и saved («Сэкономлено», что продукт вправе показать) —
+разные вещи. saved = конверсии_после × max(CPA_до − CPA_после, 0): расходы, сэкономленные на фактически полученном
+объёме против прежнего CPA. Падение CPA за счёт урезанного объёма в saved не превращается. Любое сомнение — NULL.
+
+Версии методики (замер хранит свою в measurements.policy и пересчитывается только ею):
+- high_cpa_measure@2 — текущая: экономия подтверждается только при конверсиях_после ≥ конверсий_до; иначе
+  verdict = not_confirmed («стоимость заявки снизилась, но экономия не подтверждена: заявок стало меньше»).
+- high_cpa_measure@1 — историческая (допуск падения конверсий 20%, при падении — no_effect). Новые замеры по ней не
+  создаются; остаётся для воспроизводимости уже сделанных."""
 
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
@@ -11,15 +16,21 @@ from typing import Iterable, Literal, Mapping
 
 from app.rules.domain import CampaignDay, Fact, Window, frozen
 
-POLICY = "high_cpa_measure@1"
-# Стартовые параметры методики, не статистические пороги. Любое изменение — новая версия (…_measure@2); старые
-# замеры остаются на @1 и не пересчитываются.
-PARAMS = frozen({
+# Параметры — часть версии: любое изменение — новая версия, старые замеры не пересчитываются.
+_V1 = {
     "min_before_conversions": 3,     # меньше — CPA «до» слишком шумный, сравнивать не с чем
-    # drop_pct = (conv_before − conv_after) / conv_before × 100; drop_pct > 20 → saved = NULL (ровно 20% — допустимо)
+    # drop_pct = (conv_before − conv_after) / conv_before × 100; drop_pct > limit → saved = NULL
     "max_conversion_drop_pct": 20,
+    "conversions_dropped_verdict": "no_effect",
     "final_data_wait_days": 14,      # сколько ждать окончательных данных за окно «после»; дальше — insufficient
-})
+}
+METHODS = {
+    "high_cpa_measure@1": frozen(_V1),
+    "high_cpa_measure@2": frozen({**_V1, "max_conversion_drop_pct": 0,  # conv_after ≥ conv_before
+                                  "conversions_dropped_verdict": "not_confirmed"}),
+}
+POLICY = "high_cpa_measure@2"  # по ней создаются новые замеры (триггер на 'done' в schema.sql)
+PARAMS = METHODS[POLICY]
 CENT = Decimal("0.01")
 CPA_FORMULA = "period_total_spend / period_total_conversions"
 SAVED_FORMULA = "conversions_after * (cpa_before - cpa_after)"
@@ -28,7 +39,7 @@ DM = "yandex_direct+yandex_metrika"
 
 @dataclass(frozen=True)
 class Measured:
-    verdict: Literal["effect", "no_effect", "insufficient"]
+    verdict: Literal["effect", "no_effect", "not_confirmed", "insufficient"]
     before: Mapping[str, Fact]
     after: Mapping[str, Fact]
     saved: Fact | None
@@ -68,6 +79,6 @@ def measure_cpa(days: Iterable[CampaignDay], before: Window, after: Window, para
     if cpa_a >= cpa_b:
         return result("no_effect", "cpa_not_lower", **observed)
     if a_conv < b_conv * (1 - Decimal(params["max_conversion_drop_pct"]) / 100):
-        return result("no_effect", "conversions_dropped", **observed)
+        return result(params["conversions_dropped_verdict"], "conversions_dropped", **observed)
     saved = Fact((a_conv * (cpa_b - cpa_a)).quantize(CENT, ROUND_HALF_UP), "rub", DM, after, "estimated", SAVED_FORMULA)
     return result("effect", "cpa_lower_at_same_volume", saved, **observed)
