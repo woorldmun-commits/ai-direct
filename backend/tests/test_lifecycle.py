@@ -33,7 +33,7 @@ def sync(rw, ws, account, release, cpa_cost: int):
                             data_until, partial_from, sources, conversion_definition)
                           VALUES (%s, %s, %s, %s, %s, now(), %s, '{yandex_direct,yandex_metrika}',
                                   '{"provider": "yandex_metrika", "counter_id": 555, "goal_ids": [1, 2],
-                                    "attribution": "lastsign"}') RETURNING id""",
+                                    "attribution": "cross_device_last_significant"}') RETURNING id""",
                    ws, run, release, D0, D0 + dt.timedelta(DAYS - 1), D0 + dt.timedelta(DAYS - 3))
         with rw.cursor() as cur:
             cur.executemany(

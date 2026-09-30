@@ -98,6 +98,7 @@ def test_closed_issue_cannot_be_reopened(rw, chain):
     "UPDATE sync_runs SET status = 'failed', finished_at = now(), error_code = 'x', "
     "error_reason = 'Server said: login ivan.petrov' WHERE id = %s",              # текст сервера с ПД
     "UPDATE workspace_settings SET attribution_model = 'linear' WHERE workspace_id = %s",
+    "UPDATE workspace_settings SET attribution_model = 'lastsign' WHERE workspace_id = %s",  # устаревшая модель
 ])
 def test_codes_not_free_text(rw, chain, sql):
     if "workspace_settings" in sql:

@@ -7,12 +7,15 @@
 
 from dataclasses import dataclass
 
-# Каноничные имена — как в Метрике; Директ называет те же модели своими кодами.
+# Каноничные имена — как в API Метрики; Директ называет те же модели своими кодами. Только модели, которые API
+# считают сами: устаревшие (lastsign/LSC, first/FC, last_yandex_direct_click/LYDC) Яндекс молча подменяет
+# ближайшими (с 25.06.2026 в Метрике; Директ — с предупреждением), и снимок записал бы не ту модель, по которой
+# посчитаны конверсии.
 ATTRIBUTION_DIRECT_CODE = {
-    "lastsign": "LSC",                   # последний значимый переход
-    "last": "LC",                        # последний переход
-    "first": "FC",                       # первый переход
-    "last_yandex_direct_click": "LYDC",  # последний переход из Директа
+    "cross_device_last_significant": "LSCCD",  # последний значимый переход, все устройства
+    "last": "LC",                              # последний переход
+    "cross_device_first": "FCCD",              # первый переход, все устройства
+    "automatic": "AUTO",                       # автоматическая атрибуция
 }
 MAX_GOALS = 10  # предел параметра Goals в Reports API Директа
 
@@ -21,7 +24,7 @@ MAX_GOALS = 10  # предел параметра Goals в Reports API Дире�
 class ConversionDefinition:
     counter_id: int
     goal_ids: tuple[int, ...]
-    attribution: str = "lastsign"
+    attribution: str = "cross_device_last_significant"
 
     def __post_init__(self):
         if not self.goal_ids or len(self.goal_ids) > MAX_GOALS:

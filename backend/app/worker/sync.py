@@ -70,7 +70,7 @@ def _load_run(conn: psycopg.Connection, sync_run_id: int) -> _Run | None:
     row = conn.execute("""
         SELECT r.id, r.workspace_id, r.direct_account_id, r.status, r.started_at,
                coalesce(a.client_login, c.yandex_login), r.metrika_counter_id,
-               mc.counter_id, mc.goal_ids, coalesce(ws.attribution_model, 'lastsign')
+               mc.counter_id, mc.goal_ids, coalesce(ws.attribution_model, 'cross_device_last_significant')
         FROM sync_runs r
         JOIN direct_accounts a ON a.id = r.direct_account_id
         JOIN direct_connections c ON c.id = a.direct_connection_id

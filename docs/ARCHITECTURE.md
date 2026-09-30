@@ -170,6 +170,7 @@ class DirectSource(Protocol):
 ### 2.8 Метрика
 - Reports API `/stat/v1/data/bytime`, `group=day`, `accuracy=full`, без dimensions → строки `site_goal` (`campaign_id = NULL`, `object_id = goal_id`). Logs API не используем.
 - `ConversionDefinition` (счётчик, цели, атрибуция) — одно на оба запроса: в Директ уходят `Goals` + `AttributionModels`, в Метрику — метрики `ym:s:goal<id>reaches` + `attribution`. Копия хранится в `snapshots.conversion_definition`.
+- Модели атрибуции — только те, что API считают сами: `cross_device_last_significant` (Директ `LSCCD`, по умолчанию), `last` (`LC`), `cross_device_first` (`FCCD`), `automatic` (`AUTO`). Устаревшие (`LSC`, `FC`, `LYDC`) Яндекс подменяет ближайшими — в снимке оказалась бы не та модель, по которой посчитаны конверсии; схема и `ConversionDefinition` их не принимают.
 - Парсер строже Директа: эхо `query` (счётчик, метрики, период, группировка) обязано совпасть с запросом, `sampled = true` отвергается, интервалы покрывают период день в день. Названия целей не сохраняются.
 - Ошибки API — `access_denied` · `counter_not_found` · `goal_not_found` · `invalid_request` · `report_unavailable` · `invalid_report_format`: снимок пишется без Метрики, код — в `snapshots.source_failures`. Ноль конверсий — данные, не ошибка.
 - Правила объявляют не только API-источники, но и возможность `direct_conversions` (в отчёте Директа есть конверсии по кампаниям). CPA-правила требуют её, а не `yandex_metrika`.

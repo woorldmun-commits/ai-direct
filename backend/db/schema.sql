@@ -136,7 +136,7 @@ CREATE TABLE workspace_settings (
   avg_check            numeric(14, 2) CHECK (avg_check > 0),
   lead_to_sale_rate    numeric(5, 4) CHECK (lead_to_sale_rate > 0 AND lead_to_sale_rate <= 1),
   notify_pct_threshold smallint NOT NULL DEFAULT 10 CHECK (notify_pct_threshold IN (10, 15, 20)),
-  attribution_model    text CHECK (attribution_model IN ('lastsign', 'last', 'first', 'last_yandex_direct_click')),
+  attribution_model    text CHECK (attribution_model IN ('cross_device_last_significant', 'last', 'cross_device_first', 'automatic')),
   updated_at           timestamptz NOT NULL DEFAULT now()
 );
 
@@ -275,7 +275,7 @@ CREATE TABLE snapshots (
     AND jsonb_typeof(conversion_definition->'counter_id') = 'number'
     AND jsonb_typeof(conversion_definition->'goal_ids') = 'array'
     AND jsonb_array_length(conversion_definition->'goal_ids') BETWEEN 1 AND 10
-    AND conversion_definition->>'attribution' IN ('lastsign', 'last', 'first', 'last_yandex_direct_click'))),
+    AND conversion_definition->>'attribution' IN ('cross_device_last_significant', 'last', 'cross_device_first', 'automatic'))),
   -- Необязательный источник, который не удалось получить: {"yandex_metrika": "access_denied"}.
   -- Директ здесь не бывает: без отчёта Директа снимка нет вовсе (sync_run.failed).
   source_failures jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(source_failures) = 'object'

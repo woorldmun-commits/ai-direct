@@ -139,6 +139,8 @@ def test_malformed_report_is_a_sync_failure(metrika):
 @pytest.mark.parametrize("kwargs", [
     dict(goal_ids=()), dict(goal_ids=tuple(range(1, 12))), dict(goal_ids=(222, 111)), dict(goal_ids=(111, 111)),
     dict(goal_ids=(111,), attribution="linear"),
+    # устаревшие модели: Яндекс подменил бы их другой — снимок записал бы не ту модель
+    dict(goal_ids=(111,), attribution="lastsign"), dict(goal_ids=(111,), attribution="last_yandex_direct_click"),
 ])
 def test_invalid_conversion_definition(kwargs):
     with pytest.raises(ValueError):
@@ -146,18 +148,18 @@ def test_invalid_conversion_definition(kwargs):
 
 
 def test_one_definition_drives_both_requests():
-    d = ConversionDefinition(555, (111, 222), "last_yandex_direct_click")
-    assert d.direct_columns() == ("Conversions_111_LYDC", "Conversions_222_LYDC")
+    d = ConversionDefinition(555, (111, 222), "automatic")
+    assert d.direct_columns() == ("Conversions_111_AUTO", "Conversions_222_AUTO")
     spec = MetrikaReportSpec.for_definition(d, FROM, TO)
-    assert spec.params()["attribution"] == "last_yandex_direct_click"
+    assert spec.params()["attribution"] == "automatic"
     assert spec.metrics == ("ym:s:goal111reaches", "ym:s:goal222reaches")
     assert ConversionDefinition.from_json(d.to_json()) == d
 
 
 def test_direct_report_for_other_attribution_is_rejected(root):
     """Отчёт с колонками старой атрибуции не выдаётся за новую: столбцы не совпадают с запросом."""
-    root("acc")  # fixture Директа построена для lastsign (…_LSC)
-    changed = dataclasses.replace(GOALS, attribution="last_yandex_direct_click")
+    root("acc")  # fixture Директа построена для cross_device_last_significant (…_LSCCD)
+    changed = dataclasses.replace(GOALS, attribution="automatic")
     assert sync_account(DirectFixture(root.path), "acc", changed, TO) == \
         SyncFailure("acc", "invalid_report_format", "unexpected_column")
 
@@ -222,7 +224,7 @@ def test_new_settings_do_not_change_old_snapshot(rw, chain, root, metrika):
               audit(load_view(rw, sid)))
 
     # клиент меняет настройки: другой набор целей и другая атрибуция → новая синхронизация
-    new_def = ConversionDefinition(555, (222,), "last_yandex_direct_click")
+    new_def = ConversionDefinition(555, (222,), "automatic")
     new_run = sync_run(rw, chain)
     new = dataclasses.replace(old, conversion_definition=new_def, goal_rows=())
     new = dataclasses.replace(new, sources=frozenset({"yandex_direct"}))

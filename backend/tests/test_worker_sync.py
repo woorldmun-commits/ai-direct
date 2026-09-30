@@ -135,7 +135,7 @@ def test_sync_writes_snapshot_with_frozen_definition(rw, ws):
         "SELECT sources, conversion_definition, status FROM snapshots WHERE id = %s", (out.snapshot_id,)).fetchone()
     assert (sorted(sources), status) == (["yandex_direct", "yandex_metrika"], "complete")
     assert definition == {"provider": "yandex_metrika", "counter_id": 555, "goal_ids": [111, 222],
-                          "attribution": "lastsign"}
+                          "attribution": "cross_device_last_significant"}
 
 
 def test_retry_of_same_sync_run_is_one_snapshot_and_no_new_requests(rw, ws):

@@ -151,7 +151,7 @@ def test_stored_fields_are_frozen():
         ["level", "campaign_id", "date", "impressions", "clicks", "cost", "conversions", "query"]
     assert CAMPAIGN_REPORT.fields == ("Date", "CampaignId", "Impressions", "Clicks", "Cost")
     assert QUERY_REPORT.fields == ("Date", "CampaignId", "Query", "Impressions", "Clicks", "Cost")
-    assert GOALS.direct_columns() == ("Conversions_111_LSC", "Conversions_222_LSC")
+    assert GOALS.direct_columns() == ("Conversions_111_LSCCD", "Conversions_222_LSCCD")
     assert REPORT_HEADERS["returnMoneyInMicros"] == "false"
 
 
