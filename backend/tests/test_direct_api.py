@@ -226,3 +226,22 @@ def test_worker_records_request_id_of_rejected_request(rw, ws):
     work(rw, ws, run_id, direct=api(FakeReports(error(400, 8000)), run_key=str(run_id)), metrika_source=None)
     assert rw.execute("SELECT status, error_code, provider_request_id FROM sync_runs WHERE id = %s",
                       (run_id,)).fetchone() == ("failed", "invalid_request", "8695244274068608439")
+
+
+# --- Безопасный лог HTTP -----------------------------------------------------------------------------------
+
+def test_http_log_has_request_id_and_never_token_or_body(caplog):
+    from app.sources.http import api_client
+
+    def handler(request):
+        return httpx.Response(400, json={"error": {"error_code": 8000, "request_id": "777"}},
+                              headers={"RequestId": "777"})
+
+    http = api_client("yandex_direct", httpx.MockTransport(handler))
+    with caplog.at_level("DEBUG"):
+        with pytest.raises(DirectApiError):
+            DirectApi(http, "y0_SECRET_TOKEN", "9").fetch_report("client-a", CAMPAIGN_REPORT, GOALS, FROM, TO)
+    text = "\n".join(r.getMessage() for r in caplog.records)
+    assert "yandex_direct POST /json/v501/reports status=400 request_id=777" in text
+    for secret in ("y0_SECRET_TOKEN", "Authorization", "Bearer", "client-a", "ReportName", "Goals"):
+        assert secret not in text
