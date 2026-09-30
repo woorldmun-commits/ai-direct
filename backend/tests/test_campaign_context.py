@@ -9,8 +9,8 @@ from decimal import Decimal
 import httpx
 import pytest
 
-from app.sources.campaigns import (STRATEGY_ACTIONS, DirectApiError, Strategy, get_campaign_contexts,
-                                   parse_campaign)
+from app.sources.campaigns import STRATEGY_ACTIONS, Strategy, get_campaign_contexts, parse_campaign
+from app.sources.direct import ConnectionUnavailable, DirectApiError
 
 
 def campaign(ctype="UNIFIED_CAMPAIGN", search=None, network=None, cid=101, **extra):
@@ -102,9 +102,17 @@ def test_own_account_sends_no_client_login():
     assert "Client-Login" not in seen[0].headers
 
 
+def error(code):
+    return httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={
+        "error": {"error_code": code, "error_string": "…", "request_id": "8695244274068608439"}})))
+
+
 def test_api_error_keeps_code_and_request_id():
-    http = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={
-        "error": {"error_code": 53, "error_string": "Ошибка авторизации", "request_id": "8695244274068608439"}})))
     with pytest.raises(DirectApiError) as e:
-        get_campaign_contexts(http, "tok", None, [1])
-    assert (e.value.error_code, e.value.request_id) == (53, "8695244274068608439")
+        get_campaign_contexts(error(8000), "tok", None, [1])
+    assert (e.value.error_code, e.value.request_id) == (8000, "8695244274068608439")
+
+
+def test_auth_error_is_connection_error_like_in_reports():
+    with pytest.raises(ConnectionUnavailable, match="token_expired"):
+        get_campaign_contexts(error(53), "tok", None, [1])

@@ -11,7 +11,7 @@ from typing import Mapping
 from app.rules.domain import DIRECT_CONVERSIONS, HISTORY_DAYS, CampaignDay, SnapshotView, frozen
 from app.sources.conversion import ConversionDefinition
 from app.sources.direct import (CAMPAIGN_REPORT, QUERY_REPORT, AccountUnavailable, ConnectionUnavailable,
-                                DirectSource)
+                                DirectApiError, DirectSource)
 from app.sources.metrika import MetrikaReportSpec, MetrikaSource, MetrikaUnavailable
 from app.sync.metrika_parse import GoalRow, parse_bytime, parse_goals
 from app.sync.parse import ReportFormatError, StatRow, parse_report
@@ -38,6 +38,7 @@ class SyncFailure:
     account: str               # client_login Директа или counter:<id> Метрики
     error_code: str            # access_denied · counter_not_found · goal_not_found · invalid_report_format · …
     reason: str | None = None  # для invalid_report_format — FormatError: negative_value, unexpected_column, …
+    request_id: str | None = None  # invalid_request: RequestId Яндекса — для обращения в поддержку, не для UI
 
 
 def _merge(rows: tuple[StatRow, ...]) -> tuple[StatRow, ...]:
@@ -70,6 +71,8 @@ def sync_account(source: DirectSource, login: str, conversions: ConversionDefini
         return SyncFailure(login, e.error_code)
     except ReportFormatError as e:
         return SyncFailure(login, "invalid_report_format", e.code.value)
+    except DirectApiError as e:  # запрос отклонён, повтор не поможет: наша ошибка запроса или ограничение отчёта
+        return SyncFailure(login, "invalid_request", request_id=e.request_id)
     return Snapshot(login, period_from, period_to, period_to - timedelta(PARTIAL_DAYS - 1),
                     frozenset({"yandex_direct"}), _merge(rows), conversions)
 

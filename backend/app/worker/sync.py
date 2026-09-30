@@ -2,8 +2,8 @@
 guard ещё раз → запись снимка. Бизнес-логики здесь нет — только порядок шагов и исходы.
 
 Идемпотентность — по sync_run_id: повтор завершённого запуска ничего не делает и возвращает тот же результат.
-Исходы: Done · Skipped (состояние не позволяет) · Failed (ошибка API/формата) · RetryAt (retryIn, 429: вернуть в
-очередь на N секунд, не спать в процессе)."""
+Исходы: Done · Skipped (состояние не позволяет) · Failed (ошибка API/формата) · RetryAt (retryIn или временная
+ошибка API: вернуть в очередь на N секунд, не спать в процессе)."""
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -45,7 +45,7 @@ class Failed:
 
 @dataclass(frozen=True)
 class RetryAt:
-    """Временная причина (retryIn, 429): вернуть в очередь через seconds, тот же sync_run."""
+    """Временная причина (отчёт строится, сервер недоступен, баллы): вернуть в очередь через seconds, тот же sync_run."""
     seconds: int
     reason: str
 

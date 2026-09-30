@@ -249,6 +249,7 @@ CREATE TABLE sync_runs (  -- [O]
   last_retry_at      timestamptz,
   error_code         text,  -- failed: access_denied · invalid_report_format · … ; skipped: причина guard
   error_reason       text CHECK (error_reason ~ '^[a-z_]+$'),  -- код причины: negative_value, … (не текст сервера)
+  provider_request_id text CHECK (provider_request_id ~ '^[0-9A-Za-z-]{1,64}$'),  -- RequestId Яндекса при отказе API
   CHECK ((status IN ('succeeded', 'failed', 'skipped')) = (finished_at IS NOT NULL)),
   CHECK (status NOT IN ('failed', 'skipped') OR error_code IS NOT NULL),
   CHECK (error_reason IS NULL OR error_code IS NOT NULL)

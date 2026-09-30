@@ -100,9 +100,10 @@ def write_snapshot(conn: psycopg.Connection, *, sync_run_id: int, workspace_id: 
 
 
 def record_failure(conn: psycopg.Connection, sync_run_id: int, failure: SyncFailure) -> None:
-    done = conn.execute("""UPDATE sync_runs SET status = 'failed', finished_at = now(), error_code = %s, error_reason = %s
+    done = conn.execute("""UPDATE sync_runs SET status = 'failed', finished_at = now(), error_code = %s, error_reason = %s,
+                                  provider_request_id = %s
                            WHERE id = %s AND status IN ('queued', 'running', 'waiting_report')""",
-                        (failure.error_code, failure.reason, sync_run_id))
+                        (failure.error_code, failure.reason, failure.request_id, sync_run_id))
     if done.rowcount != 1:
         raise SyncRunStateError(f"sync_run {sync_run_id}: уже завершён")
 

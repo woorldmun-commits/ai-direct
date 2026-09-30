@@ -34,9 +34,12 @@ class ConversionDefinition:
         if self.attribution not in ATTRIBUTION_DIRECT_CODE:
             raise ValueError(f"attribution: одно из {sorted(ATTRIBUTION_DIRECT_CODE)}")
 
+    def direct_attribution(self) -> str:
+        """Код модели для AttributionModels в Reports API Директа."""
+        return ATTRIBUTION_DIRECT_CODE[self.attribution]
+
     def direct_columns(self) -> tuple[str, ...]:
-        code = ATTRIBUTION_DIRECT_CODE[self.attribution]
-        return tuple(f"Conversions_{g}_{code}" for g in self.goal_ids)
+        return tuple(f"Conversions_{g}_{self.direct_attribution()}" for g in self.goal_ids)
 
     def to_json(self) -> dict:
         """Хранится в snapshots.conversion_definition и в замороженных настройках аудита."""

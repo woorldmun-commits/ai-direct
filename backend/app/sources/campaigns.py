@@ -15,6 +15,8 @@ from enum import Enum
 
 import httpx
 
+from app.sources.direct import raise_for_direct_error
+
 CAMPAIGNS_URL = {"api": "https://api.direct.yandex.com/json/v5/campaigns",
                  "sandbox": "https://api-sandbox.direct.yandex.com/json/v5/campaigns"}
 SOURCE = "campaigns.get@v5"
@@ -64,14 +66,6 @@ STRATEGY_ACTIONS: dict[Strategy, tuple[str | None, str]] = {
     Strategy.UNSUPPORTED: (None, "inspect_only"),
     Strategy.UNKNOWN: (None, "inspect_only"),
 }
-
-
-class DirectApiError(Exception):
-    """Ответ {"error": ...}. Разбор кодов в классы доступа (AccountUnavailable и т. п.) — после сверки с песочницей."""
-
-    def __init__(self, error_code: int, request_id: str | None):
-        super().__init__(f"direct api error {error_code} (request {request_id})")
-        self.error_code, self.request_id = error_code, request_id
 
 
 @dataclass(frozen=True)
@@ -146,8 +140,7 @@ def get_campaign_contexts(http: httpx.Client, access_token: str, client_login: s
         **{f"{name}FieldNames": _TYPE_FIELD_NAMES for name in _TYPE_FIELDS.values()},
     }}
     r = http.post(CAMPAIGNS_URL[env], json=body, headers=headers, timeout=30)
-    r.raise_for_status()  # 5xx и прочее без JSON-тела — не разбираем как ответ
+    if r.status_code != 200 or "error" in r.json():  # коды ошибок — те же, что у Reports (sources/direct.py)
+        raise_for_direct_error(r, client_login or "")
     data = r.json()
-    if "error" in data:
-        raise DirectApiError(int(data["error"]["error_code"]), data["error"].get("request_id"))
     return {ctx.campaign_id: ctx for ctx in map(parse_campaign, data["result"].get("Campaigns", []))}
