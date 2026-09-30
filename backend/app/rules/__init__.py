@@ -1,0 +1,3 @@
+from app.rules.high_cpa import HIGH_CPA_BASELINE, HIGH_CPA_TARGET
+
+RULES = (HIGH_CPA_TARGET, HIGH_CPA_BASELINE)

@@ -1,0 +1,3 @@
+pydantic>=2
+psycopg[binary]
+tzdata  # часовой пояс данных (Europe/Moscow) для срока хранения; в slim-образах системной базы поясов нет
