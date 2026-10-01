@@ -121,13 +121,27 @@ def time_zones(contexts: dict, counter_tz: str | None) -> dict:
             "product": str(DATA_TIMEZONE), "product_match": sources == {str(DATA_TIMEZONE)}}
 
 
+def outcome(campaigns: set[int], found: set[int], insufficient: set[int], account_skipped: bool) -> dict:
+    """0 выводов — не один исход: кампании проверены и проблем нет (NO_PROBLEMS_FOUND) или проверить было не по чему
+    (NO_ACTIONABLE_DATA). Ошибка интеграции до аудита не доходит — это STATUS: FAIL."""
+    checked_ok = set() if account_skipped else campaigns - found - insufficient
+    label = "FINDINGS" if found else "NO_PROBLEMS_FOUND" if checked_ok else "NO_ACTIONABLE_DATA"
+    return {"outcome": label, "campaigns_with_findings": len(found), "campaigns_checked_no_problem": len(checked_ok),
+            "campaigns_not_enough_data": len(campaigns) if account_skipped else len(insufficient - found)}
+
+
 def audit(snap: Snapshot, settings: AuditSettings, contexts: dict) -> dict:
     view = to_view(snap, snapshot_id=0, workspace_id=0, direct_account_id=0)
-    levels, skipped = Counter(), Counter()
+    levels, skipped, found, insufficient, account_skipped = Counter(), Counter(), set(), set(), False
     for o in (o for rule in RULES for o in run(rule, view, settings)):
         if isinstance(o, NotEnoughData):
             skipped[o.reason.value] += 1
+            if o.object_id is None:
+                account_skipped = True  # правило не вычислялось для всего аккаунта (нет источника)
+            else:
+                insufficient.add(o.object_id)
             continue
+        found.add(o.object_id)
         assert isinstance(o, Finding)
         d = decide(o)
         levels[d.level] += 1
@@ -136,8 +150,9 @@ def audit(snap: Snapshot, settings: AuditSettings, contexts: dict) -> dict:
         print(f"\n[{o.rule_version} → {d.level}{' ← ' + ','.join(d.reasons) if d.reasons else ''}] "
               f"кампания {o.object_id} · стратегия {strategy} · потеряно ≈ {o.lost.amount} ₽")
         print(f"  {explain(o, d)}")
+    campaigns = {d.campaign_id for d in view.campaign_days}
     return {"findings": sum(levels.values()), **{k: levels[k] for k in ("inspect_only", "review", "change")},
-            "not_enough_data": dict(skipped)}
+            "not_enough_data": dict(skipped), **outcome(campaigns, found, insufficient, account_skipped)}
 
 
 def status(r: dict) -> str:
@@ -169,7 +184,9 @@ def summary(r: dict) -> str:
         f"  report rows: {m['report_rows']} of {m['rows_expected']}",
         f"  goal reaches, all site traffic: {m['goal_reaches_all_traffic']}", "",
         "Campaign strategies", *[f"  {k}: {v}" for k, v in sorted(r["strategies"].items())], "",
-        "Audit", *[f"  {k}: {a.get(k, 0)}" for k in ("findings", "inspect_only", "review", "change")],
+        "Audit", f"  outcome: {a.get('outcome')}",
+        *[f"  {k}: {a.get(k, 0)}" for k in ("findings", "inspect_only", "review", "change", "campaigns_with_findings",
+                                            "campaigns_checked_no_problem", "campaigns_not_enough_data")],
         f"  not enough data: {a.get('not_enough_data', {})}", "",
         "Errors", f"  Direct: {r['errors'].get('direct', 0)}", f"  Metrika: {m['failure'] or 0}", "",
         f"STATUS: {r['status']}",

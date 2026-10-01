@@ -103,3 +103,19 @@ def test_rejected_report_is_fail_and_artifact_is_written(monkeypatch, tmp_path, 
     [run_dir] = list(tmp_path.iterdir())
     r = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
     assert r["status"] == "FAIL" and r["errors"]["direct"] == "invalid_request request_id=42"
+
+
+@pytest.mark.parametrize("campaigns, found, insufficient, account_skipped, label", [
+    ({1, 2}, {1}, set(), False, "FINDINGS"),
+    ({1, 2}, set(), {2}, False, "NO_PROBLEMS_FOUND"),          # кампания 1 проверена — проблем нет
+    ({1, 2}, set(), {1, 2}, False, "NO_ACTIONABLE_DATA"),      # проверить было не по чему
+    ({1, 2}, set(), set(), True, "NO_ACTIONABLE_DATA"),        # правило не вычислялось: нет источника
+    (set(), set(), set(), False, "NO_ACTIONABLE_DATA"),        # кампаний с показами нет
+])
+def test_zero_findings_is_not_one_outcome(campaigns, found, insufficient, account_skipped, label):
+    assert e2e_account.outcome(campaigns, found, insufficient, account_skipped)["outcome"] == label
+
+
+def test_outcome_in_artifact(run):
+    _, r, _ = run()
+    assert (r["audit"]["outcome"], r["audit"]["campaigns_with_findings"]) == ("FINDINGS", 1)
