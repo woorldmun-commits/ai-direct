@@ -10,7 +10,7 @@ import httpx
 import pytest
 
 from app.sources.campaigns import STRATEGY_ACTIONS, Strategy, get_campaign_contexts, parse_campaign
-from app.sources.direct import ConnectionUnavailable, DirectApiError
+from app.sources.direct import ConnectionUnavailable, DirectApiError, RetryLater
 
 
 def campaign(ctype="UNIFIED_CAMPAIGN", search=None, network=None, cid=101, **extra):
@@ -116,3 +116,30 @@ def test_api_error_keeps_code_and_request_id():
 def test_auth_error_is_connection_error_like_in_reports():
     with pytest.raises(ConnectionUnavailable, match="token_expired"):
         get_campaign_contexts(error(53), "tok", None, [1])
+
+
+def raw(handler):
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def down(request):
+    raise httpx.ConnectError("boom")
+
+
+@pytest.mark.parametrize("http", [raw(down), raw(lambda r: httpx.Response(502, text="<html>bad gateway</html>"))])
+def test_network_or_gateway_failure_is_retried_like_in_reports(http):
+    with pytest.raises(RetryLater):
+        get_campaign_contexts(http, "tok", None, [1])
+
+
+@pytest.mark.parametrize("response", [httpx.Response(200, text="not json"), httpx.Response(200, json={"result": 1})])
+def test_malformed_success_is_api_error_not_crash(response):
+    with pytest.raises(DirectApiError):
+        get_campaign_contexts(raw(lambda r: response), "tok", None, [1])
+
+
+def test_request_id_from_server_is_not_trusted_into_logs():
+    http = raw(lambda r: httpx.Response(200, json={"error": {"error_code": 8000, "request_id": "1\nFAKE LOG LINE"}}))
+    with pytest.raises(DirectApiError) as e:
+        get_campaign_contexts(http, "tok", None, [1])
+    assert e.value.request_id is None

@@ -3,6 +3,7 @@
 
 Реализации: DirectFixture (тесты, разработка) и DirectApi (Reports API v501, api или sandbox)."""
 
+import re
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -76,6 +77,8 @@ class DirectApiError(Exception):
     request_id — для обращения в поддержку Яндекса; текст ошибки сервера не храним и не показываем."""
 
     def __init__(self, error_code: int, request_id: str | None):
+        if not re.fullmatch(r"[\w-]{1,64}", str(request_id or "")):  # пишется в логи и артефакты — без переводов строк
+            request_id = None
         super().__init__(f"direct api error {error_code} (request {request_id})")
         self.error_code, self.request_id = error_code, request_id
 
@@ -130,12 +133,19 @@ _ERRORS = {
 _TEMPORARY = frozenset({52, 152, 506, 1000, 1001, 1002})  # сервер авторизации/API, баллы, соединения
 
 
+def json_body(r: httpx.Response) -> dict:
+    """Тело-объект JSON или {}: шлюз может вернуть HTML, а сбойный ответ — не объект."""
+    try:
+        body = r.json()
+    except ValueError:
+        return {}
+    return body if isinstance(body, dict) else {}
+
+
 def raise_for_direct_error(r: httpx.Response, login: str) -> NoReturn:
     """Ответ не 200 → исключение источника. Тело ошибки — JSON {"error": {error_code, request_id, …}}."""
-    try:
-        err = r.json().get("error") or {}
-    except ValueError:
-        err = {}
+    err = json_body(r).get("error")
+    err = err if isinstance(err, dict) else {}
     code = int(err.get("error_code") or 0)
     retry_in = int(r.headers.get("retryIn") or DEFAULT_RETRY_IN)
     if code in _ERRORS:
@@ -201,6 +211,6 @@ class DirectApi:
             r = self.http.post(f"{API_URL[self.env]}/v5/campaigns", json=body, headers=self._headers(login), timeout=30)
         except httpx.TransportError:
             raise RetryLater(DEFAULT_RETRY_IN, "api_unavailable") from None
-        if r.status_code == 200 and "error" not in r.json():
+        if r.status_code == 200 and "error" not in json_body(r):
             return
         raise_for_direct_error(r, login)

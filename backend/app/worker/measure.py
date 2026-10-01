@@ -87,6 +87,13 @@ def _finished(conn: psycopg.Connection, m: _M) -> Measured | Skipped | None:
     return Skipped("already_skipped") if skipped.fetchone() else None
 
 
+def _claim(conn: psycopg.Connection, m: _M) -> Measured | Skipped | None:
+    """В транзакции записи: блокировка замера и повторная проверка — параллельный воркер, прошедший _finished
+    одновременно с нами, уже мог записать итог; тогда возвращаем его, а не падаем на UNIQUE и не пишем дубль."""
+    conn.execute("SELECT pg_advisory_xact_lock(hashtextextended('measure:' || %s::text, 0))", (m.id,))
+    return _finished(conn, m)
+
+
 def _snapshot(conn: psycopg.Connection, m: _M) -> tuple[int, date, dict | None] | None:
     """Снимок, в котором оба окна целиком и данные за окно «после» уже окончательные (вне окна дозачёта)."""
     return conn.execute("""SELECT s.id, s.partial_from, s.conversion_definition
@@ -101,6 +108,8 @@ def _write(conn: psycopg.Connection, m: _M, *, release_id: int, now: datetime, s
            verdict: str, before: dict, after: dict, saved, effect: dict) -> Measured | Skipped:
     with conn.transaction():
         workspace_shared(conn, m.workspace_id)
+        if done := _claim(conn, m):
+            return done
         if isinstance(d := guard(Task.MEASURE, load_state(conn, m.workspace_id, None, now)), Skip):
             return _skip(conn, m, d)
         result_id = conn.execute(
@@ -118,8 +127,10 @@ def _write(conn: psycopg.Connection, m: _M, *, release_id: int, now: datetime, s
     return Measured(result_id, verdict)
 
 
-def _skip(conn: psycopg.Connection, m: _M, d: Skip) -> Skipped:
+def _skip(conn: psycopg.Connection, m: _M, d: Skip) -> Measured | Skipped:
     with conn.transaction():  # событие и outbox — вместе
+        if done := _claim(conn, m):
+            return done
         conn.execute("INSERT INTO recommendation_events (recommendation_id, type, payload) "
                      "VALUES (%s, 'measurement_skipped', %s)",
                      (m.recommendation_id, Jsonb({"reason": d.reason, "detail": d.detail})))

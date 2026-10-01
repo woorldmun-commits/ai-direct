@@ -190,3 +190,22 @@ def test_parallel_refresh_calls_yandex_once(rw, ref, db):
     for t in threads:
         t.join()
     assert results == ["access-1", "access-1"] and fake.calls == 1
+
+
+def test_disconnect_during_refresh_is_not_undone(rw, ref, db):
+    """Пользователь отключил подключение, пока шёл запрос обновления к Яндексу: новая пара не должна вернуть
+    токен и статус connected — отключение ждёт конца обновления и применяется после него."""
+    expire_soon(rw, ref)
+    fake = RotatingYandex(delay=0.5)
+
+    def worker():
+        with db("app_token") as conn:
+            fresh(conn, fake, ref)
+
+    t = threading.Thread(target=worker)
+    t.start()
+    time.sleep(0.2)  # обновление уже под блокировкой и ждёт ответа Яндекса
+    rw.execute("SELECT drop_connection_token('direct', %s, %s, 'disconnected')", (ref.workspace_id, ref.connection_id))
+    t.join()
+    assert rw.execute("SELECT status, has_token FROM direct_connections WHERE id = %s",
+                      (ref.connection_id,)).fetchone() == ("disconnected", False)

@@ -113,6 +113,18 @@ CREATE TABLE sessions (
   CHECK (expires_at > created_at)
 );
 
+-- Принятие документов — доказательство на операторе (ч. 3 ст. 9 152-ФЗ). Каждый документ — отдельная строка:
+-- согласие на обработку ПД оформляется отдельно от оферты (ч. 1 ст. 9, ред. 156-ФЗ с 01.09.2025). Append-only:
+-- новая редакция или отзыв — новая строка, не правка старой.
+CREATE TABLE legal_acceptances (
+  id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  user_id     bigint NOT NULL REFERENCES users,
+  document    text NOT NULL CHECK (document IN ('offer', 'pd_consent', 'marketing')),
+  version     text NOT NULL CHECK (version ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}(\.[0-9]+)?$'),
+  accepted_at timestamptz NOT NULL
+);
+CREATE INDEX legal_acceptances_user ON legal_acceptances (user_id, document);
+
 CREATE TABLE workspaces (
   id             bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   name           text NOT NULL,
@@ -468,8 +480,8 @@ CREATE TABLE findings (
   audit_run_id bigint NOT NULL REFERENCES audit_runs,
   issue_id     bigint NOT NULL REFERENCES issues,
   rule_version text NOT NULL CHECK (rule_version ~ '^[a-z0-9_]+@[0-9]+$'),
-  lost         jsonb NOT NULL CHECK (value_is_valid(lost)),
-  recoverable  jsonb NOT NULL CHECK (value_is_valid(recoverable)),
+  lost         jsonb NOT NULL CHECK (value_is_valid(lost) AND coalesce(lost->>'amount', '') NOT LIKE '-%'),
+  recoverable  jsonb NOT NULL CHECK (value_is_valid(recoverable) AND coalesce(recoverable->>'amount', '') NOT LIKE '-%'),
   -- достаточность данных текущего периода (current_data_quality), не статистическая уверенность
   data_quality text NOT NULL CHECK (data_quality IN ('high', 'medium', 'low')),
   evidence     jsonb NOT NULL CHECK (evidence_is_valid(evidence)),
@@ -529,7 +541,8 @@ CREATE TABLE recommendation_results (
   release_id        bigint NOT NULL REFERENCES releases,
   before            jsonb NOT NULL CHECK (evidence_is_valid(before)),
   after             jsonb NOT NULL CHECK (evidence_is_valid(after)),
-  saved             jsonb CHECK (saved IS NULL OR (value_is_valid(saved) AND saved->>'calculation_type' = 'estimated')),
+  saved             jsonb CHECK (saved IS NULL OR (value_is_valid(saved) AND saved->>'calculation_type' = 'estimated'
+                                       AND coalesce(saved->>'amount', '') NOT LIKE '-%')),
   verdict           text NOT NULL CHECK (verdict IN ('effect', 'no_effect', 'not_confirmed', 'insufficient')),
   -- наблюдаемое изменение и причина вердикта (cpa_change_pct, conversions_change_pct, reason); saved — отдельно
   effect            jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(effect) = 'object'),
@@ -815,7 +828,8 @@ CREATE TABLE deletion_requests (
   id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   workspace_id bigint,
   requested_by text NOT NULL CHECK (requested_by ~ '^(user|operator):[0-9]+$' OR requested_by = 'system:retention'),
-  scope        text NOT NULL CHECK (scope IN ('workspace', 'search_query_texts_expired', 'unreferenced_snapshots')),
+  scope        text NOT NULL CHECK (scope IN ('workspace', 'search_query_texts_expired', 'unreferenced_snapshots',
+                                     'personal_data_expired')),
   status       text NOT NULL DEFAULT 'requested'
                CHECK (status IN ('requested', 'scheduled', 'deleting', 'verified', 'completed', 'failed')),
   requested_at timestamptz NOT NULL DEFAULT now(),
@@ -926,6 +940,33 @@ END $$;
 -- Срок хранения текстов поисковых запросов — 60 дней от последнего появления в отчёте (ARCHITECTURE.md §2.4).
 -- Удаляет пачку текстов, чьё последнее появление раньше cutoff (дату считает вызывающий в часовом поясе данных —
 -- результат не зависит от часового пояса сервера). Агрегаты stat_rows остаются: у них нет FK на текст.
+-- ПД вне workspace (152-ФЗ, ARCHITECTURE.md §2.5), срок — 30 дней: сессии — после окончания (истекла или отозвана);
+-- email и логин Яндекса деактивированного пользователя — после деактивации обезличиваются. yandex_uid остаётся:
+-- по нему деактивированный пользователь не войдёт снова под тем же аккаунтом. cutoff = now - 30 дней — из воркера.
+-- Непустой проход — запись deletion_requests (system:retention). Повторный вызов безопасен.
+CREATE FUNCTION purge_personal_data(cutoff timestamptz) RETURNS integer
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+DECLARE
+  s integer;
+  u integer;
+  i integer;
+BEGIN
+  DELETE FROM sessions WHERE least(expires_at, revoked_at) < cutoff;
+  GET DIAGNOSTICS s = ROW_COUNT;
+  UPDATE users SET email = '' WHERE status = 'deactivated' AND deactivated_at < cutoff AND email <> '';
+  GET DIAGNOSTICS u = ROW_COUNT;
+  UPDATE yandex_identities y SET login = '' FROM users
+   WHERE users.id = y.user_id AND users.status = 'deactivated' AND users.deactivated_at < cutoff AND y.login <> '';
+  GET DIAGNOSTICS i = ROW_COUNT;
+  IF s + u + i > 0 THEN
+    INSERT INTO deletion_requests (requested_by, scope, status, started_at, completed_at, verification, deleted_by)
+    VALUES ('system:retention', 'personal_data_expired', 'completed', now(), now(),
+            jsonb_build_object('sessions', s, 'users', u, 'yandex_identities', i, 'cutoff', cutoff),
+            'purge_personal_data');
+  END IF;
+  RETURN s + u + i;
+END $$;
+
 -- Каждая непустая пачка — запись deletion_requests (system:retention). Повторный вызов безопасен.
 CREATE FUNCTION purge_search_query_texts(cutoff date, batch_size integer) RETURNS integer
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
@@ -936,9 +977,16 @@ BEGIN
   IF batch_size NOT BETWEEN 1 AND 10000 THEN
     RAISE EXCEPTION 'batch_size must be 1..10000';
   END IF;
-  SELECT array_agg(query_id) INTO ids FROM (
-    SELECT query_id FROM search_query_sightings GROUP BY query_id HAVING max(seen_on) < cutoff
-    ORDER BY query_id LIMIT batch_size) expired;
+  -- Блокировка текстов: новый показ (FK из синхронизации) ждёт удаления, а текст, который идущая синхронизация
+  -- уже встретила снова, пропускаем (SKIP LOCKED) — не ждём её и не удаляем свежий показ.
+  SELECT array_agg(id) INTO ids FROM (
+    SELECT t.id FROM search_query_texts t
+     WHERE t.id IN (SELECT query_id FROM search_query_sightings GROUP BY query_id HAVING max(seen_on) < cutoff)
+     ORDER BY t.id LIMIT batch_size
+     FOR UPDATE SKIP LOCKED) expired;
+  -- Показ, закоммиченный до блокировки, виден только новому снимку: перепроверяем срок уже под блокировкой.
+  SELECT array_agg(q) INTO ids FROM unnest(ids) q
+   WHERE NOT EXISTS (SELECT 1 FROM search_query_sightings s WHERE s.query_id = q AND s.seen_on >= cutoff);
   IF ids IS NULL THEN
     RETURN 0;
   END IF;
@@ -964,7 +1012,7 @@ BEGIN
                            'audit_runs', 'audit_run_snapshots', 'findings', 'explanations', 'recommendations',
                            'measurements',
                            'recommendation_events', 'recommendation_results', 'digests',
-                           'subscription_events', 'free_audit_claims']
+                           'subscription_events', 'free_audit_claims', 'legal_acceptances']
   LOOP
     EXECUTE format('CREATE TRIGGER %I BEFORE UPDATE OR DELETE ON %I
                     FOR EACH ROW EXECUTE FUNCTION forbid_mutation()', t || '_append_only', t);
@@ -1093,6 +1141,9 @@ BEGIN
   IF new_status NOT IN ('disconnected', 'token_revoked') THEN
     RAISE EXCEPTION 'new_status must be disconnected or token_revoked';
   END IF;
+  -- Ключ блокировки обновления пары (auth/tokens.py fresh_access_token): отключение ждёт идущий refresh,
+  -- иначе тот записал бы новую пару и статус connected поверх отключения.
+  PERFORM pg_advisory_xact_lock(hashtextextended('token:' || kind || ':' || connection, 0));
   IF kind = 'direct' THEN
     UPDATE direct_connections
        SET status_changed_at = CASE WHEN status <> new_status THEN now() ELSE status_changed_at END,
@@ -1165,8 +1216,10 @@ GRANT EXECUTE ON FUNCTION connection_token(text, bigint, bigint) TO app_token;
 -- Удаление: никаких прав на таблицы — только вызов функций удаления (SECURITY DEFINER).
 REVOKE EXECUTE ON FUNCTION delete_workspace_data(bigint) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION purge_search_query_texts(date, integer) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION purge_personal_data(timestamptz) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION delete_workspace_data(bigint) TO app_deleter;
 GRANT EXECUTE ON FUNCTION purge_search_query_texts(date, integer) TO app_deleter;
+GRANT EXECUTE ON FUNCTION purge_personal_data(timestamptz) TO app_deleter;
 
 -- Таблицы из будущих миграций получают те же базовые права автоматически. Удаление их данных
 -- delete_workspace_data само не узнает: новую таблицу с workspace нужно добавить в функцию и в test_lifecycle.

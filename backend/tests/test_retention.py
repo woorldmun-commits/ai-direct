@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 import psycopg
 import pytest
 
-from app.worker.retention import purge_search_queries, retention_cutoff
+from app.worker.retention import purge_personal_data, purge_search_queries, retention_cutoff
 from test_schema import chain, key, one  # noqa: F401 — chain: фикстура
 
 TODAY = date(2026, 9, 30)
@@ -85,3 +85,75 @@ def test_cutoff_is_computed_in_data_timezone():
 def test_app_role_cannot_purge(rw):
     with pytest.raises(psycopg.errors.InsufficientPrivilege):
         rw.execute("SELECT purge_search_query_texts(%s, 100)", (CUTOFF,))
+
+
+def test_text_seen_again_by_running_sync_is_kept_and_purge_does_not_wait(rw, db, chain, deleter):
+    """Синхронизация (ещё не закоммичена) снова встретила старый запрос: его текст не удаляется, а очистка не ждёт
+    её и не падает — остальное удаляет."""
+    seen_again = query_seen(rw, chain, "снова встретился", 90)
+    gone = query_seen(rw, chain, "давно не встречался", 90)
+    with db("app_rw") as sync:
+        sync.autocommit = False
+        sync.execute("INSERT INTO search_query_sightings (query_id, seen_on) VALUES (%s, %s)", (seen_again, TODAY))
+        deleter.execute("SET lock_timeout = '2s'")
+        purge_search_queries(deleter, cutoff=CUTOFF)
+        sync.commit()
+    assert exists(rw, seen_again) and not exists(rw, gone)
+
+
+# --- Персональные данные вне workspace: сессии и деактивированные пользователи — 30 дней ----------
+
+NOW = datetime(2026, 9, 30, 12, tzinfo=timezone.utc)
+
+
+def user(rw, email, deactivated_days_ago=None) -> int:
+    at = NOW - timedelta(days=deactivated_days_ago) if deactivated_days_ago is not None else None
+    uid = one(rw, "INSERT INTO users (email, status, deactivated_at) VALUES (%s, %s, %s) RETURNING id",
+              email, "deactivated" if at else "active", at)
+    rw.execute("INSERT INTO yandex_identities (user_id, yandex_uid, login) VALUES (%s, %s, %s)",
+               (uid, f"uid-{email}", f"login-{email}"))
+    return uid
+
+
+def session(rw, user_id, *, ended_days_ago, revoked=False) -> bytes:
+    """Сессия, закончившаяся N дней назад: истекла или (revoked) отозвана при ещё действующем сроке."""
+    ended = NOW - timedelta(days=ended_days_ago)
+    token = key("session", user_id, ended_days_ago, revoked)
+    rw.execute("INSERT INTO sessions (token_hash, user_id, created_at, expires_at, revoked_at) VALUES (%s, %s, %s, %s, %s)",
+               (token, user_id, ended - timedelta(days=60),
+                ended + timedelta(days=365) if revoked else ended, ended if revoked else None))
+    return token
+
+
+def session_exists(rw, token) -> bool:
+    return one(rw, "SELECT count(*) FROM sessions WHERE token_hash = %s", token) == 1
+
+
+def personal(rw, uid):
+    return rw.execute("SELECT u.email, i.login, i.yandex_uid FROM users u JOIN yandex_identities i ON i.user_id = u.id "
+                      "WHERE u.id = %s", (uid,)).fetchone()
+
+
+def test_sessions_are_deleted_30_days_after_they_ended(rw, deleter):
+    uid = user(rw, "s@x.ru")
+    old, recent, revoked, active = (session(rw, uid, ended_days_ago=31), session(rw, uid, ended_days_ago=29),
+                                    session(rw, uid, ended_days_ago=31, revoked=True),
+                                    session(rw, uid, ended_days_ago=-10))
+    assert purge_personal_data(deleter, now=NOW) >= 2
+    assert [session_exists(rw, t) for t in (old, recent, revoked, active)] == [False, True, False, True]
+
+
+def test_deactivated_user_is_depersonalised_after_30_days(rw, deleter):
+    gone, recent, active = user(rw, "gone@x.ru", 31), user(rw, "recent@x.ru", 29), user(rw, "active@x.ru")
+    purge_personal_data(deleter, now=NOW)
+    # yandex_uid остаётся: по нему деактивированный не войдёт снова под тем же аккаунтом Яндекса
+    assert personal(rw, gone) == ("", "", "uid-gone@x.ru")
+    assert personal(rw, recent) == ("recent@x.ru", "login-recent@x.ru", "uid-recent@x.ru")
+    assert personal(rw, active)[0] == "active@x.ru"
+    assert one(rw, "SELECT count(*) FROM deletion_requests WHERE scope = 'personal_data_expired'") >= 1
+    assert purge_personal_data(deleter, now=NOW) == 0  # повтор безопасен
+
+
+def test_app_role_cannot_purge_personal_data(rw):
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        rw.execute("SELECT purge_personal_data(%s)", (NOW,))

@@ -15,7 +15,7 @@ from enum import Enum
 
 import httpx
 
-from app.sources.direct import raise_for_direct_error
+from app.sources.direct import DEFAULT_RETRY_IN, RetryLater, json_body, raise_for_direct_error
 
 CAMPAIGNS_URL = {"api": "https://api.direct.yandex.com/json/v5/campaigns",
                  "sandbox": "https://api-sandbox.direct.yandex.com/json/v5/campaigns"}
@@ -141,8 +141,12 @@ def get_campaign_contexts(http: httpx.Client, access_token: str, client_login: s
         "FieldNames": ["Id", "Type", "Currency", "TimeZone"],
         **{f"{name}FieldNames": _TYPE_FIELD_NAMES for name in _TYPE_FIELDS.values()},
     }}
-    r = http.post(CAMPAIGNS_URL[env], json=body, headers=headers, timeout=30)
-    if r.status_code != 200 or "error" in r.json():  # коды ошибок — те же, что у Reports (sources/direct.py)
+    try:
+        r = http.post(CAMPAIGNS_URL[env], json=body, headers=headers, timeout=30)
+    except httpx.TransportError:
+        raise RetryLater(DEFAULT_RETRY_IN, "api_unavailable") from None
+    data = json_body(r)
+    # коды ошибок — те же, что у Reports (sources/direct.py); 200 без объекта result — тоже ошибка API, не сбой разбора
+    if r.status_code != 200 or "error" in data or not isinstance(data.get("result"), dict):
         raise_for_direct_error(r, client_login or "")
-    data = r.json()
     return {ctx.campaign_id: ctx for ctx in map(parse_campaign, data["result"].get("Campaigns", []))}

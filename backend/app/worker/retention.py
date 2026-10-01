@@ -1,4 +1,6 @@
-"""Срок хранения текстов поисковых запросов — 60 дней от последнего появления в отчёте (ARCHITECTURE.md §2.4–2.5).
+"""Срок хранения ПД вне workspace — 30 дней: сессии после окончания, email и логин деактивированного пользователя.
+
+Срок хранения текстов поисковых запросов — 60 дней от последнего появления в отчёте (ARCHITECTURE.md §2.4–2.5).
 
 Дата отсечения считается здесь, в часовом поясе данных (даты отчётов Директа — московские), и передаётся в БД явно:
 результат не зависит от часового пояса сервера PostgreSQL. Удаление — пачками, каждая в своей транзакции:
@@ -11,6 +13,7 @@ from zoneinfo import ZoneInfo
 import psycopg
 
 RETENTION_DAYS = 60
+PERSONAL_DATA_DAYS = 30
 DATA_TIMEZONE = ZoneInfo("Europe/Moscow")
 BATCH_SIZE = 5000
 
@@ -29,3 +32,10 @@ def purge_search_queries(conn: psycopg.Connection, *, cutoff: date, batch_size: 
     while deleted := conn.execute("SELECT purge_search_query_texts(%s, %s)", (cutoff, batch_size)).fetchone()[0]:
         total += deleted
     return total
+
+
+def purge_personal_data(conn: psycopg.Connection, *, now: datetime) -> int:
+    """Удаляет сессии и обезличивает деактивированных пользователей старше 30 дней. Повторный запуск безопасен (0)."""
+    if now.tzinfo is None:
+        raise ValueError("now: нужна дата с часовым поясом")
+    return conn.execute("SELECT purge_personal_data(%s)", (now - timedelta(days=PERSONAL_DATA_DAYS),)).fetchone()[0]

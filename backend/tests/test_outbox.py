@@ -129,3 +129,11 @@ def test_error_codes_not_server_text(rw, chain):
     eid = event(rw, chain)
     with pytest.raises(psycopg.errors.CheckViolation):
         rw.execute("UPDATE outbox_events SET last_error = 'Telegram said: chat 12345 blocked' WHERE id = %s", (eid,))
+
+
+def test_unexpected_error_releases_rest_of_batch_without_waiting_for_lease(rw, chain):
+    first, rest = event(rw, chain), event(rw, chain)
+    with pytest.raises(ValueError):
+        deliver(rw, Receiver(fail_with=ValueError("bug")))
+    # упавшее событие отмечено, остальные не держат аренду 5 минут: следующий воркер берёт их сразу
+    assert state(rw, first)[3] is False and state(rw, rest)[3] is False

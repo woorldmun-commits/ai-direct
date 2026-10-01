@@ -395,3 +395,19 @@ def test_one_snapshot_per_account_in_audit(rw, chain):
     rw.execute(LINK, (audit, chain["account"], chain["snapshot"]))
     with pytest.raises(psycopg.errors.UniqueViolation):
         rw.execute(LINK, (audit, chain["account"], chain["snapshot"]))
+
+
+@pytest.mark.parametrize("column", ["lost", "recoverable"])
+def test_negative_loss_cannot_enter_immutable_evidence(rw, chain, column):
+    """Ошибка правила не должна навсегда записать «потеряно −5 000 ₽»: доказательства потом не исправить."""
+    audit = one(rw, "SELECT audit_run_id FROM findings WHERE id = %s", chain["finding"])
+    issue = one(rw, """INSERT INTO issues (workspace_id, direct_account_id, issue_key, issue_type, object_type, object_id)
+                       VALUES (%s, %s, %s, 'zero_conv_campaign', 'campaign', 778) RETURNING id""",
+                chain["ws"], chain["account"], key(chain["ws"], "negative", 778))
+    amounts = {"lost": value(), "recoverable": value(), column: value(amount="-5000.00")}
+    with pytest.raises(psycopg.errors.CheckViolation):
+        rw.execute("""INSERT INTO findings (audit_run_id, issue_id, rule_version, lost, recoverable, data_quality,
+                      evidence, action, safety_policy, candidate_level, action_level)
+                      VALUES (%s, %s, 'zero_conv_campaign@1', %s, %s, 'high', '{}', '{"type": "pause"}',
+                              'safety_policy@1', 'review', 'review')""",
+                   (audit, issue, Jsonb(amounts["lost"]), Jsonb(amounts["recoverable"])))

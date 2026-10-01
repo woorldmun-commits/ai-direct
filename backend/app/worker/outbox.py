@@ -69,7 +69,8 @@ def deliver_pending(conn: psycopg.Connection, publisher: Publisher, *, now: date
     (failed не окончательный); непредвиденная ошибка отмечается internal_error и пробрасывается."""
     assert conn.autocommit, "захват и отметка — отдельные короткие транзакции: нужен autocommit"
     delivered = 0
-    for event in _claim(conn, now, limit):
+    events = _claim(conn, now, limit)
+    for i, event in enumerate(events):
         try:
             publisher.publish(event)  # вне транзакции БД
         except PublishError as e:
@@ -77,6 +78,9 @@ def deliver_pending(conn: psycopg.Connection, publisher: Publisher, *, now: date
             continue
         except Exception:
             _fail(conn, event.id, "internal_error", now)
+            # остаток пачки не ждёт истечения аренды — его сразу может взять другой воркер
+            conn.execute("UPDATE outbox_events SET locked_until = NULL WHERE id = ANY(%s)",
+                         ([e.id for e in events[i + 1:]],))
             raise
         conn.execute("""UPDATE outbox_events SET delivered_at = %s, locked_until = NULL, last_error = NULL
                         WHERE id = %s""", (now, event.id))
