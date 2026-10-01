@@ -81,6 +81,7 @@ class CampaignContext:
     campaign_id: int
     campaign_type: str             # TEXT_CAMPAIGN · UNIFIED_CAMPAIGN · …
     currency: str | None
+    time_zone: str | None          # даты отчётов Директа — в поясе кампании (сверка с Метрикой)
     search: StrategySide | None    # None: тип кампании не поддержан — стратегия не читалась
     network: StrategySide | None
     priority_goals: tuple[int, ...]
@@ -121,6 +122,7 @@ def parse_campaign(c: dict) -> CampaignContext:
     supported = c["Type"] in _TYPE_FIELDS
     return CampaignContext(
         campaign_id=int(c["Id"]), campaign_type=c["Type"], currency=c.get("Currency"),
+        time_zone=c.get("TimeZone"),
         search=_side(bidding.get("Search")) if supported else None,
         network=_side(bidding.get("Network")) if supported else None,
         priority_goals=tuple(int(g["GoalId"]) for g in ((specific.get("PriorityGoals") or {}).get("Items") or ())),
@@ -136,7 +138,7 @@ def get_campaign_contexts(http: httpx.Client, access_token: str, client_login: s
         headers["Client-Login"] = client_login
     body = {"method": "get", "params": {
         "SelectionCriteria": {"Ids": campaign_ids},
-        "FieldNames": ["Id", "Type", "Currency"],
+        "FieldNames": ["Id", "Type", "Currency", "TimeZone"],
         **{f"{name}FieldNames": _TYPE_FIELD_NAMES for name in _TYPE_FIELDS.values()},
     }}
     r = http.post(CAMPAIGNS_URL[env], json=body, headers=headers, timeout=30)
