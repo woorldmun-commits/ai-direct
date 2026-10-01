@@ -67,8 +67,8 @@ def direct_snapshot(direct: DirectApi, login: str, d: ConversionDefinition, peri
 
 def integrity(snap: Snapshot) -> dict:
     """Итоги считаются двумя путями (по дням и по кампаниям) и обязаны совпасть; каждая дата периода — в таблице.
-    Дня нет в отчёте: Директ не отдаёт дни без показов — по отчёту это ноль показов (no_rows), а отличить его от
-    пропуска данных можно только сверкой с кабинетом."""
+    Дня нет в отчёте (no_row_observation): API не вернул строк, и по Reports API причина неразличима — отсутствие
+    активности или отсутствие строки. Доказанным нулём это не считается; проверить можно только по кабинету."""
     rows = [r for r in snap.rows if r.level == "campaign"]
     period = [snap.period_from + timedelta(i) for i in range((snap.period_to - snap.period_from).days + 1)]
     by_date, by_campaign = defaultdict(lambda: [set(), Decimal(0), 0, Decimal(0)]), defaultdict(Decimal)
@@ -88,7 +88,7 @@ def integrity(snap: Snapshot) -> dict:
     return {
         "period": f"{snap.period_from}..{snap.period_to}", "partial_from": str(snap.partial_from),
         "dates_expected": len(period), "dates_found": len(by_date),
-        "no_rows_dates": [str(d) for d in period if d not in by_date],
+        "no_row_observation_dates": [str(d) for d in period if d not in by_date],
         "out_of_period_rows": sum(1 for r in snap.rows if not snap.period_from <= r.date <= snap.period_to),
         "duplicate_rows": sum(n - 1 for n in Counter(r.key() for r in snap.rows).values() if n > 1),
         "campaigns": len(by_campaign), "spend": str(cost), "clicks": clicks, "conversions": str(conv),
@@ -111,11 +111,14 @@ def metrika_check(snap: Snapshot, d: ConversionDefinition, period_days: int) -> 
 
 
 def time_zones(contexts: dict, counter_tz: str | None) -> dict:
-    """Граница суток: Директ — в поясе кампании, Метрика — в поясе счётчика, продукт — в Europe/Moscow."""
+    """Граница суток должна совпадать у источников: Директ — в поясе кампаний, Метрика — в поясе счётчика.
+    Europe/Moscow — ожидаемый случай по умолчанию, не эталон: Екатеринбург у обоих — тоже согласовано.
+    product_match — совпадает ли с поясом, в котором продукт сейчас считает «вчера» и окна (DATA_TIMEZONE)."""
     campaigns = Counter(c.time_zone or "unknown" for c in contexts.values())
-    expected = str(DATA_TIMEZONE)
-    return {"expected": expected, "direct_campaigns": dict(campaigns), "metrika_counter": counter_tz,
-            "match": set(campaigns) <= {expected} and counter_tz == expected}
+    sources = set(campaigns) | {counter_tz or "unknown"}
+    return {"direct_campaigns": dict(campaigns), "metrika_counter": counter_tz,
+            "match": len(sources) == 1 and "unknown" not in sources,
+            "product": str(DATA_TIMEZONE), "product_match": sources == {str(DATA_TIMEZONE)}}
 
 
 def audit(snap: Snapshot, settings: AuditSettings, contexts: dict) -> dict:
@@ -153,13 +156,14 @@ def summary(r: dict) -> str:
     i, m, a, tz = r["integrity"], r["metrika"], r.get("audit", {}), r["time_zones"]
     lines = [
         "MVP-0 E2E", "", f"Account: {r['account']}", f"Period: {i['period']} (partial from {i['partial_from']})",
-        f"Timezone: expected {tz['expected']} · Direct campaigns {tz['direct_campaigns']} · "
-        f"Metrika counter {tz['metrika_counter']} · match {tz['match']}", "",
+        f"Timezone: Direct campaigns {tz['direct_campaigns']} · Metrika counter {tz['metrika_counter']} · "
+        f"sources match {tz['match']} · product ({tz['product']}) match {tz['product_match']}", "",
         "Direct", f"  campaigns: {i['campaigns']}", f"  spend: {i['spend']} ₽", f"  clicks: {i['clicks']}",
         f"  conversions: {i['conversions']}", f"  CPA: {i['computed_cpa'] or 'нет (0 конверсий)'} ₽"
         f" · check {i['cpa_check']} · sums match {i['sums_match']}", "",
         "Data integrity", f"  expected dates: {i['dates_expected']}", f"  dates with rows: {i['dates_found']}",
-        f"  no rows (по отчёту Директа — ноль показов): {i['no_rows_dates'] or 0}",
+        f"  no row observation (API не вернул строк; ноль или пропуск — неразличимо): "
+        f"{i['no_row_observation_dates'] or 0}",
         f"  duplicate rows: {i['duplicate_rows']}", f"  rows out of period: {i['out_of_period_rows']}", "",
         "Metrika", f"  selected goals: {m['selected_goals']}",
         f"  report rows: {m['report_rows']} of {m['rows_expected']}",

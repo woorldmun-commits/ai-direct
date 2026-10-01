@@ -61,7 +61,7 @@ def test_full_path_passes_and_leaves_artifact(run):
     assert r["status"] == "PASS" and "STATUS: PASS" in (run_dir / "summary.txt").read_text(encoding="utf-8")
     i = r["integrity"]
     assert (i["dates_expected"], i["dates_found"], i["duplicate_rows"]) == (37, 3, 0)
-    assert len(i["no_rows_dates"]) == 34                           # дни без показов: Директ строк не отдаёт
+    assert len(i["no_row_observation_dates"]) == 34               # API не вернул строк: не доказанный ноль
     assert (i["spend"], i["clicks"], i["conversions"], i["computed_cpa"]) == ("157200.00", 1000, "38", "4136.84")
     assert i["sums_match"] and i["cpa_check"]
     assert [d["campaigns"] for d in i["by_date"]] == [1, 1, 1]
@@ -80,9 +80,15 @@ def test_no_secrets_or_login_in_output_and_files(run):
 
 
 @pytest.mark.parametrize("kw", [dict(campaign_tz="Asia/Yekaterinburg"), dict(counter_tz="Europe/Kaliningrad")])
-def test_time_zone_mismatch_needs_review(run, kw):
+def test_sources_in_different_time_zones_need_review(run, kw):
     _, r, _ = run(**kw)
     assert (r["status"], r["time_zones"]["match"]) == ("REVIEW", False)
+
+
+def test_same_non_moscow_time_zone_in_both_sources_passes(run):
+    """Екатеринбург и в Директе, и в Метрике — граница суток одна; отличие от пояса продукта видно отдельно."""
+    _, r, _ = run(campaign_tz="Asia/Yekaterinburg", counter_tz="Asia/Yekaterinburg")
+    assert (r["status"], r["time_zones"]["match"], r["time_zones"]["product_match"]) == ("PASS", True, False)
 
 
 def test_rejected_report_is_fail_and_artifact_is_written(monkeypatch, tmp_path, capsys):
