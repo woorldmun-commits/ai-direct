@@ -1,13 +1,16 @@
 """Контракт Value: один набор примеров проходит и через Pydantic, и через SQL value_is_valid — вердикты обязаны совпасть.
 Прямой путь: API → Pydantic → БД. Обратный: БД → SQL-проверка → Pydantic."""
 
+from datetime import date
 from decimal import Decimal
 
 import pytest
 from psycopg.types.json import Jsonb
 from pydantic import ValidationError
 
+from app.audit.values import to_value
 from app.contract import Value
+from app.rules.domain import Fact, Window
 
 BASE = {
     "amount": "12400.00", "unit": "rub", "source": "yandex_direct",
@@ -133,3 +136,26 @@ def test_decimal_in_exponent_form_is_stored_positionally(rw):
     dumped = Value.model_validate(v(amount=Decimal("1E+2"))).model_dump(mode="json")
     assert dumped["amount"] == "100"
     assert rw.execute("SELECT value_is_valid(%s)", (Jsonb(dumped),)).fetchone()[0] is True
+
+
+# --- Fact правила → Value: unavailable выражается с теми же инвариантами --------------------------------
+
+WINDOW = Window(date(2026, 9, 24), date(2026, 9, 30))
+
+
+def test_unavailable_fact_becomes_valid_unavailable_value(rw):
+    fact = Fact.unavailable("rub", "yandex_direct+yandex_metrika", WINDOW)
+    value = to_value(fact, 1, WINDOW.date_from, "zero_conv_campaign@1")
+    assert (value.amount, value.calculation_type, value.data_sufficiency) == (None, "unavailable", "insufficient")
+    dumped = value.model_dump(mode="json")
+    assert rw.execute("SELECT value_is_valid(%s)", (Jsonb(dumped),)).fetchone()[0] is True
+
+
+@pytest.mark.parametrize("kw", [
+    {"amount": None},                                                   # нет числа — но не unavailable
+    {"amount": Decimal(1), "calculation_type": "unavailable"},          # unavailable с числом
+    {"amount": Decimal(1), "calculation_type": "estimated"},            # estimated без формулы
+])
+def test_fact_keeps_value_invariants(kw):
+    with pytest.raises(ValueError):
+        Fact(unit="rub", source="yandex_direct", period=WINDOW, **{"calculation_type": "actual", **kw})

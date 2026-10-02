@@ -11,8 +11,8 @@ import pytest
 from app.audit.policy import decide
 from app.audit.templates import explain
 from app.rules import RULES
-from app.rules.domain import (BID_OR_BUDGET_ACTIONS, AuditSettings, CampaignDay, Finding, NotEnoughData, Reason,
-                              SnapshotView, run, windows)
+from app.rules.domain import (BID_OR_BUDGET_ACTIONS, SPEND_CAMPAIGN, AuditSettings, CampaignDay, Finding, NotEnoughData,
+                              Reason, SnapshotView, run, windows)
 from app.rules.zero_conv_campaign import ZERO_CONV_CAMPAIGN
 
 D = date(2026, 9, 30)
@@ -189,3 +189,14 @@ def test_template_uses_only_finding_numbers():
     assert "ставк" not in text  # рычаг — не ставка
     baseline = only(audit(snap(), NO_TARGET))
     assert "Укажите целевой CPA" in explain(baseline, decide(baseline))
+
+
+@pytest.mark.parametrize("s, settings", FIXTURES)
+def test_recoverable_is_unavailable_not_a_copy_of_lost(s, settings):
+    """ARCHITECTURE §4: у «проверить» нет обоснованной формулы прогноза — «Можно сэкономить» не завышается копией
+    exposure, а честно unavailable. Основа exposure — весь расход кампании за окно."""
+    f = only(audit(s, settings))
+    assert f.lost.amount > 0 and f.lost.calculation_type == "estimated"
+    assert (f.recoverable.amount, f.recoverable.calculation_type) == (None, "unavailable")
+    assert f.recoverable.unit == "rub" and f.recoverable.period == f.lost.period
+    assert f.exposure_basis == SPEND_CAMPAIGN

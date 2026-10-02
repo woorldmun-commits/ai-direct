@@ -1,0 +1,86 @@
+{
+  "description": "Чистый кабинет: площадки с конверсиями, с расходом ниже CPA кампании, с малым числом кликов и с расходом только до окна. Выводов нет ни у одного правила.",
+  "tags": [
+    "clean"
+  ],
+  "settings": {},
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "partial_from": "2026-09-28",
+    "sources": [
+      "yandex_direct",
+      "direct_conversions"
+    ],
+    "campaigns": [
+      {
+        "id": 606,
+        "strategy": "manual",
+        "days": [
+          {
+            "date": "2026-09-10",
+            "cost": "30000.00",
+            "clicks": 1200,
+            "conversions": "20"
+          },
+          {
+            "date": "2026-09-25",
+            "cost": "30000.00",
+            "clicks": 1000,
+            "conversions": "20"
+          }
+        ]
+      }
+    ],
+    "placements": [
+      {
+        "campaign_id": 606,
+        "id": 1,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "3000.00",
+            "clicks": 90,
+            "conversions": "2"
+          }
+        ]
+      },
+      {
+        "campaign_id": 606,
+        "id": 2,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "1400.00",
+            "clicks": 60,
+            "conversions": "0"
+          }
+        ]
+      },
+      {
+        "campaign_id": 606,
+        "id": 3,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "2000.00",
+            "clicks": 10,
+            "conversions": "0"
+          }
+        ]
+      },
+      {
+        "campaign_id": 606,
+        "id": 4,
+        "days": [
+          {
+            "date": "2026-09-10",
+            "cost": "5000.00",
+            "clicks": 200,
+            "conversions": "0"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": []
+}

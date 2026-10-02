@@ -107,13 +107,53 @@ class Reason(str, Enum):
 
 @dataclass(frozen=True)
 class Fact:
-    """Одно число доказательства. Слой audit/ превращает его в Value (добавляя snapshot_id, data_status)."""
-    amount: Decimal
+    """Одно число доказательства. Слой audit/ превращает его в Value (добавляя snapshot_id, data_status).
+    unavailable — числа нет и не выдумывается (например, «Можно сэкономить» у рекомендации «проверить»: обоснованной
+    формулы прогноза нет). Инварианты — как у contract.Value: amount is None ⇔ unavailable; estimated ⇒ formula."""
+    amount: Decimal | None
     unit: Literal["rub", "count", "pct"]
     source: str
     period: Window
-    calculation_type: Literal["actual", "estimated"] = "actual"
+    calculation_type: Literal["actual", "estimated", "unavailable"] = "actual"
     formula: str | None = None
+
+    def __post_init__(self):
+        if (self.amount is None) != (self.calculation_type == "unavailable"):
+            raise ValueError("Fact: amount is None ⇔ unavailable")
+        if self.calculation_type == "estimated" and not self.formula:
+            raise ValueError("Fact: estimated ⇒ formula обязательна")
+
+    @classmethod
+    def unavailable(cls, unit: Literal["rub", "count", "pct"], source: str, period: Window,
+                    formula: str | None = None) -> "Fact":
+        return cls(None, unit, source, period, "unavailable", formula)
+
+
+@dataclass(frozen=True)
+class ExposureBasis:
+    """Основа суммы `lost` для exposure_total@1 (ECONOMICS.md §3.2) — декларирует правило, а не угадывает итог.
+
+    spend   — сумма = расход своих единиц `stat_rows` за окно `lost.period`: level = "campaign" — вся кампания вывода;
+              иной уровень (placement, query…) — строки этого уровня с object_id из object_ids внутри кампании вывода;
+    formula — сумма по формуле (например, (CPA − target) × конверсии): на единицы не раскладывается, участвует блоком
+              «кампания × дни окна»."""
+    kind: Literal["spend", "formula"]
+    level: str | None = None
+    object_ids: tuple[int, ...] = ()
+
+    def __post_init__(self):
+        if self.kind == "formula" and (self.level is not None or self.object_ids):
+            raise ValueError("ExposureBasis: у formula нет единиц")
+        if self.kind == "spend" and self.level is None:
+            raise ValueError("ExposureBasis: у spend нужен уровень единиц")
+        if self.kind == "spend" and self.level != "campaign" and not self.object_ids:
+            raise ValueError("ExposureBasis: spend по объектам — нужен их список")
+        if self.level == "campaign" and self.object_ids:
+            raise ValueError("ExposureBasis: spend по кампании — без object_ids (кампания — объект вывода)")
+
+
+SPEND_CAMPAIGN = ExposureBasis("spend", "campaign")
+FORMULA = ExposureBasis("formula")
 
 
 def issue_key(workspace_id: int, direct_account_id: int, issue_type: str,
@@ -142,6 +182,7 @@ class Finding:
     evidence: Mapping[str, Fact]
     evidence_meta: Mapping[str, str]
     action: Mapping[str, object]
+    exposure_basis: ExposureBasis  # на чём основана сумма lost — для итога без двойного учёта (audit/exposure.py)
 
 
 @dataclass(frozen=True)

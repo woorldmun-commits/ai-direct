@@ -3,7 +3,11 @@
 Чистая функция: без БД, сети, текущего времени; не импортирует ai/ и не знает конкретных правил. Вход — выводы
 последнего аудита по каждому кабинету (их `lost` = exposure карточки) и строки статистики их снимков (`StatUnit`).
 Уровень вывода берётся из `object_type` (ECONOMICS §3.2): `account` — кабинет, `campaign` — кампания, любой другой —
-объект, чьи единицы — строки `stat_rows` того же уровня (`level = object_type`, `object_id`).
+объект. Основу суммы декларирует правило (`ExposureBasis`, хранится в `findings.evidence_meta`, см. `basis_meta`):
+- spend по уровню `campaign` — блок «кампания × дни окна» (вся кампания);
+- spend по объектам (`level`, `object_ids`) — единицы: строки `stat_rows` этого уровня с этими object_id в дни окна
+  (у вывода уровня кампании — только внутри неё; у объектного — `object_ids` = его объект);
+- formula — блок со своей суммой на уровне кампании × дни окна.
 
 Единица — кабинет · кампания · объект · день. Для каждой пары кабинет · кампания:
 1. объектные выводы — объединение их единиц (одна единица — один раз). Уровни из ADDITIVE_LEVELS (запросы — поиск,
@@ -15,10 +19,13 @@
 Затем вывод уровня кабинета против суммы вкладов его кампаний — по максимуму. Итог — сумма по кабинетам.
 
 Решения там, где ECONOMICS не однозначен (минимальные, сохраняют инварианты §3.5):
-- раскладывается ли сумма объектного вывода на единицы, определяют данные, а не имя правила: сумма `cost` его единиц
-  в окне вывода ровно равна `lost` → раскладывается («без конверсий»); иначе (формула) — блок со своей суммой на
-  уровне кампании × дни окна, как вывод кампании; если его единицы не сводятся к одной кампании — блок добавляется к
-  кабинету целиком, без вычета пересечений;
+- основа не угадывается по совпадению сумм: её декларирует правило. Вывод без декларации (записан до неё) — как
+  formula: блок, а не единицы (итог не занижается и остаётся в границах §3.5, но пересечения с объектами того же
+  дня вычитаются только по максимуму блока);
+- spend по объектам, но сумма `cost` его строк в окне не равна `lost` (строк нет или данные расходятся) — тоже блок:
+  иначе итог мог бы оказаться меньше карточки;
+- блок объектного вывода, чьи строки не сводятся к одной кампании, добавляется к кабинету целиком, без вычета
+  пересечений;
 - несколько выводов кампании с разными окнами (§6 п. 4): сумма — максимум, покрытые дни — объединение окон;
 - шаг 4 применяется, только если в снимке есть строки уровня `campaign` этой кампании; предел не опускается ниже
   самой большой карточки пары — иначе итог мог бы стать меньше карточки (гейт §3.5);
@@ -34,6 +41,7 @@ from decimal import Decimal
 from typing import Iterable
 
 from app.contract import SOURCES, Value
+from app.rules.domain import ExposureBasis
 
 VERSION = "exposure_total@1"
 FORMULA = ("Σ по кабинетам max(вывод кабинета, Σ по кампаниям min(расход кампании, "
@@ -57,6 +65,28 @@ class ExposureFinding:
     object_type: str
     object_id: int
     lost: Value
+    basis: ExposureBasis | None = None  # None — вывод записан до декларации основы: считается как formula
+
+
+def basis_meta(basis: ExposureBasis) -> dict[str, str]:
+    """Декларация основы → ключи findings.evidence_meta (строки, как остальные meta; id — через запятую)."""
+    meta = {"exposure_basis": basis.kind}
+    if basis.level is not None:
+        meta["exposure_level"] = basis.level
+    if basis.object_ids:
+        meta["exposure_object_ids"] = ",".join(map(str, basis.object_ids))
+    return meta
+
+
+def basis_from_meta(meta: dict) -> ExposureBasis | None:
+    """Обратно из evidence_meta; нет декларации или она не разбирается — None (старый вывод → как formula)."""
+    if meta.get("exposure_basis") not in ("spend", "formula"):
+        return None
+    try:
+        ids = tuple(int(x) for x in str(meta.get("exposure_object_ids") or "").split(",") if x)
+        return ExposureBasis(meta["exposure_basis"], meta.get("exposure_level"), ids)
+    except ValueError:
+        return None
 
 
 @dataclass(frozen=True)
@@ -139,23 +169,26 @@ def _account_total(findings: list[tuple[int, ExposureFinding]], units: list[Stat
     unattributed = Decimal(0)
     pairs: dict[int, _Pair] = defaultdict(_Pair)
     for card, f in findings:
-        amount, days = f.lost.amount, _days(f.lost)
+        amount, days, basis = f.lost.amount, _days(f.lost), f.basis
         if f.object_type == ACCOUNT_LEVEL:
             account_blocks.append(amount)
             continue
-        if f.object_type == CAMPAIGN_LEVEL:
+        if basis is not None and basis.kind == "spend" and basis.level != CAMPAIGN_LEVEL:
+            rows = [u for oid in sorted(set(basis.object_ids)) for u in objects[(basis.level, oid)]
+                    if u.date in days and (f.object_type != CAMPAIGN_LEVEL or u.campaign_id == f.object_id)]
+            if rows and sum((u.cost for u in rows), Decimal(0)) == amount:  # сумма = расход своих единиц
+                for u in rows:
+                    pair = pairs[u.campaign_id]
+                    pair.units[(u.level, u.object_id, u.date)] = u.cost
+                    pair.parts[card] += u.cost
+                continue
+        if f.object_type == CAMPAIGN_LEVEL:  # spend по кампании, formula, без декларации, нераскладываемый spend
             pairs[f.object_id].blocks.append(amount)
             pairs[f.object_id].covered |= days
             continue
         rows = [u for u in objects[(f.object_type, f.object_id)] if u.date in days]
-        if rows and sum((u.cost for u in rows), Decimal(0)) == amount:  # «без конверсий»: сумма = расход единиц
-            for u in rows:
-                pair = pairs[u.campaign_id]
-                pair.units[(u.level, u.object_id, u.date)] = u.cost
-                pair.parts[card] += u.cost
-            continue
         campaigns = {u.campaign_id for u in rows}
-        if len(campaigns) == 1:  # формульный объектный вывод — блоком «кампания × дни окна»
+        if len(campaigns) == 1:  # формульный (или не декларированный) объектный вывод — блоком «кампания × окно»
             pair = pairs[campaigns.pop()]
             pair.blocks.append(amount)
             pair.covered |= days
@@ -191,7 +224,7 @@ def _unavailable(values: list[Value], as_of: date, formula: str) -> Value:
 
 
 def _key(f: ExposureFinding) -> tuple:
-    return (f.account_id, f.object_type, f.object_id, f.issue_type, f.lost.model_dump_json())
+    return (f.account_id, f.object_type, f.object_id, f.issue_type, f.lost.model_dump_json(), repr(f.basis))
 
 
 def exposure_total(findings: Iterable[ExposureFinding], units: Iterable[StatUnit], *, as_of: date) -> ExposureTotal:

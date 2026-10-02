@@ -1,0 +1,92 @@
+{
+  "description": "Пересечение (ECONOMICS §3): кампания без конверсий (42 000 ₽ за окно) и её площадки без конверсий (8 000 ₽). Обе карточки описывают один и тот же расход: итог — максимум, 42 000 ₽, а не 50 000 ₽.",
+  "tags": [
+    "problem"
+  ],
+  "settings": {
+    "target_cpa": "1000"
+  },
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "partial_from": "2026-09-28",
+    "sources": [
+      "yandex_direct",
+      "direct_conversions"
+    ],
+    "campaigns": [
+      {
+        "id": 808,
+        "strategy": "manual",
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "42000.00",
+            "clicks": 700,
+            "conversions": "0"
+          }
+        ]
+      }
+    ],
+    "placements": [
+      {
+        "campaign_id": 808,
+        "id": 1,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "5000.00",
+            "clicks": 100,
+            "conversions": "0"
+          }
+        ]
+      },
+      {
+        "campaign_id": 808,
+        "id": 2,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "3000.00",
+            "clicks": 50,
+            "conversions": "0"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": [
+    {
+      "rule_version": "zero_conv_campaign@1",
+      "object_type": "campaign",
+      "object_id": 808,
+      "candidate_level": "inspect_only",
+      "action_level": "inspect_only",
+      "action": {
+        "type": "investigate_zero_conversions",
+        "check": [
+          "conversion_goals",
+          "strategy",
+          "search_queries_negative_keywords"
+        ]
+      },
+      "exposure": "42000.00"
+    },
+    {
+      "rule_version": "zero_conv_placements@1",
+      "object_type": "campaign",
+      "object_id": 808,
+      "candidate_level": "review",
+      "action_level": "review",
+      "action": {
+        "type": "exclude_placements",
+        "execution": "manual",
+        "placement_ids": [
+          1,
+          2
+        ]
+      },
+      "exposure": "8000.00"
+    }
+  ],
+  "exposure_total": "42000.00"
+}

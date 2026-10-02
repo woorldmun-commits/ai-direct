@@ -1,0 +1,99 @@
+{
+  "description": "Площадка 2 проходит порог только с днём досчёта 29.09 (1000 ₽ до 28.09 < CPA кампании 1540 ₽, 1600 ₽ с ним): вывод остаётся с причиной conversions_partial, достаточность данных понижена с high (17 600 / 1540 ≈ 11,4) до medium → review, не выше.",
+  "tags": [
+    "partial",
+    "problem"
+  ],
+  "settings": {},
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "partial_from": "2026-09-28",
+    "sources": [
+      "yandex_direct",
+      "direct_conversions"
+    ],
+    "campaigns": [
+      {
+        "id": 202,
+        "strategy": "manual",
+        "days": [
+          {
+            "date": "2026-09-10",
+            "cost": "30000.00",
+            "clicks": 1200,
+            "conversions": "20"
+          },
+          {
+            "date": "2026-09-25",
+            "cost": "30000.00",
+            "clicks": 1000,
+            "conversions": "20"
+          },
+          {
+            "date": "2026-09-27",
+            "cost": "1000.00",
+            "clicks": 30,
+            "conversions": "0"
+          },
+          {
+            "date": "2026-09-29",
+            "cost": "600.00",
+            "clicks": 20,
+            "conversions": "0"
+          }
+        ]
+      }
+    ],
+    "placements": [
+      {
+        "campaign_id": 202,
+        "id": 1,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "16000.00",
+            "clicks": 500,
+            "conversions": "0"
+          }
+        ]
+      },
+      {
+        "campaign_id": 202,
+        "id": 2,
+        "days": [
+          {
+            "date": "2026-09-27",
+            "cost": "1000.00",
+            "clicks": 30,
+            "conversions": "0"
+          },
+          {
+            "date": "2026-09-29",
+            "cost": "600.00",
+            "clicks": 20,
+            "conversions": "0"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": [
+    {
+      "rule_version": "zero_conv_placements@1",
+      "object_type": "campaign",
+      "object_id": 202,
+      "candidate_level": "review",
+      "action_level": "review",
+      "action": {
+        "type": "exclude_placements",
+        "execution": "manual",
+        "placement_ids": [
+          1,
+          2
+        ]
+      },
+      "exposure": "17600.00"
+    }
+  ],
+  "exposure_total": "17600.00"
+}

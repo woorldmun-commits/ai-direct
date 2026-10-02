@@ -7,7 +7,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.rules.domain import Fact, Finding, Rule, frozen, issue_key, windows
+from app.rules.domain import SPEND_CAMPAIGN, Fact, Finding, Rule, frozen, issue_key, windows
 from app.worker import audit as audit_module
 from test_api_headers import assert_secure
 from test_api_support import api, cookie, session, user, world  # noqa: F401 — фикстуры
@@ -35,7 +35,7 @@ def _spend_block(rule, snap, settings):
             reason_code="test_spend", metric="cost", actual=cost, reference=Decimal(0), reference_type="target",
             delta_pct=Decimal(0), lost=lost, recoverable=lost, current_data_quality="high",
             evidence=frozen({"cost": Fact(cost, "rub", "yandex_direct", evaluation)}), evidence_meta=frozen({}),
-            action=frozen({"type": "pause_for_test"})))
+            action=frozen({"type": "pause_for_test"}), exposure_basis=SPEND_CAMPAIGN))
     return tuple(out)
 
 
@@ -107,6 +107,16 @@ def test_today_on_real_snapshot_dedups_overlapping_cards(api, rw, audited, monke
     assert "snapshot_id" not in r.text and "snapshot_ids" not in r.text
     assert body["data_status"] == e["total"]["data_status"]
     assert body["last_audit_at"] is not None
+
+
+def test_persisted_findings_declare_exposure_basis(rw, audited, monkeypatch):
+    """Основа exposure пишется в evidence_meta при сохранении вывода — итог не угадывает её по суммам."""
+    monkeypatch.setattr(audit_module, "RULES", audit_module.RULES + (SPEND_RULE,))
+    audit(rw, audited)
+    metas = dict(rw.execute("""SELECT i.issue_type, f.evidence_meta FROM findings f JOIN issues i ON i.id = f.issue_id
+                               WHERE i.workspace_id = %s AND i.closed_at IS NULL""", (audited["ws"],)).fetchall())
+    assert metas["high_cpa"]["exposure_basis"] == "formula" and "exposure_level" not in metas["high_cpa"]
+    assert (metas["spend_block"]["exposure_basis"], metas["spend_block"]["exposure_level"]) == ("spend", "campaign")
 
 
 def test_today_freshness_from_snapshots_and_connections(api, rw, audited):
@@ -207,3 +217,4 @@ def test_foreign_workspace_cards_never_leak(api, rw, audited, monkeypatch):
     assert get_today(api, rw, stranger, audited["ws"]).status_code == 404
     body = get_today(api, rw, stranger, other).json()
     assert body["top"] == [] and body["exposure"]["total"]["amount"] is None
+

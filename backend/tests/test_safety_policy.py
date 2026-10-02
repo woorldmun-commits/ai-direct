@@ -6,7 +6,7 @@ import dataclasses
 import psycopg
 import pytest
 
-from app.audit.policy import LEVELS, decide
+from app.audit.policy import CANDIDATE_LEVEL, LEVELS, decide
 from app.audit.templates import explain
 from test_rule_high_cpa import NO_TARGET, TARGET, audit, only, snap
 from test_direct_sync import root  # noqa: F401 — фикстура
@@ -36,6 +36,32 @@ def test_bid_change_is_downgraded_by_data_and_unknown_strategy(conv, level, reas
 def test_investigation_stays_inspect_only():
     d = decide(finding(settings=NO_TARGET))
     assert (d.candidate_level, d.level, d.reasons) == ("inspect_only", "inspect_only", ())
+
+
+def test_candidate_levels_of_v1_actions_are_explicit():
+    """Каждое действие трёх правил v1.0 — явно в политике: «проверить» — inspect_only, исключение площадок —
+    review (change не бывает). Раньше два последних шли веткой «неизвестное действие» — тоже inspect_only."""
+    assert CANDIDATE_LEVEL == {"decrease_bid": "change", "investigate_cpa_growth": "inspect_only",
+                               "investigate_zero_conversions": "inspect_only", "exclude_placements": "review"}
+
+
+@pytest.mark.parametrize("quality, level, reasons", [
+    ("low", "inspect_only", ("data_sufficiency_low",)),
+    ("medium", "review", ()),
+    ("high", "review", ()),            # данных много — но кандидат review, политика не повышает до change
+])
+def test_exclude_placements_is_never_above_review(quality, level, reasons):
+    from test_rule_zero_conv_placements import CID, DONE, evaluate, pday
+    (f,) = evaluate([pday(CID, "a.ru", DONE, "15000.00", 500, "0")])
+    d = decide(dataclasses.replace(f, current_data_quality=quality))
+    assert (d.candidate_level, d.level, d.reasons) == ("review", level, reasons)
+
+
+def test_investigate_zero_conversions_stays_inspect_only_at_any_data():
+    from test_rule_zero_conv_campaign import TARGET as ZC_TARGET, audit as zc_audit, only as zc_only, snap as zc_snap
+    f = zc_only(zc_audit(zc_snap(eval_cost=90000, eval_clicks=900), ZC_TARGET))
+    assert f.current_data_quality == "high"
+    assert decide(f).level == "inspect_only"
 
 
 def test_unknown_action_offers_no_change():

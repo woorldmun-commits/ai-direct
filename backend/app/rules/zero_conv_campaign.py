@@ -28,12 +28,14 @@ spend_threshold = max(cpa_multiple × CPA-ориентир, min_cost_rub). CPA-�
 проблема не «исчезает» от того, что расход упал ниже порога. Конверсии неизвестны (None) хотя бы за один день окна →
 NotEnoughData(SOURCE_MISSING): ноль конверсий не выводится из их отсутствия. Расход 0 или есть конверсии → ничего.
 
-lost (exposure) = весь расход кампании за окно оценки (estimated, формула ниже)."""
+lost (exposure) = весь расход кампании за окно оценки (estimated, формула ниже; основа exposure — вся кампания).
+recoverable = unavailable: действие — «проверить», обоснованной формулы прогноза эффекта нет (ARCHITECTURE.md §4),
+поэтому «Можно сэкономить» не копирует lost и не завышается."""
 
 from decimal import ROUND_HALF_UP, Decimal
 
-from app.rules.domain import (DIRECT_CONVERSIONS, AuditSettings, CampaignDay, Fact, Finding, NotEnoughData, Output,
-                              Reason, Rule, SnapshotView, Window, frozen, issue_key, windows)
+from app.rules.domain import (DIRECT_CONVERSIONS, SPEND_CAMPAIGN, AuditSettings, CampaignDay, Fact, Finding,
+                              NotEnoughData, Output, Reason, Rule, SnapshotView, Window, frozen, issue_key, windows)
 
 FAMILY = "zero_conv_campaign"
 CPA_FORMULA = "period_total_spend / period_total_conversions"
@@ -117,8 +119,9 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings, 
         issue_key=issue_key(snap.workspace_id, snap.direct_account_id, rule.family, "campaign", campaign_id),
         reason_code="zero_conversions", metric="cost", actual=cost, reference=threshold, reference_type=ref_type,
         delta_pct=((cost - threshold) / threshold * 100).quantize(Decimal("0.1"), ROUND_HALF_UP),
-        lost=lost, recoverable=lost, current_data_quality="high" if high else "medium",
+        lost=lost, recoverable=Fact.unavailable("rub", DM, evaluation), current_data_quality="high" if high else "medium",
         evidence=frozen(evidence), evidence_meta=frozen({"reference_source": ref_source}), action=frozen(action),
+        exposure_basis=SPEND_CAMPAIGN,
     )
 
 

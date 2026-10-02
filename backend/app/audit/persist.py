@@ -12,6 +12,7 @@ from datetime import date
 import psycopg
 from psycopg.types.json import Jsonb
 
+from app.audit.exposure import basis_meta
 from app.audit.policy import decide
 from app.audit.templates import explain
 from app.audit.values import to_value
@@ -34,7 +35,8 @@ def _finding_row(f: Finding, snapshot_id: int, partial_from: date) -> tuple:
     def value(fact):
         return to_value(fact, snapshot_id, partial_from, f.rule_version).model_dump(mode="json")
     meta = {**f.evidence_meta, "reason_code": f.reason_code, "metric": f.metric, "reference_type": f.reference_type,
-            "actual": str(f.actual), "reference": str(f.reference), "delta_pct": str(f.delta_pct)}
+            "actual": str(f.actual), "reference": str(f.reference), "delta_pct": str(f.delta_pct),
+            **basis_meta(f.exposure_basis)}  # основа exposure — для итога без двойного учёта (api/today.py)
     d = decide(f)
     return (f.rule_version, Jsonb(value(f.lost)), Jsonb(value(f.recoverable)), f.current_data_quality,
             Jsonb({k: value(x) for k, x in f.evidence.items()}), Jsonb(meta), Jsonb(dict(f.action)),

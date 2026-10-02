@@ -1,0 +1,75 @@
+{
+  "description": "Пересечение с формульным выводом (ECONOMICS §3.3 п. 3): CPA 2000 ₽ при цели 1000 ₽ — (2000 − 1000) × 15 = 15 000 ₽ блоком «кампания × окно»; площадка без конверсий — 20 000 ₽ в тот же день. Итог — max(15 000, 20 000) = 20 000 ₽: не сумма и не меньше самой большой карточки.",
+  "tags": [
+    "problem"
+  ],
+  "settings": {
+    "target_cpa": "1000"
+  },
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "partial_from": "2026-09-28",
+    "sources": [
+      "yandex_direct",
+      "direct_conversions"
+    ],
+    "campaigns": [
+      {
+        "id": 909,
+        "strategy": "manual",
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "30000.00",
+            "clicks": 600,
+            "conversions": "15"
+          }
+        ]
+      }
+    ],
+    "placements": [
+      {
+        "campaign_id": 909,
+        "id": 1,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "20000.00",
+            "clicks": 300,
+            "conversions": "0"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": [
+    {
+      "rule_version": "high_cpa_target@1",
+      "object_type": "campaign",
+      "object_id": 909,
+      "candidate_level": "change",
+      "action_level": "review",
+      "action": {
+        "type": "decrease_bid",
+        "change_pct": -25
+      },
+      "exposure": "15000.00"
+    },
+    {
+      "rule_version": "zero_conv_placements@1",
+      "object_type": "campaign",
+      "object_id": 909,
+      "candidate_level": "review",
+      "action_level": "review",
+      "action": {
+        "type": "exclude_placements",
+        "execution": "manual",
+        "placement_ids": [
+          1
+        ]
+      },
+      "exposure": "20000.00"
+    }
+  ],
+  "exposure_total": "20000.00"
+}

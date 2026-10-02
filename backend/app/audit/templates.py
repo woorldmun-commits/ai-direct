@@ -45,9 +45,41 @@ def _zero_conv(f: Finding) -> str:
     return text
 
 
+_PLACEMENT_REFERENCE = {"target": "целевой CPA", "campaign": "CPA кампании за период снимка"}
+NAMES_SHOWN = 5  # имён площадок в тексте; полный список — в доказательствах и действии
+
+
+def _placement_names(f: Finding) -> list[str]:
+    ids = [i for i in f.evidence_meta.get("placement_ids", "").split(",") if i]
+    return [n for i in ids if (n := f.evidence_meta.get(f"placement_{i}_name"))]
+
+
+def _placements(f: Finding, d: Decision) -> str:
+    """Числа — только из Finding: расход и клики площадок, их число, ориентир CPA. Отклонение не пишется: у правила
+    его нет (delta_pct = 0 — служебное значение, а не «расход на 0% выше ориентира»)."""
+    ev = f.evidence
+    text = (f"В кампании {f.object_id} площадок РСЯ без конверсий: {_rub(ev['placements'].amount)}. За период они "
+            f"потратили {_rub(f.actual)} ₽ ({_rub(ev['clicks'].amount)} кликов), а конверсий не было ни за период, "
+            f"ни раньше в истории снимка. Каждая потратила не меньше ориентира — "
+            f"{_PLACEMENT_REFERENCE.get(f.evidence_meta.get('reference_mode'), 'CPA')} {_rub(f.reference)} ₽.")
+    if names := _placement_names(f):
+        text += " Площадки: " + ", ".join(names[:NAMES_SHOWN]) + (" и другие." if len(names) > NAMES_SHOWN else ".")
+    if f.evidence_meta.get("level_reason") == "conversions_partial":
+        text += " Конверсии последних дней ещё досчитываются — проверьте площадки перед исключением."
+    if d.level == "inspect_only":
+        text += (" Расхода пока мало для уверенного вывода: проверьте, что это за площадки и подходит ли их аудитория, "
+                 "прежде чем исключать.")
+    else:
+        text += (" Проверьте площадки и исключите лишние вручную в настройках кампании в Директе. «Можно сэкономить» "
+                 "— верхняя оценка: Директ может перераспределить бюджет на другие площадки.")
+    return text
+
+
 def explain(f: Finding, d: Decision) -> str:
     if f.reason_code == "zero_conversions":
         return _zero_conv(f)
+    if f.reason_code == "placements_without_conversions":
+        return _placements(f, d)
     head = f"CPA кампании {f.object_id} — {_rub(f.actual)} ₽"
     if f.reason_code == "cpa_above_target":
         return f"{head}, это на {f.delta_pct}% выше целевого CPA {_rub(f.reference)} ₽. {_bid_advice(f, d)}"
