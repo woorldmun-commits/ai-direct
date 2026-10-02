@@ -1,0 +1,56 @@
+{
+  "description": "Новый аккаунт (10 дней, CPA неизвестен): 12 000 ₽ без конверсий целиком в днях досчёта — абсолютный порог 5 000 ₽, уровень не выше review.",
+  "tags": [
+    "problem",
+    "partial"
+  ],
+  "settings": {},
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "history_days": 10,
+    "sources": [
+      "yandex_direct",
+      "direct_conversions"
+    ],
+    "campaigns": [
+      {
+        "id": 101,
+        "strategy": "manual",
+        "history_days": 10,
+        "days": [
+          {
+            "date": "2026-09-28",
+            "cost": "6000",
+            "clicks": 80,
+            "conversions": "0"
+          },
+          {
+            "date": "2026-09-29",
+            "cost": "6000",
+            "clicks": 80,
+            "conversions": "0"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": [
+    {
+      "rule_version": "zero_conv_campaign@1",
+      "object_type": "campaign",
+      "object_id": 101,
+      "candidate_level": "inspect_only",
+      "action_level": "inspect_only",
+      "action": {
+        "type": "investigate_zero_conversions",
+        "check": [
+          "conversion_goals",
+          "strategy",
+          "search_queries_negative_keywords"
+        ],
+        "suggest": "set_target_cpa"
+      },
+      "exposure": "12000.00"
+    }
+  ]
+}

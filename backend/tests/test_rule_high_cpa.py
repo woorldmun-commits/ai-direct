@@ -34,9 +34,12 @@ def snap(eval_cost=42000, eval_conv=8, base_cost=115200, base_conv=30, history_d
                         period_from=D - timedelta(36), period_to=D, sources=sources, campaign_days=days)
 
 
+HIGH_CPA_RULES = tuple(r for r in RULES if r.family == "high_cpa")  # другие семейства — свои тесты
+
+
 def audit(s, settings):
-    """Как аудит: все зарегистрированные версии правил; неприменимая версия молчит."""
-    return tuple(out for rule in RULES for out in run(rule, s, settings))
+    """Как аудит: все зарегистрированные версии семейства high_cpa; неприменимая версия молчит."""
+    return tuple(out for rule in HIGH_CPA_RULES for out in run(rule, s, settings))
 
 
 def only(result):
@@ -227,7 +230,7 @@ def test_current_data_quality_does_not_block_action():
 
 @pytest.mark.parametrize("settings", [TARGET, NO_TARGET])
 def test_exactly_one_version_of_family_applies(settings):
-    applied = [r.rule_version for r in RULES if run(r, snap(), settings)]
+    applied = [r.rule_version for r in HIGH_CPA_RULES if run(r, snap(), settings)]
     assert applied == (["high_cpa_target@1"] if settings.target_cpa else ["high_cpa_baseline@1"])
 
 

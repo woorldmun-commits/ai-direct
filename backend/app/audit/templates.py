@@ -24,7 +24,30 @@ def _bid_advice(f: Finding, d: Decision) -> str:
     return f"Рекомендуется снизить ставку на {change}%."
 
 
+_ZERO_CONV_REFERENCE = {
+    "target_cpa": ("target_cpa", "целевого CPA"),
+    "campaign_baseline": ("baseline_cpa", "CPA кампании за прошлые 30 дней"),
+    "account_baseline": ("account_baseline_cpa", "CPA аккаунта за прошлые 30 дней"),
+}
+
+
+def _zero_conv(f: Finding) -> str:
+    """Числа — только из Finding: расход, клики, порог и CPA-ориентир из доказательств."""
+    ev = f.evidence
+    text = (f"Кампания {f.object_id} потратила {_rub(f.actual)} ₽ ({_rub(ev['clicks'].amount)} кликов) за период "
+            f"и не получила ни одной конверсии. Порог достаточного объёма — {_rub(f.reference)} ₽")
+    if (ref := _ZERO_CONV_REFERENCE.get(f.evidence_meta.get("reference_source"))) and ref[0] in ev:
+        text += f", рассчитан от {ref[1]} {_rub(ev[ref[0]].amount)} ₽"
+    text += (". Проверьте: учитываются ли цели и конверсии Метрики в кампании, стратегию и её цель, поисковые "
+             "запросы и минус-фразы.")
+    if f.action.get("suggest") == "set_target_cpa":
+        text += " Укажите целевой CPA — порог станет точнее."
+    return text
+
+
 def explain(f: Finding, d: Decision) -> str:
+    if f.reason_code == "zero_conversions":
+        return _zero_conv(f)
     head = f"CPA кампании {f.object_id} — {_rub(f.actual)} ₽"
     if f.reason_code == "cpa_above_target":
         return f"{head}, это на {f.delta_pct}% выше целевого CPA {_rub(f.reference)} ₽. {_bid_advice(f, d)}"

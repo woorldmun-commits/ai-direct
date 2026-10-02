@@ -231,7 +231,10 @@ def test_not_enough_data_does_not_resolve(rw, ws):
     audit(rw, ws, "d1")
     snapshot_like(rw, ws, ws["account"], snap, eval_cost=42000, eval_conv=0)   # за неделю ноль конверсий
     second = audit(rw, ws, "d2")
-    assert events(rw, ws) == [] and open_issues(rw, ws) == 1
+    # high_cpa не закрыта (нет «resolved»); тот же расход без конверсий открыл свою проблему zero_conv_campaign
+    assert events(rw, ws) == [] and open_issues(rw, ws) == 2
+    assert {r[0] for r in rw.execute("SELECT issue_type FROM issues WHERE workspace_id = %s AND closed_at IS NULL",
+                                     (ws["ws"],)).fetchall()} >= {"high_cpa", "zero_conv_campaign"}
     assert {"account": ws["account"], "rule": "high_cpa_baseline@1", "reason": "no_conversions",
             "object_type": "campaign", "object_id": 12345} in \
         one(rw, "SELECT rules_skipped FROM audit_runs WHERE id = %s", second.audit_run_id)

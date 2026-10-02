@@ -1,0 +1,50 @@
+{
+  "description": "1 конверсия: кандидат −15%, но low → inspect_only (data_sufficiency_low).",
+  "tags": [
+    "problem"
+  ],
+  "settings": {
+    "target_cpa": "3000"
+  },
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "sources": [
+      "yandex_direct",
+      "direct_conversions"
+    ],
+    "campaigns": [
+      {
+        "id": 101,
+        "strategy": "manual",
+        "days": [
+          {
+            "date": "2026-09-23",
+            "cost": "115200",
+            "clicks": 300,
+            "conversions": "30"
+          },
+          {
+            "date": "2026-09-30",
+            "cost": "5000",
+            "clicks": 20,
+            "conversions": "1"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": [
+    {
+      "rule_version": "high_cpa_target@1",
+      "object_type": "campaign",
+      "object_id": 101,
+      "candidate_level": "change",
+      "action_level": "inspect_only",
+      "action": {
+        "type": "decrease_bid",
+        "change_pct": -15
+      },
+      "exposure": "2000.00"
+    }
+  ]
+}

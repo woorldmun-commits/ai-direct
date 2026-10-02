@@ -1,0 +1,45 @@
+{
+  "description": "36 дней истории вместо 37: baseline не считается — «недостаточно данных», вывода нет.",
+  "tags": [
+    "not_enough_data"
+  ],
+  "settings": {},
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "history_days": 36,
+    "sources": [
+      "yandex_direct",
+      "direct_conversions"
+    ],
+    "campaigns": [
+      {
+        "id": 101,
+        "strategy": "manual",
+        "history_days": 36,
+        "days": [
+          {
+            "date": "2026-09-23",
+            "cost": "115200",
+            "clicks": 300,
+            "conversions": "30"
+          },
+          {
+            "date": "2026-09-30",
+            "cost": "42000",
+            "clicks": 70,
+            "conversions": "8"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": [],
+  "expected_not_enough_data": [
+    {
+      "rule_version": "high_cpa_baseline@1",
+      "reason": "baseline_history_insufficient",
+      "object_type": "campaign",
+      "object_id": 101
+    }
+  ]
+}
