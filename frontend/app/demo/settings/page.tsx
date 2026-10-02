@@ -126,7 +126,7 @@ export default function SettingsPage() {
                   клиентов, кампаний и запросов — подробности после входа.
                 </p>
               </div>
-              <Toggle label="Ежедневная сводка на почту" />
+              <Toggle label="Утренний дайджест в Telegram" />
               <Toggle label="Замер эффекта после решения" defaultOn />
             </div>
           </Block>

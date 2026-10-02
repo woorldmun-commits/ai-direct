@@ -149,7 +149,7 @@ EXECUTION_SAFETY.md.
 | `apply` | `approved → applied` / `failed` | execute | кворум не истёк; одобренная версия последняя |
 | `approve_and_apply` | `requires_decision → approved → applied` / `failed` | approve **и** execute | одобрение пользователя **завершает** кворум; условия `approve` |
 | `cancel` | `approved → cancelled` | approve | исполнение ещё не начато |
-| `rollback` | `rollback_status → pending → …` | approve | `applied` через API, не позже 7 дней, изменение откатываемо (§6.2) |
+| `rollback` | `rollback_status → pending → …` | approve | гейт отката §6.2; последней версии вывода **не** требует |
 
 `postponed` можно решить раньше даты: из него доступны те же действия, что из `requires_decision`.
 
@@ -176,7 +176,7 @@ high = 1, critical = 2; меняет owner/admin, снизить critical до 1
 | `write_access_missing` | «Нет прав на изменение рекламного кабинета — выполните вручную или выдайте доступ» |
 | `capability_unsupported` | «AdPilot не умеет безопасно применить это изменение для такой кампании — выполните вручную» |
 | `level_not_change` | «Рекомендация требует проверки — автоматическое применение недоступно» |
-| `second_approval_required` | «Нужно второе одобрение: изменение высокого риска» |
+| `second_approval_required` | «Нужно второе одобрение: критичное изменение» (по умолчанию два одобрения — только `critical`) |
 | `same_approver` | «Второе одобрение должен дать другой участник» |
 | `state_changed` | «Параметр в Директе изменился после предпросмотра — нужны новый предпросмотр и одобрение» |
 | `approval_expired` | «Одобрение старше 24 часов — одобрите заново» |
@@ -275,7 +275,7 @@ high = 1, critical = 2; меняет owner/admin, снизить critical до 1
 ставшего текущим состоянием (двойной клик), → `200` без новой записи.
 
 Проверки по порядку: (1) доступ к workspace → иначе `404`; (2) формат → `400 invalid_request`; (3) `version_id`
-последний → `409 version_outdated` (в ответе актуальная рекомендация); (4) переход допустим из текущего `status` →
+последний (кроме `rollback`: аудит создаёт новые версии, откат от них не зависит) → `409 version_outdated` (в ответе актуальная рекомендация); (4) переход допустим из текущего `status` →
 `409 invalid_transition`; (5) действие в `allowed_actions` → иначе `422 action_unavailable` с `reason` из §4
 (`role_forbidden` → `403 forbidden_role`); (6) для `approve*`: предпросмотр не истёк и его `precondition_hash` совпадает
 с уже данными одобрениями → иначе `422 action_unavailable` с `state_changed`.
@@ -302,14 +302,15 @@ high = 1, critical = 2; меняет owner/admin, снизить critical до 1
 - Действие не поддерживается для типа кампании/стратегии, поле неизменяемо или объект архивирован → `422
   action_unavailable` с `capability_unsupported`.
 - Перед записью воркер перечитывает объект: значение изменилось → записи нет, `execution.error_code = state_changed`,
-  рекомендация снова `requires_decision`. Исполнение позже 24 часов после одобрения → `approval_expired`, так же.
+  рекомендация снова `requires_decision`. Одобрение действует 24 ч, истёкшее в кворум не входит (`approval_expired`).
 
 ### 6.2 Откат
 
-`{"action": "rollback", "version_id": "…"}` с `Idempotency-Key` → `202`, `rollback_status = pending`. Доступен до
-`execution.rollback_until` (7 дней после исполнения), одно одобрение человека с правом approve. Воркер перечитывает
-объект: текущее значение равно подтверждённому после исполнения → возвращает прежнее (`succeeded`). Не равно → записи
-нет, `rollback_status = blocked`, `rollback_reason = state_changed_since_execution`, текущее значение — в тексте причины.
+`{"action": "rollback", "version_id": "…"}` с `Idempotency-Key` → `202`, `rollback_status = pending`; одно одобрение.
+Гейт (EXECUTION_SAFETY.md §7; последней версии вывода **не** требует): успешное исполнение через API · не прошло 7 дней
+(`execution.rollback_until`) · текущее значение == `applied_value` · право approve · подключение `connected` и
+`write_access = granted` · capability поддерживает обратное изменение. Равно → возвращает прежнее (`succeeded`); не
+равно → записи нет, `blocked`, `rollback_reason = state_changed_since_execution` с текущим значением в тексте.
 
 ## 7. `measurement` — результат замера
 
@@ -338,7 +339,7 @@ high = 1, critical = 2; меняет owner/admin, снизить critical до 1
 ```json
 {
   "access": "paid", "today": "2026-10-02", "last_audit_at": "2026-10-02T07:01:54+03:00", "spent": "Value",
-  "exposure": {"total": "Value", "overlap": "Value", "version": "exposure_total@1",
+  "exposure": {"total": "Value", "overlap": "Value", "version": "exposure_total@1", "formula": "Σ по кабинетам max(...)",
                "components": [{"issue_type": "high_cpa", "amount": "Value"}],
                "coverage": {"included": 3, "unavailable": 1}},
   "can_save": {"total": "Value", "overlap": "Value", "components": [], "coverage": {"included": 2, "unavailable": 2}},
@@ -354,7 +355,7 @@ high = 1, critical = 2; меняет owner/admin, снизить critical до 1
 - `exposure` — «Расход с признаками неэффективности ≈ N ₽» по активным рекомендациям последних аудитов всех кабинетов
   workspace, включённых в анализ. **Не сумма карточек:** `total` считает `audit/exposure.py` по объединению
   затронутого расхода (ECONOMICS.md); `components` — по типам проблем, `overlap` — сколько вычтено как пересечение,
-  `total.formula` и `version` — как посчитано. Пояснение в UI: «Оценка расходов, по которым система обнаружила признаки
+  `version` и `formula` — как посчитано. Пояснение в UI: «Оценка расходов, по которым система обнаружила признаки
   неэффективности. Одна и та же сумма учитывается в итоге только один раз». `coverage` — сколько рекомендаций без
   числа в итог не попали. `can_save` — тем же способом.
 - `saved` — только замеры с `counts_in_saved_total = true`. Пока таких нет — `unavailable`, а не `0`.
@@ -396,9 +397,11 @@ high = 1, critical = 2; меняет owner/admin, снизить critical до 1
 
 ```json
 {"summary": "Рост ≈ 4 200 ₽ в основном по одной кампании…",
- "claims": [{"text": "CPA кампании выше целевого на 25%", "evidence_ids": ["e1", "e2"]}],
- "evidence": [{"id": "e1", "kind": "finding", "recommendation_id": "rec_8f2c1", "fact": "exposure"},
-              {"id": "e2", "kind": "metric_change", "recommendation_id": "rec_8f2c1", "fact": "cpa"}],
+ "claims": [{"text": "Расход с признаками неэффективности вырос ≈ на 4 200 ₽", "evidence_ids": ["e1"]},
+            {"text": "CPA кампании выше целевого на 25%", "evidence_ids": ["e2", "e3"]}],
+ "evidence": [{"id": "e1", "kind": "metric_change", "fact": "exposure_delta", "value": "4200.00"},
+              {"id": "e2", "kind": "metric_change", "recommendation_id": "rec_8f2c1", "fact": "cpa"},
+              {"id": "e3", "kind": "finding", "recommendation_id": "rec_8f2c1", "fact": "cpa_vs_target_pct", "value": "25"}],
  "data_sufficiency": "sufficient"}
 ```
 
@@ -490,10 +493,8 @@ high = 1, critical = 2; меняет owner/admin, снизить critical до 1
 `GET /organizations/{org}/billing` — тариф, статус подписки, дата следующего списания, лимиты и использование
 (`{"limits": {"max_workspaces": 10, "max_members": 5, …}, "usage": {…}}` — PRD §7).
 `POST …/billing/checkout`, `POST …/billing/cancel`, `POST …/billing/payment-method/refuse` — с `Idempotency-Key`.
-Отказ от способа оплаты — отдельно от отмены подписки: подписка может продолжиться с ручной оплатой, списаний с
-отозванного способа больше нет (LEGAL.md, 376-ФЗ).
+Отказ от способа оплаты — отдельно от отмены подписки: подписка может продолжиться с ручной оплатой, списаний с отозванного способа больше нет (LEGAL.md, 376-ФЗ).
 
 ## 14. Чего нет в v1.0
 
-Автоматизации по заранее одобренным правилам (режимы безопасности — v2.0); создания действия из «Спросить AI» и
-кросс-аккаунтного портфеля агентства (v1.1); CRM и VK Реклама (v2.0). Полный список — [VERSION_SCOPE.md](VERSION_SCOPE.md).
+Автоматизации по заранее одобренным правилам (режимы безопасности — v2.0); создания действия из «Спросить AI» и кросс-аккаунтного портфеля агентства (v1.1); CRM и VK Реклама (v2.0). Полный список — [VERSION_SCOPE.md](VERSION_SCOPE.md).
