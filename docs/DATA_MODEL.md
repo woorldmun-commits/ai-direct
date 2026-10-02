@@ -2,7 +2,7 @@
 
 > Основа: [PRD.md](PRD.md) v1.0, [ARCHITECTURE.md](ARCHITECTURE.md), [API_CONTRACT.md](API_CONTRACT.md). **Точная схема — [backend/db/schema.sql](../backend/db/schema.sql)** (при расхождении в реализованном права она; инварианты проверяются тестами `backend/tests/test_schema.py`). Этот документ — смысл и состояния. PostgreSQL 16. Деньги — `numeric(14,2)` в рублях, даты периодов — `date` (МСК), моменты времени — `timestamptz`.
 
-Обозначения: **[A]** — append-only (роль `app`: только `SELECT, INSERT`; `UPDATE/DELETE` запрещены триггером, кроме роли `deleter`). **[O]** — операционная таблица (`app` может `UPDATE`). **[schema]** — новое v1.0, уже реализованное в `schema.sql`. **[v1.0]** — целевая модель v1.0, в `schema.sql` ещё нет: появляется миграцией вместе с кодом, который её использует. Что в какой версии — [VERSION_SCOPE.md](VERSION_SCOPE.md); риск, capability, предусловия и откат — [EXECUTION_SAFETY.md](EXECUTION_SAFETY.md); exposure — [ECONOMICS.md](ECONOMICS.md); AI — [AI_GOVERNANCE.md](AI_GOVERNANCE.md).
+Обозначения: **[A]** — append-only (роль `app`: только `SELECT, INSERT`; `UPDATE/DELETE` запрещены триггером, кроме роли `deleter`). **[O]** — операционная таблица (`app` может `UPDATE`). **[schema]** — новое v1.0, уже реализованное в `schema.sql`. **[v1.0]** — целевая модель v1.0, в `schema.sql` ещё нет: появляется миграцией вместе с кодом, который её использует. **[v1.1]** — модель исполнения через Direct API (Deferred to v1.1): спроектирована, в v1.0 не создаётся и не обещается — в v1.0 AdPilot не изменяет рекламные кабинеты. Что в какой версии — [VERSION_SCOPE.md](VERSION_SCOPE.md); риск, capability, предусловия и откат (v1.1) — [EXECUTION_SAFETY.md](EXECUTION_SAFETY.md), [API_CONTRACT_EXECUTION.md](API_CONTRACT_EXECUTION.md); exposure — [ECONOMICS.md](ECONOMICS.md); AI — [AI_GOVERNANCE.md](AI_GOVERNANCE.md).
 
 ## 1. Карта сущностей
 
@@ -33,8 +33,8 @@ erDiagram
   findings ||--o{ explanations : ""
   findings ||--o| recommendations : ""
   recommendations ||--o{ recommendation_events : ""
-  recommendations ||--o{ execution_attempts : ""
-  execution_attempts ||--o| execution_attempts : "rollback_of"
+  recommendations ||--o{ execution_attempts : "v1.1"
+  execution_attempts ||--o| execution_attempts : "rollback_of v1.1"
   recommendation_events ||--o| measurements : ""
   recommendations ||--o{ recommendation_results : ""
   workspaces ||--o{ digests : ""
@@ -71,7 +71,7 @@ erDiagram
 `id` (случайный 256 бит, в httpOnly cookie хранится он; в БД — sha256), `user_id`, `created_at`, `expires_at`, `revoked_at`. Workspace в сессии не хранится — он в пути запроса (API_CONTRACT.md §1).
 
 ### `organizations` [O] [schema]
-`id`, `name`, `kind` (`business` · `agency`), `created_at`. Владелец тарифа, лимитов и команды. Собственник бизнеса — организация `business` с одним workspace; агентство — `agency` с workspace на каждого клиента. На одобрения `kind` не влияет — их задаёт `approval_policy` (§2 `workspace_settings`). Без RLS (нужна до выбора workspace); меняется только функциями `SECURITY DEFINER` с проверкой, что actor — `owner` / `admin` (§9.5).
+`id`, `name`, `kind` (`business` · `agency`), `created_at`. Владелец тарифа, лимитов и команды. Собственник бизнеса — организация `business` с одним workspace; агентство — `agency` с workspace на каждого клиента. На решения `kind` не влияет (в v1.1 кворум задаёт `approval_policy`, §2 `workspace_settings`). Без RLS (нужна до выбора workspace); меняется только функциями `SECURITY DEFINER` с проверкой, что actor — `owner` / `admin` (§9.5).
 
 ### `workspaces` [O]
 `id`, `organization_id` **[schema]**, `name`, `status` (`active` · `deactivated` · `deletion_pending`), `created_at`, `deactivated_at`. `organization_id` неизменяем (триггер): клиент не переносится в другую организацию вместе с историей. «Удалён» — строки нет (её удаляет `delete_workspace_data`). Workspace = один клиент: его подключения, снимки, рекомендации.
@@ -80,7 +80,7 @@ erDiagram
 PK (`user_id`, `organization_id`), `org_role`: `owner` · `admin` · `member`. `owner` / `admin` видят и ведут все workspace организации с полными правами (всё, что `approver`, плюс команда, интеграции, биллинг); удалить организацию — только `owner`. `member` видит **только** workspace, где у него есть `workspace_memberships`, остальные для него не существуют (`404`). Хотя бы один `owner` на организацию — триггер. Удаление участника из организации удаляет его `workspace_memberships`. Без RLS; приглашение, смена роли и удаление участника — только функциями `SECURITY DEFINER` с проверкой, что actor — `owner` / `admin` этой организации (прямой записи у `app_rw` нет); выдать роль `owner`, изменить или удалить `owner` может только `owner`. Проверка «хотя бы один owner» сериализуется по строке организации (параллельные понижения не оставят организацию без владельца).
 
 ### `workspace_memberships` [O] [schema]
-PK (`user_id`, `workspace_id`), `ws_role`: `approver` (смотреть, decide, approve, execute) · `analyst` (смотреть, decide, execute только одобренного) · `viewer` (только смотреть). Строка возможна только у участника той же организации (составной FK через `organization_id` → `organization_memberships`). Права — API_CONTRACT.md §10. Прежняя `memberships` (роль `owner` на workspace) заменена этими двумя таблицами.
+PK (`user_id`, `workspace_id`), `ws_role`: `approver` (смотреть, decide; **[v1.1]** + approve, execute) · `analyst` (смотреть, decide; **[v1.1]** + execute только одобренного) · `viewer` (только смотреть). Строка возможна только у участника той же организации (составной FK через `organization_id` → `organization_memberships`). Права — API_CONTRACT.md §10. Прежняя `memberships` (роль `owner` на workspace) заменена этими двумя таблицами.
 
 ### `workspace_settings` [O]
 | Поле | Тип | Источник |
@@ -91,10 +91,10 @@ PK (`user_id`, `workspace_id`), `ws_role`: `approver` (смотреть, decide,
 | lead_to_sale_rate | numeric(5,4) NULL | user_input, 0..1 |
 | notify_pct_threshold | smallint | 10 / 15 / 20, `CHECK` |
 | attribution_model | text | фиксируется при подключении |
-| approval_policy | jsonb | **[v1.0]** уровень риска → число **разных** одобривших: по умолчанию `{"medium": 1, "high": 1, "critical": 2}` (`low` зарезервирован). CHECK: ключи из перечисления, значения ≥ 1. Меняет owner/admin; `critical` ниже 2 — только явным действием owner, это событие в журнале (§11 п. 7) |
+| approval_policy | jsonb | **[v1.1]** уровень риска → число **разных** одобривших: по умолчанию `{"medium": 1, "high": 1, "critical": 2}` (`low` зарезервирован). CHECK: ключи из перечисления, значения ≥ 1. Меняет owner/admin; `critical` ниже 2 — только явным действием owner, это событие в журнале (§11 п. 7) |
 | updated_at | timestamptz | |
 
-Изменения настроек не ломают воспроизводимость: `audit_runs.settings` хранит замороженную копию. `approval_mode` (`single_step` / `two_step` по `kind`) убран: число одобрений задаёт риск действия (EXECUTION_SAFETY.md).
+Изменения настроек не ломают воспроизводимость: `audit_runs.settings` хранит замороженную копию. `approval_mode` (`single_step` / `two_step` по `kind`) убран: в v1.1 число одобрений задаёт риск действия (EXECUTION_SAFETY.md); в v1.0 решение принимает один человек с правом decide.
 
 ### `telegram_links` [O]
 `user_id` PK, `chat_id` UNIQUE, `linked_at`. Одноразовый токен deep-link — в Redis с TTL 15 минут.
@@ -110,7 +110,7 @@ PK (`user_id`, `workspace_id`), `ws_role`: `approver` (смотреть, decide,
 | token_enc | bytea | AES-GCM; ключ вне БД |
 | token_expires_at | timestamptz | |
 | scopes | text[] | фактически выданные |
-| write_access | `granted` · `denied` · `unknown` | **[v1.0]** может ли этот токен менять кампании аккаунта (права в Директе зависят от роли пользователя, например представитель «только чтение»). Обновляется по факту ответа API, как `status` |
+| write_access | `granted` · `denied` · `unknown` | **[v1.1]** может ли этот токен менять кампании аккаунта (права в Директе зависят от роли пользователя, например представитель «только чтение»). Обновляется по факту ответа API, как `status` |
 | status | enum, §8.1 | |
 | status_detail | text NULL | код ошибки API, без ПД |
 | status_changed_at, last_sync_at | timestamptz | |
@@ -200,8 +200,8 @@ PK (`user_id`, `workspace_id`), `ws_role`: `approver` (смотреть, decide,
 | evidence | jsonb `{имя: Value}` | `CHECK (evidence_is_valid(evidence))`; имена нужны шаблону объяснения |
 | evidence_meta | jsonb | нечисловые доказательства: метод baseline, периоды, определение конверсии, атрибуция |
 | action | jsonb | `{"type": "decrease_bid", "change_pct": -15}` |
-| risk_level | `low` · `medium` · `high` · `critical` NULL | **[v1.0]** риск действия этой версии; NULL — исполнять нечего (`inspect_only`). Неизвестный тип действия → `critical` |
-| risk_policy | text NULL | **[v1.0]** `risk_policy@1` — детерминированная функция в коде (EXECUTION_SAFETY.md); NULL ⇔ `risk_level` NULL (CHECK) |
+| risk_level | `low` · `medium` · `high` · `critical` NULL | **[v1.1]** риск действия этой версии; NULL — исполнять нечего (`inspect_only`). Неизвестный тип действия → `critical` |
+| risk_policy | text NULL | **[v1.1]** `risk_policy@1` — детерминированная функция в коде (EXECUTION_SAFETY.md); NULL ⇔ `risk_level` NULL (CHECK) |
 | created_at | | |
 
 `value_is_valid(jsonb)` — SQL-функция, проверяющая инварианты контракта (§5). Та же логика в pydantic; тест проверяет, что они согласованы на одном наборе примеров.
@@ -219,15 +219,15 @@ PK (`user_id`, `workspace_id`), `ws_role`: `approver` (смотреть, decide,
 
 Ссылки на объекты — колонками с составными FK, не в JSON: (`finding_id`, `issue_id`) → `findings`, (`explanation_id`, `finding_id`) → `explanations`, (`result_id`, `recommendation_id`, `finding_id`) → `recommendation_results`. `finding_id` обязателен ровно у `seen_again` · `done` · `checked` · `measured`; `explanation_id` — у `seen_again`; `result_id` — у `measured`. Триггер: `done` и `checked` допустимы только над выводом, который показывали, и только по его `action_level` (§8.3) (исходный вывод рекомендации или пришедший через `seen_again`). В `payload` остаются только данные без идентичности (`until` у `postponed`).
 
-**[v1.0] Типы событий** — §8.3. Переименования относительно MVP-схемы (миграция в PR жизненного цикла): `done` → `manual_claimed` (это заявление пользователя, а не факт исполнения), `checked` → `recommendation_checked`. Правила `execution_date` и обязательного `finding_id` переходят на все события, после которых возможен замер: `manual_claimed` и `execution_succeeded`. Новым событиям действия человека (`approval_granted`, `cancelled`, `rollback_requested`) `actor_user_id` обязателен (CHECK); событиям системы (`approved`, `execution_*`, `rollback_succeeded/failed/blocked`, `verification_*`) — `actor_user_id IS NULL`.
+**[v1.0] Типы событий** — §8.3. Переименования относительно MVP-схемы (миграция в PR жизненного цикла): `done` → `manual_claimed` (это заявление пользователя, а не факт исполнения), `checked` → `recommendation_checked`. Новые события v1.0: `accepted` (человек, `finding_id` версии обязателен, `payload.before_state` — параметры объекта, прочитанные сервером из Директа в момент `accept` (`Campaigns.get` и аналоги, только чтение); NULL — чтение не удалось). У `manual_claimed` без предшествующего `accepted` `payload.before_state` читается в момент отметки с `reliability = reduced` (сверка менее надёжна) и `verification_confirmed` / `verification_not_confirmed` (система, `payload`: прочитанное значение). У `rejected` появляется колонка `reason` (CHECK: `wrong_data` · `irrelevant_rule` · `not_enough_context` · `too_risky` · `other`; NOT NULL ⇔ `type = rejected`) и `payload.comment` (≤ 500 символов; обязателен при `other` — проверяет API; в LLM и уведомления не уходит). Правила `execution_date` и обязательного `finding_id` — у событий, после которых возможен замер: `manual_claimed` (в v1.1 — и `execution_succeeded`). Действиям человека (`accepted`, `postponed`, `rejected`, `recommendation_checked`, `manual_claimed`; в v1.1 — `approval_granted`, `cancelled`, `rollback_requested`) `actor_user_id` обязателен (CHECK); событиям системы (`verification_*`; в v1.1 — `approved`, `execution_*`, `rollback_succeeded/failed/blocked`) — `actor_user_id IS NULL`.
 
-**[v1.0] Одобрение и кворум** (EXECUTION_SAFETY.md):
+**[v1.1] Одобрение и кворум** (Deferred to v1.1, EXECUTION_SAFETY.md) — в v1.0 этих событий нет:
 - `approval_granted` — одобрение одного человека: `actor_user_id`, `finding_id` (одобренная версия), колонка `precondition_hash` (обязательна у этого типа, CHECK) и `payload.expected_state` = `{object_ref, field, expected_current_value, action, target_value}` из предпросмотра; `precondition_hash` — хэш канонического JSON `expected_state` (тот же текущий параметр в повторном предпросмотре → тот же хэш). Частичный UNIQUE (`recommendation_id`, `finding_id`, `precondition_hash`, `actor_user_id`) — один человек засчитывается один раз (`same_approver`).
 - Одобрение действительно 24 ч (`created_at` + 24 ч — константа политики, не колонка): истёкшее в кворум не входит, исполнение после срока → `approval_expired`.
 - `approved` — системное событие «кворум набран»: пишется в той же транзакции, что и завершающее `approval_granted`, когда число **разных** авторов `approval_granted` с тем же `finding_id` и `precondition_hash`, не истёкших, ≥ `approval_policy[risk_level]`. `payload`: `risk_level`, требуемое число, id засчитанных одобрений, `precondition_hash`. До кворума статус — `requires_decision` («одобрено 1 из 2»).
 
-### `execution_attempts` [A, кроме однократного `applied_value`] [v1.0]
-Одна попытка изменить Директ через API — исполнение или откат.
+### `execution_attempts` [A, кроме однократного `applied_value`] [v1.1]
+**Deferred to v1.1** — в v1.0 таблица не создаётся. Одна попытка изменить Директ через API — исполнение или откат.
 
 | Поле | Тип | |
 |---|---|---|
@@ -252,7 +252,7 @@ PK (`user_id`, `workspace_id`), `ws_role`: `approver` (смотреть, decide,
 `id`, `recommendation_id`, `issue_id` (триггер), `finding_id` — замеренная версия действия, `measurement_id` (триггер: замер последнего `done`; FK (`measurement_id`, `recommendation_id`, `finding_id`)), `snapshot_id` (NULL только у `insufficient` без данных), `release_id`, `before` / `after` jsonb `{имя: Value}`, `saved` jsonb `Value` (`estimated`, с формулой; только при `effect`), `verdict` (`effect` · `no_effect` · `not_confirmed` — CPA снизился, но конверсий меньше · `insufficient`), `effect` jsonb (наблюдаемое изменение и причина вердикта), `created_at`. Триггер: `finding_id` результата = `finding_id` последнего `done`.
 
 ### `measurements` [A]
-`id`, `done_event_id` UNIQUE, `recommendation_id`, `issue_id`, `finding_id`, `policy` (`high_cpa_measure@2`; `@1` — исторические замеры), `method` **[v1.0]** (`uncontrolled_before_after` — единственный в v1.0: 7 дней до и после без контрольной группы; `matched_control` · `experiment` — зарезервированы, CHECK), `before_from/to`, `after_from/to` (от `done.execution_date`), `created_at`. Создаётся триггером на `done` — ARCHITECTURE.md §5 (**[v1.0]** — на `manual_claimed` и `execution_succeeded`). Определения конверсии в замере нет: оно читается из снимка выполненного вывода (`finding → audit_run_snapshots → snapshots`), копия могла бы разойтись с ним.
+`id`, `done_event_id` UNIQUE, `recommendation_id`, `issue_id`, `finding_id`, `policy` (`high_cpa_measure@2`; `@1` — исторические замеры), `method` **[v1.0]** (`uncontrolled_before_after` — единственный в v1.0: 7 дней до и после без контрольной группы; `matched_control` · `experiment` — зарезервированы, CHECK), `before_from/to`, `after_from/to` (от `done.execution_date`), `created_at`. Создаётся триггером на `done` — ARCHITECTURE.md §5 (**[v1.0]** — на `manual_claimed`; **[v1.1]** — и на `execution_succeeded`). Определения конверсии в замере нет: оно читается из снимка выполненного вывода (`finding → audit_run_snapshots → snapshots`), копия могла бы разойтись с ним.
 
 ### `outbox_events` [O]
 `id`, `workspace_id`, `event_type`, `aggregate_type`, `aggregate_id`, `payload` (только ID и числа), `created_at`, `available_at`, `attempts`, `locked_until`, `delivered_at`, `last_error` (код). Состояние — из полей доставки, без `status` — ARCHITECTURE.md §5.1.
@@ -279,7 +279,7 @@ PK (`user_id`, `workspace_id`), `ws_role`: `approver` (смотреть, decide,
 
 Тарифы и их функции — в коде (`billing/plans.py`), не в БД: меняются релизом, а не данными.
 
-**[v1.0] Тариф → лимиты → использование** (PRD §7, «Тарификация агентств»). Тариф не привязан напрямую ни к пользователю, ни к рекламному кабинету. `plans.py` задаёт для тарифа набор лимитов (`entitlements`): `max_workspaces`, `max_ad_accounts`, `max_members`, `max_metrika_counters`, `max_clients`, `max_api_connections`, функции (`api_execution`, `ask_ai`, …). Использование (`usage`) не хранится — считается запросом по `workspaces`, `direct_accounts`, `organization_memberships`, `metrika_counters` организации. Проверка — одна функция `can(organization, feature | limit)` на бэкенде. Модель агентского тарифа (за кабинет или за участника) выбирается значениями лимитов, без изменения схемы.
+**[v1.0] Тариф → лимиты → использование** (PRD §7, «Тарификация агентств»). Тариф не привязан напрямую ни к пользователю, ни к рекламному кабинету. `plans.py` задаёт для тарифа набор лимитов (`entitlements`): `max_workspaces`, `max_ad_accounts`, `max_members`, `max_metrika_counters`, `max_clients`, `max_api_connections`, функции (**[v1.1]** `api_execution`, `ask_ai`, …). Использование (`usage`) не хранится — считается запросом по `workspaces`, `direct_accounts`, `organization_memberships`, `metrika_counters` организации. Проверка — одна функция `can(organization, feature | limit)` на бэкенде. Модель агентского тарифа (за кабинет или за участника) выбирается значениями лимитов, без изменения схемы.
 
 ### `subscriptions` [O]
 `id`, `organization_id` **[v1.0: было `workspace_id`]**, `plan` (`start` · `business` · `business_plus`), `status` (§8.4), `price` numeric (цена на момент оформления), `current_period_start`, `current_period_end`, `auto_renew` bool, `renew_consent_at` timestamptz NULL (явное согласие на автопродление), `renew_consent_version` text NULL **[v1.0]** (редакция текста согласия), `payment_method_ref` text NULL (токен провайдера, **не** данные карты), `payment_method_refused_at` timestamptz NULL **[v1.0]**, `payment_method_refusal_channel` (`cabinet` · `email` · `support`) NULL **[v1.0]**, `payer_type` (`individual` · `ip` · `legal_entity`) **[v1.0]**, `canceled_at`.
@@ -313,50 +313,42 @@ PK (`user_id`, `workspace_id`), `ws_role`: `approver` (смотреть, decide,
 `queued → running → waiting_report (Reports API 201/202, опрос по retryIn) → running → succeeded | failed`. Снимок создаётся только при `succeeded` — частично загруженных снимков не бывает.
 
 ### 8.3 Рекомендация [v1.0]
-Состояние — **основной `status` (8 значений) и независимые поля** `execution_mode`, `execution_status`, `verification_status`, `rollback_status`, `measurement` (API_CONTRACT.md §3). Ничего из этого не хранится колонкой: всё выводится из append-only `recommendation_events` — история фактическая и не зависит от трактовки статуса.
+Состояние — **основной `status` (6 значений v1.0) и независимые поля** `execution_mode` (`manual` · `none`), `verification_status`, `measurement` (API_CONTRACT.md §3). Ничего из этого не хранится колонкой: всё выводится из append-only `recommendation_events` — история фактическая и не зависит от трактовки статуса. В v1.0 AdPilot не изменяет рекламные кабинеты: изменение вносит человек, AdPilot сверяет его чтением.
 
 ```
-new ──▶ requires_decision ──(кворум approval_granted)──▶ approved ──▶ applied (api)
-             │   ▲  ▲                                       │  ├──▶ failed
-             │   │  └──── state_changed · approval_expired ─┤  │
-             │   │        · новая версия вывода             │  └──▶ cancelled
-             ├──▶ postponed ─(дата)┘
-             ├──▶ rejected
-             ├──▶ applied (manual)   «Выполнено вручную» — review / change
-             └──▶ applied (none)     «Проверил» — inspect_only
-applied (api) ── откат: rollback_status not_requested → pending → succeeded | failed | blocked
+new ──▶ requires_decision ──accepted──▶ accepted ──manual_claimed──▶ applied (manual) ── verification_* ── measured
+             │   ▲                         ├──▶ postponed / rejected (reason)
+             │   └──(дата)── postponed ◀───┘
+             ├──▶ rejected (reason)          только review / change
+             ├──▶ applied (manual)           «Выполнено вручную» без отдельного «Принять» — review / change
+             └──▶ applied (none)             «Проверил» — inspect_only
 ```
 
 | Событие | Кто | Переход / поле |
 |---|---|---|
 | `created` (строка `recommendations`) | система | → `new` |
 | `viewed` · `delivered` | пользователь · система (уведомление доставлено) | `new` → `requires_decision`; повтор ничего не меняет |
+| `accepted` | пользователь (decide) | → `accepted` «Принята к выполнению» (только `review` / `change`); `payload.before_state` — чтение параметров объекта из Директа в момент действия |
 | `postponed` (`until`) | пользователь | → `postponed`; после даты — снова `requires_decision` |
-| `rejected` | пользователь | → `rejected` (только `review` / `change`) |
+| `rejected` (`reason`, `comment`) | пользователь | → `rejected` (только `review` / `change`); `reason` обязателен |
 | `recommendation_checked` | пользователь | → `applied`, `execution_mode = none`, `verification_status = not_required` (только `inspect_only`) |
-| `manual_claimed` | пользователь | → `applied`, `manual`, `execution_status = claimed_manual`, `verification_status = pending`; создаёт замер |
-| `approval_granted` (`finding_id`, `precondition_hash`) | пользователь с правом approve | статус не меняет до кворума (§4 `recommendation_events`); только `change`, полные данные, capability поддержана, `write_access = granted` |
-| `approved` | система (кворум набран) | → `approved` |
-| `cancelled` | пользователь с правом approve | `approved` → `cancelled`, если исполнение не начато |
-| `execution_started` | система | `execution_status = pending` |
-| `execution_succeeded` | система | → `applied`, `api`, `succeeded`, `verification_status = confirmed`; `applied_value` в попытке; создаёт замер |
-| `execution_failed` (`error_code`) | система | `state_changed` · `approval_expired` → `requires_decision` (одобрения сгорают); иначе → `failed` |
-| `rollback_requested` · `rollback_succeeded` · `rollback_failed` · `rollback_blocked` | пользователь · система ×3 | `rollback_status`: `pending` → `succeeded` / `failed` / `blocked`; `status` остаётся `applied` |
-| `verification_confirmed` · `verification_not_confirmed` | система (сверка с Директом) | только для `manual`: `verification_status` |
+| `manual_claimed` | пользователь | → `applied`, `manual`, `verification_status = pending`; создаёт замер; без `accepted` — `payload.before_state` читается сейчас, `reliability = reduced` |
+| `verification_confirmed` · `verification_not_confirmed` | система (сверка: чтение параметров из Директа) | только для `manual`: `verification_status` |
 | `measured` · `measurement_skipped` | система | заполняют `measurement` (ARCHITECTURE.md §5) |
-| `seen_again` | система | новая версия вывода; статус не меняется, кроме `approved` → `requires_decision` при новом `action` |
+| `seen_again` | система | новая версия вывода; статус не меняется (`accepted` ссылается на версию, которую принимали) |
 
-- **Ручное ≠ исполненное.** `manual_claimed` — заявление пользователя: AdPilot не утверждает, что изменение сделано. `verification_confirmed` пишется только когда синхронизация параметров затронутого объекта из Директа показала ожидаемое изменение (ARCHITECTURE.md §4.2); до её реализации ручное выполнение остаётся `pending`. Автоматически «подтверждённым» оно не становится.
-- **Неполные данные.** `approval_granted`, `approved` и `execution_*` невозможны, если `data_status` выводов этой версии не `complete` (триггер + проверка воркера перед исполнением). Остаются «Проверил» и «Выполнено вручную».
-- **Одобрение относится к версии и состоянию.** `approval_granted.finding_id` = версия, которую видел пользователь, `precondition_hash` — состояние объекта, которое он видел. Новая версия (`seen_again` с другим `action`), изменение параметра в Директе или истечение 24 ч — одобрения устарели, исполнение не начинается, рекомендация в `requires_decision`.
-- **«Применить» одним действием** (`approve_and_apply`): когда одобрение пользователя завершает кворум и у него есть право execute — `approval_granted`, `approved`, `execution_started` пишутся одной транзакцией, но остаются тремя событиями.
+- **Ручное ≠ исполненное.** `manual_claimed` — заявление пользователя: AdPilot не утверждает, что изменение сделано. `verification_confirmed` пишется только когда синхронизация параметров затронутого объекта из Директа показала ожидаемое изменение относительно `before_state` из `accepted` (или из `manual_claimed` с `reliability = reduced`, если `accept` не было; ARCHITECTURE.md §4.2); до этого ручное выполнение остаётся `pending`. Автоматически «подтверждённым» оно не становится.
+- **Неполные данные** (`data_status = partial`) решения v1.0 не блокируют — все они ручные; пометка видна в паспорте.
+- **Решение относится к версии.** `accepted.finding_id` и `manual_claimed.finding_id` — версия, которую видел пользователь; при `seen_again` с другим `action` принятая версия устарела — UI показывает новую, `manual_claimed` по старой → `409 version_outdated`.
 - `resolved` (проблема исчезла в аудите без действий) — закрытие **проблемы** (`issues.close_reason`), не статус рекомендации; в «Сэкономлено» не входит.
 
-**Состояния MVP-схемы** (реализованы в `schema.sql`, переводятся миграцией): `new` → `new` / `requires_decision`; `checked` → `applied` + `none`; `done` → `applied` + `manual` + `claimed_manual`; `measured` → `applied` + `measurement`; `postponed`, `rejected` — без изменений.
+**[v1.1] Расширение без ломки** (Deferred to v1.1, API_CONTRACT_EXECUTION.md §1–2, EXECUTION_SAFETY.md): добавляются статусы `approved`, `failed`, `cancelled`, поля `execution_status`, `rollback_status`, `execution_mode = api` и события `approval_granted` (`finding_id`, `precondition_hash`), `approved` (кворум), `cancelled`, `execution_started` / `execution_succeeded` (→ `applied`, `api`, создаёт замер) / `execution_failed` (`state_changed` · `approval_expired` → `requires_decision`; иначе → `failed`), `rollback_requested` / `rollback_succeeded` / `rollback_failed` / `rollback_blocked`. Путь: `requires_decision` или `accepted` → кворум → `approved` → `applied (api)`. События и статусы v1.0 сохраняют смысл; `accepted` остаётся ручным путём. Правила v1.1: `approval_granted`, `approved`, `execution_*` невозможны при неполных данных (триггер); новая версия вывода, изменение параметра в Директе или 24 ч — одобрения устарели; `approve_and_apply` пишет `approval_granted`, `approved`, `execution_started` одной транзакцией тремя событиями.
+
+**Состояния MVP-схемы** (реализованы в `schema.sql`, переводятся миграцией; `accepted`, `reason` у `rejected` и `verification_*` добавляются ею же): `new` → `new` / `requires_decision`; `checked` → `applied` + `none`; `done` → `applied` + `manual` + `claimed_manual`; `measured` → `applied` + `measurement`; `postponed`, `rejected` — без изменений.
 
 **Пересчёт действия без новой рекомендации.** Аудит #1: CPA 5 000 → «снизить на 15%»; аудит #2: CPA 7 000 → «снизить на 25%». Проблема та же, рекомендация та же. Каждый аудит создаёт новый неизменяемый `finding` (со своим `action`) и `explanation` к нему; событие `seen_again` с колонками `finding_id`, `explanation_id` связывает их с рекомендацией. UI показывает последний вывод — история не переписывается. Отдельный тип события `recalculated` не нужен: это `seen_again`, у которого изменился `action`.
 
-**Что именно выполнено.** `finding_id` у `manual_claimed`, `approved` и `execution_succeeded` обязателен (CHECK) и должен быть выводом этой же проблемы, который показывали (FK + триггер): пользователь решал, глядя на конкретную версию действия (−15% или −25%). Именно её исполняет API и замеряет `verify`.
+**Что именно выполнено.** `finding_id` у `accepted` и `manual_claimed` (в v1.1 — и у `approved`, `execution_succeeded`) обязателен (CHECK) и должен быть выводом этой же проблемы, который показывали (FK + триггер): пользователь решал, глядя на конкретную версию действия (−15% или −25%). Именно её замеряет `verify`.
 
 **Разделение источников истины:** схема БД — для инвариантов; код — для бизнес-расчётов; события — для истории.
 
@@ -404,8 +396,8 @@ workspace: active ──«деактивировать»──▶ deactivated �
 | recheck доступа | `active` | — | есть токен (не `token_revoked`/`disconnected`); **аккаунт может быть `unavailable`** | `Skip(direct_unavailable, token_revoked)` — нужен новый OAuth |
 | verify (+7 дней) | `active` | Paid | — (читает снимки, не API) | событие `measurement_skipped` с причиной, один раз; в «Сэкономлено» не входит |
 | уведомление | `active` | Paid (кроме `billing`-уведомлений) | — | `notifications.status = skipped` |
-| **[v1.0]** исполнение / откат через API | `active` | Paid + лимит `api_execution` | `connected`, `write_access = granted`, аккаунт `active`; capability поддержана; исполнение — кворум с тем же `precondition_hash` не истёк, объект не изменился; откат — гейт EXECUTION_SAFETY.md §7 | событие `execution_failed` (`capability_unsupported` · `state_changed` · `approval_expired` · …) / `rollback_blocked` / `rollback_failed` с причиной; запроса на изменение к Директу нет |
-| **[v1.0]** сверка ручного выполнения | `active` | Paid | `connected` | `verification_status` остаётся `pending` |
+| **[v1.1]** исполнение / откат через API (в v1.0 задачи нет) | `active` | Paid + лимит `api_execution` | `connected`, `write_access = granted`, аккаунт `active`; capability поддержана; исполнение — кворум с тем же `precondition_hash` не истёк, объект не изменился; откат — гейт EXECUTION_SAFETY.md §7 | событие `execution_failed` (`capability_unsupported` · `state_changed` · `approval_expired` · …) / `rollback_blocked` / `rollback_failed` с причиной; запроса на изменение к Директу нет |
+| **[v1.0]** сверка ручного выполнения (только чтение параметров объекта) | `active` | Paid | `connected`, аккаунт `active` | `verification_status` остаётся `pending` |
 | удаление | любой, кроме `deleted` | — | — | — |
 
 Состояние проверяется в момент выполнения, а не постановки в очередь: задача, поставленная до деактивации, после неё ничего не сделает. Код — `app/worker/guard.py`: таблица `RULES` (задача → проверки по порядку), результат `Allow` · `Skip(reason)`. `RETRY` — не решение guard, а исход исполнения (`retryIn`, временная ошибка API): задача возвращается в очередь на интервал сервера. Воркер синхронизации вызывает guard дважды: до запросов к API и под блокировкой перед записью снимка.
@@ -428,11 +420,13 @@ workspace: active ──«деактивировать»──▶ deactivated �
 | 2 | Нет аудита без снимка, вывода без аудита, рекомендации без вывода и объяснения | FK `NOT NULL` |
 | 3 | Одна открытая рекомендация на проблему | `issues`: частичный UNIQUE по `issue_key` + UNIQUE(`recommendations.issue_id`). Новый вывод по открытой проблеме → событие `seen_again(finding_id)`; UI показывает цифры последнего вывода |
 | 4 | Проблема ушла сама → рекомендация не висит | в новом аудите нет вывода по `issue_key` → событие `resolved`, `issues.closed_at` |
-| 5 | «Сэкономлено» только за подтверждённые действия | `recommendation_results` только после `manual_claimed` / `execution_succeeded` и только по выполненной версии действия (триггер); `saved` не NULL ⇔ `verdict = effect` (CHECK); в сумму «Сэкономлено» входит только при `api` + `succeeded` или `manual` + `verification_confirmed` и без успешного отката (запрос, не флаг); `resolved` не входит |
-| 5b | **[v1.0]** Одно изменение в Директе на один кворум | `execution_attempts.idempotency_key` UNIQUE; не больше одной попытки `apply` в работе на рекомендацию (частичный UNIQUE); одобрение устаревает с новой версией вывода, сменой состояния объекта и через 24 ч |
-| 5e | **[v1.0]** Кворум — разные люди, одно ожидаемое состояние | `approved` только при ≥ `approval_policy[risk_level]` не истёкших `approval_granted` разных `actor_user_id` с одинаковыми `finding_id` и `precondition_hash` (триггер); повтор того же человека — частичный UNIQUE; `execution_attempts.precondition_hash` = хэш кворума |
-| 5f | **[v1.0]** Откат не перезаписывает чужое изменение | `rollback` пишет только если текущее значение == `applied_value` исполнения, иначе `rollback_blocked`; не позже 7 дней после `execution_succeeded` |
-| 5c | **[v1.0]** Без полных данных — без API | `approved` / `execution_started` отклоняются триггером, если вывод версии `partial`; воркер перепроверяет перед запросом к Директу |
+| 5 | «Сэкономлено» только за подтверждённые действия | `recommendation_results` только после `manual_claimed` (v1.1 — и `execution_succeeded`) и только по выполненной версии действия (триггер); `saved` не NULL ⇔ `verdict = effect` (CHECK); в сумму «Сэкономлено» входит только при `manual` + `verification_confirmed` (v1.1 — и `api` + `succeeded` без успешного отката; запрос, не флаг); `resolved` не входит |
+| 5b | **[v1.1]** Одно изменение в Директе на один кворум | `execution_attempts.idempotency_key` UNIQUE; не больше одной попытки `apply` в работе на рекомендацию (частичный UNIQUE); одобрение устаревает с новой версией вывода, сменой состояния объекта и через 24 ч |
+| 5e | **[v1.1]** Кворум — разные люди, одно ожидаемое состояние | `approved` только при ≥ `approval_policy[risk_level]` не истёкших `approval_granted` разных `actor_user_id` с одинаковыми `finding_id` и `precondition_hash` (триггер); повтор того же человека — частичный UNIQUE; `execution_attempts.precondition_hash` = хэш кворума |
+| 5f | **[v1.1]** Откат не перезаписывает чужое изменение | `rollback` пишет только если текущее значение == `applied_value` исполнения, иначе `rollback_blocked`; не позже 7 дней после `execution_succeeded` |
+| 5c | **[v1.1]** Без полных данных — без API | `approved` / `execution_started` отклоняются триггером, если вывод версии `partial`; воркер перепроверяет перед запросом к Директу |
+| 5g | **[v1.0]** AdPilot не пишет в рекламный кабинет | в v1.0 нет `execution_attempts` и событий исполнения (CHECK перечисления `recommendation_events.type`); клиент Директа — только методы чтения (тест, ARCHITECTURE.md §11) |
+| 5h | **[v1.0]** Отклонение — с причиной | `rejected` ⇔ `reason` NOT NULL из закрытого списка (CHECK) |
 | 5d | **[v1.0]** Изоляция workspace в API | каждый запрос API — через функции доступа с обязательным `workspace_id` и проверкой членства (`organization_memberships` owner/admin или `workspace_memberships`); тест: пользователь A не читает, не меняет и не узнаёт о существовании объектов B, включая вложенные (`history`, `evidence`); `member` без `workspace_memberships` — так же. RLS — §9.5 |
 | 5a | Событие и результат не ссылаются на чужую проблему | составные FK через `issue_id` (§ `recommendation_events`); тесты `backend/tests/test_issue_integrity.py` |
 | 6 | После `measured` проблема может вернуться | проблема закрыта → следующий вывод создаёт новую строку `issues` и новую рекомендацию |
@@ -447,7 +441,7 @@ workspace: active ──«деактивировать»──▶ deactivated �
 | 15 | **[v1.0]** Итог exposure без двойного счёта | `audit/exposure.py`: объединение затронутого расхода по кабинету · кампании · объекту · дню; итог ≤ суммы карточек и ≥ максимальной (golden-набор, AI_GOVERNANCE.md / ECONOMICS.md) |
 
 ### 9.4 Исполнение и автоматизация
-Исполнение v1.0 — §8.3: `execution_started` только после `approved` (или в одной транзакции с ним при `approve_and_apply`), `approved` — только при кворуме `approval_granted` людей с правом approve (`actor_user_id NOT NULL`, CHECK на тип события). Риск, capability, предусловие и откат — EXECUTION_SAFETY.md. Автоматизация v2.0 (PRD §10, вопрос 8) — только через явно одобренное правило со своей записью одобрения; до решения по нему схему не расширяем.
+В v1.0 исполнения через API нет: человек выполняет вручную, AdPilot сверяет чтением (§8.3). **[v1.1]** Исполнение — §8.3 (раздел v1.1): `execution_started` только после `approved` (или в одной транзакции с ним при `approve_and_apply`), `approved` — только при кворуме `approval_granted` людей с правом approve (`actor_user_id NOT NULL`, CHECK на тип события). Риск, capability, предусловие и откат — EXECUTION_SAFETY.md. Автоматизация v2.0 (PRD §10, вопрос 8) — только через явно одобренное правило со своей записью одобрения; до решения по нему схему не расширяем.
 
 ### 9.5 Изоляция арендаторов — RLS **[schema]**
 Второй барьер после проверки членства в коде (`workspace_role`, `app/tenancy.py`).
@@ -469,12 +463,15 @@ workspace: active ──«деактивировать»──▶ deactivated �
 1. Расход в Директе — с НДС или без: хранить как в отчёте и подписывать в UI (проверить параметр отчёта при интеграции).
 2. ~~Целевой CPA~~ — решено: target / baseline, PRD §4.1. Два правила: `high_cpa_target@1`, `high_cpa_baseline@1`.
 3. Нужен ли `revenue` в MVP (e-commerce из Метрики) — поле заложено, заполняется только если у счётчика есть доход.
-4. **[v1.0]** Срок хранения `execution_attempts.before/target/applied_value` после закрытия проблемы — сейчас «пока жив workspace», как остальная история решений.
+4. **[v1.1]** Срок хранения `execution_attempts.before/target/applied_value` после закрытия проблемы — сейчас «пока жив workspace», как остальная история решений.
 5. Приглашение участника: на номер телефона или на email, и создаётся ли `workspace_memberships` вместе с приглашением.
 6. Где считать лимит кодов на IP (20 в час): IP в `auth_codes` — ПД с отдельным сроком хранения, или счётчик вне БД (Redis с TTL). Срок хранения истёкших `auth_codes` — ARCHITECTURE.md §2.5.
-7. Где хранится журнал изменений `approval_policy` (в т. ч. снижение `critical` до 1 владельцем): отдельная append-only таблица не определена.
+7. **[v1.1]** Где хранится журнал изменений `approval_policy` (в т. ч. снижение `critical` до 1 владельцем): отдельная append-only таблица не определена.
 8. ~~RLS для дочерних таблиц и уровня организации~~ — решено (§9.5): дочерние — `EXISTS` по родителю; `app.organization_id` нет, организация и членство — без RLS, изменение только функциями `SECURITY DEFINER`.
-9. Сменилась `approval_policy` между одобрениями — кворум по политике на момент завершающего одобрения или на момент первого.
+9. **[v1.1]** Сменилась `approval_policy` между одобрениями — кворум по политике на момент завершающего одобрения или на момент первого.
 10. Срок хранения обезличенных доказательств принятия (`legal_acceptances` после удаления пользователя) и номера `users.phone_e164` после удаления — LEGAL.md. `ip` / `user_agent` — решено: обнуляются через 30 дней после деактивации.
-11. Код `reason` для отката после 7 дней: сейчас откат просто исчезает из `allowed_actions`.
+11. **[v1.1]** Код `reason` для отката после 7 дней: сейчас откат просто исчезает из `allowed_actions`.
 12. Гасит ли новый SMS-код предыдущий неиспользованный. API_CONTRACT.md §11 исходит из того, что при `422 acceptance_required` код не гасится до истечения — подтвердить.
+13. **[v1.0]** Сверка ручного выполнения: сколько синхронизаций (дней) ждать изменения до `verification_not_confirmed` и как сверять действия без одного параметра (например, «проверить цели»: остаются `pending` или не сверяются).
+14. **[v1.0]** Сверка при `reliability = reduced`: входит ли подтверждённый результат в «Сэкономлено» наравне с обычным или только показывается (сейчас — входит при `verification_confirmed`).
+15. **[v1.0]** `reject` для `inspect_only`: сейчас недоступен (только «Проверил» / «Позже»); для метрики ложных срабатываний может понадобиться «Не буду» с `irrelevant_rule` и на «проверить».
