@@ -17,6 +17,13 @@ export function signed(n: number): string {
   return n > 0 ? `+${n}` : `${n}`.replace("-", "−");
 }
 
+// Wording (P0 D9/D10): an estimate of spend with signs of inefficiency, never "lost money".
+export const EXPOSURE = "Расход с признаками неэффективности";
+export const EXPOSURE_SHORT = "Неэффективный расход";
+export const EXPOSURE_NOTE =
+  "Оценка расходов, по которым система обнаружила признаки неэффективности. Одна и та же сумма учитывается в итоге только один раз.";
+export const SAVED_NOTE = "Расчётный эффект · сравнение 7 дней до и после без контрольной группы";
+
 export const LEGAL_DOCS = [
   { slug: "offer", title: "Договор-оферта" },
   { slug: "privacy", title: "Политика обработки персональных данных" },

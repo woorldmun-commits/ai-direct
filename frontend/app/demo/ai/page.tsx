@@ -4,8 +4,8 @@ import { ArrowUp, Bot, Sparkles } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { useDemo } from "@/components/app/store";
 import { Approx, PriorityIcon } from "@/components/ui";
-import { KPI, PREV_KPI, RECOVERABLE, type Problem } from "@/lib/demo";
-import { pctChange, rub, signed } from "@/lib/site";
+import { exposureTotal, KPI, PREV_KPI, RECOVERABLE, type Problem } from "@/lib/demo";
+import { EXPOSURE_SHORT, pctChange, rub, signed } from "@/lib/site";
 
 type Msg = { role: "user" | "ai"; text: string };
 
@@ -15,10 +15,10 @@ function answer(q: string, problems: Problem[]): string {
   switch (q) {
     case "Почему вырос CPA?":
       return `CPA вырос с ${rub(PREV_KPI.cpa)} до ${rub(KPI.cpa)} (${signed(pctChange(PREV_KPI.cpa, KPI.cpa))}%). Расход изменился на ${signed(pctChange(PREV_KPI.spend, KPI.spend))}%, а конверсий стало ${KPI.conversions} вместо ${PREV_KPI.conversions}. Сильнее всего влияет «${problems[0].campaign}»: ${problems[0].reason}.`;
-    case "Где самые большие потери?":
-      return `${problems.map((p, i) => `${i + 1}. ${p.campaign} — ${p.title.toLowerCase()}, ≈ ${rub(p.loss)}`).join("\n")}\nВсего ≈ ${rub(problems.reduce((s, p) => s + p.loss, 0))} за 7 дней.`;
+    case "Где больше всего неэффективного расхода?":
+      return `${problems.map((p, i) => `${i + 1}. ${p.campaign} — ${p.title.toLowerCase()}, ≈ ${rub(p.loss)}`).join("\n")}\nРасход с признаками неэффективности ≈ ${rub(exposureTotal(problems).total)} за 7 дней (оценка, одна сумма учтена один раз).`;
     case "Что изменилось за неделю?":
-      return `К прошлой неделе: расход ${signed(pctChange(PREV_KPI.spend, KPI.spend))}%, конверсии ${signed(pctChange(PREV_KPI.conversions, KPI.conversions))}%, CPA ${signed(pctChange(PREV_KPI.cpa, KPI.cpa))}%, потери ${signed(pctChange(PREV_KPI.losses, KPI.losses))}%.`;
+      return `К прошлой неделе: расход ${signed(pctChange(PREV_KPI.spend, KPI.spend))}%, конверсии ${signed(pctChange(PREV_KPI.conversions, KPI.conversions))}%, CPA ${signed(pctChange(PREV_KPI.cpa, KPI.cpa))}%, неэффективный расход ≈ ${signed(pctChange(PREV_KPI.losses, KPI.losses))}%.`;
     case "Что сделать сегодня?":
       return open.length
         ? `${open
@@ -31,7 +31,7 @@ function answer(q: string, problems: Problem[]): string {
   }
 }
 
-const QUICK = ["Почему вырос CPA?", "Где самые большие потери?", "Что изменилось за неделю?", "Что сделать сегодня?"];
+const QUICK = ["Почему вырос CPA?", "Где больше всего неэффективного расхода?", "Что изменилось за неделю?", "Что сделать сегодня?"];
 
 export default function AiDirector() {
   const { problems, openWhy } = useDemo();
@@ -65,11 +65,11 @@ export default function AiDirector() {
 
       <div className="mt-6 grid grid-cols-3 gap-3">
         <div className="card p-4">
-          <p className="label">Потери</p>
+          <p className="label">{EXPOSURE_SHORT}</p>
           <Approx className="text-lg text-danger md:text-2xl">{rub(KPI.losses)}</Approx>
         </div>
         <div className="card p-4">
-          <p className="label">Можно вернуть</p>
+          <p className="label">Можно сэкономить</p>
           <Approx className="text-lg text-warning md:text-2xl">{rub(RECOVERABLE)}</Approx>
         </div>
         <div className="card p-4">

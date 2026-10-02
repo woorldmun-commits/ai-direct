@@ -24,7 +24,7 @@ export default function HistoryPage() {
 
   return (
     <>
-      <PageHeader title="История решений" sub="Проблема → рекомендация → ваше действие → замер → сэкономлено ≈.">
+      <PageHeader title="История решений" sub="Проблема → рекомендация → ваше действие → замер → сэкономлено ≈ (расчётный эффект без контрольной группы).">
         <div role="group" aria-label="Раздел истории" className="flex gap-2">
           <button className="chip" aria-pressed={tab === "decisions"} onClick={() => setTab("decisions")}>
             Решения

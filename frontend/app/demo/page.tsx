@@ -7,7 +7,7 @@ import { MainFocus, MetricCard, StatusBadge } from "@/components/app/problem";
 import { useDemo } from "@/components/app/store";
 import { Approx, Delta, PageHeader, PriorityIcon } from "@/components/ui";
 import { KPI, PREV_KPI, SAVED, SYNC, USER, WEEK } from "@/lib/demo";
-import { pctChange, rub } from "@/lib/site";
+import { EXPOSURE_SHORT, pctChange, rub, SAVED_NOTE } from "@/lib/site";
 
 export default function Overview() {
   const { problems, openWhy } = useDemo();
@@ -20,10 +20,11 @@ export default function Overview() {
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <MetricCard label="Потрачено" value={rub(KPI.spend)} extra={<Delta value={pctChange(PREV_KPI.spend, KPI.spend)} goodWhenDown />} />
         <MetricCard
-          label="Потери"
+          label={EXPOSURE_SHORT}
           value={rub(KPI.losses)}
           approx
           tone="text-danger"
+          note="оценка, без двойного счёта"
           extra={<Delta value={pctChange(PREV_KPI.losses, KPI.losses)} goodWhenDown />}
         />
         <MetricCard label="CPA" value={rub(KPI.cpa)} extra={<Delta value={pctChange(PREV_KPI.cpa, KPI.cpa)} goodWhenDown />} />
@@ -39,7 +40,7 @@ export default function Overview() {
             </p>
             <p className="mt-4 text-xl font-bold">Сегодня я нашёл {problems.length} проблемы.</p>
             <p className="mt-2 text-sm text-white/70">
-              Главная — CPA выше цели. Начните с неё: это {Math.round((main.loss / KPI.losses) * 100)}% всех потерь.
+              Главная — CPA выше цели. Начните с неё: это {Math.round((main.loss / KPI.losses) * 100)}% расхода с признаками неэффективности.
             </p>
           </div>
           <span className="mt-6 inline-flex items-center gap-1 text-sm font-semibold text-[#39BFA0]">
@@ -55,7 +56,7 @@ export default function Overview() {
               Другие проблемы
             </h2>
             <Link href="/demo/losses" className="text-sm font-semibold text-brand">
-              Все потери
+              Все проблемы
             </Link>
           </div>
           <ul className="mt-3 divide-y divide-line">
@@ -107,7 +108,7 @@ export default function Overview() {
               <PiggyBank size={16} className="text-success" /> Сэкономлено
             </h2>
             <Approx className="mt-1 block text-[28px] text-success">{rub(SAVED)}</Approx>
-            <p className="text-xs text-muted">расчётная оценка по 2 решениям в сентябре</p>
+            <p className="text-xs text-muted">{SAVED_NOTE} · 2 решения в сентябре</p>
           </section>
           <section className="card p-5" aria-labelledby="data">
             <h2 id="data" className="text-sm text-muted">

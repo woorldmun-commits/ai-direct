@@ -55,7 +55,7 @@ export function PlatformIcon({ platform }: { platform: Platform }) {
   );
 }
 
-/** Change badge. `goodWhenDown` flips colors for costs and losses. */
+/** Change badge. `goodWhenDown` flips colors for costs and inefficient spend. */
 export function Delta({ value, goodWhenDown = false }: { value: number; goodWhenDown?: boolean }) {
   const good = goodWhenDown ? value < 0 : value > 0;
   const Icon = value >= 0 ? TrendingUp : TrendingDown;

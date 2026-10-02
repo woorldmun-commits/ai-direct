@@ -4,7 +4,7 @@ import { Bot, Check, ChevronDown, Database, X } from "lucide-react";
 import { useEffect } from "react";
 import { Approx, PriorityBadge } from "@/components/ui";
 import { PERIOD, SYNC } from "@/lib/demo";
-import { rub } from "@/lib/site";
+import { EXPOSURE, EXPOSURE_NOTE, rub } from "@/lib/site";
 import { RecActions } from "./problem";
 import { useDemo } from "./store";
 
@@ -44,8 +44,9 @@ export function WhyDrawer() {
         </div>
 
         <div className="mt-5 rounded-2xl bg-surface p-4">
-          <p className="label">Потери за период</p>
+          <p className="label">{EXPOSURE} за период</p>
           <Approx className="text-[28px] text-danger">{rub(p.loss)}</Approx>
+          <p className="mt-1 text-xs text-muted">{EXPOSURE_NOTE}</p>
         </div>
 
         <section className="mt-5">

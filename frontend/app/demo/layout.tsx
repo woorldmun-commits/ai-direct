@@ -4,7 +4,7 @@ import { DemoProvider } from "@/components/app/store";
 
 export const metadata: Metadata = {
   title: "Демо — пример дашборда Яндекс Директ",
-  description: "Посмотрите, как AdPilot показывает потери бюджета и рекомендации. Демо-данные, регистрация не нужна.",
+  description: "Посмотрите, как AdPilot показывает, где рекламный бюджет расходуется неэффективно, и рекомендации. Демо-данные, регистрация не нужна.",
   // Demo data is thin, duplicate-ish content: keep it out of the index but crawlable.
   robots: { index: false, follow: false },
   alternates: { canonical: "/demo" },

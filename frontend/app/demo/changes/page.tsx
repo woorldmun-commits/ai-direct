@@ -13,7 +13,7 @@ const METRICS = [
   { name: "CPA", cur: KPI.cpa, prev: PREV_KPI.cpa, fmt: rub, a: KPI.cpaDaily, b: prevCpaDaily, down: true },
   { name: "Расход", cur: KPI.spend, prev: PREV_KPI.spend, fmt: rub, a: WEEK.spend, b: PREV_WEEK.spend, down: true },
   { name: "Конверсии", cur: KPI.conversions, prev: PREV_KPI.conversions, fmt: String, a: WEEK.conversions, b: PREV_WEEK.conversions, down: false },
-  { name: "Потери", cur: KPI.losses, prev: PREV_KPI.losses, fmt: (n: number) => `≈ ${rub(n)}`, a: WEEK.losses, b: PREV_WEEK.losses, down: true },
+  { name: "Неэффективный расход", cur: KPI.losses, prev: PREV_KPI.losses, fmt: (n: number) => `≈ ${rub(n)}`, a: WEEK.losses, b: PREV_WEEK.losses, down: true },
 ];
 
 const k = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));

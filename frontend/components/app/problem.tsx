@@ -4,8 +4,8 @@ import { ArrowRight, Check, Clock, Database, X } from "lucide-react";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { Approx, PlatformIcon, PriorityBadge, PriorityIcon } from "@/components/ui";
-import { PERIOD, STATUS_LABEL, type Problem, type RecStatus } from "@/lib/demo";
-import { rub } from "@/lib/site";
+import { exposureTotal, PERIOD, STATUS_LABEL, type Problem, type RecStatus } from "@/lib/demo";
+import { EXPOSURE, EXPOSURE_SHORT, rub } from "@/lib/site";
 import { useDemo } from "./store";
 
 const STATUS_STYLE: Record<RecStatus, string> = {
@@ -104,8 +104,9 @@ export function MainFocus({ p }: { p: Problem }) {
       </div>
       <div className="mt-5 grid gap-4 md:grid-cols-[auto_1fr] md:items-end">
         <div>
-          <p className="label">Потери</p>
+          <p className="label">{EXPOSURE}</p>
           <Approx className="text-[36px] leading-tight text-danger">{rub(p.loss)}</Approx>
+          <p className="text-xs text-muted">оценка за {PERIOD}</p>
         </div>
         <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm md:justify-end">
           {p.facts.map((f) => (
@@ -144,7 +145,7 @@ export function RecommendationCard({ p }: { p: Problem }) {
       </p>
       <dl className="mt-4 grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
         <div>
-          <dt className="label">Потери</dt>
+          <dt className="label">{EXPOSURE_SHORT}</dt>
           <dd className="money text-danger">≈ {rub(p.loss)}</dd>
         </div>
         <div>
@@ -178,6 +179,9 @@ export function LossesList({ problems, selectable = true }: { problems: Problem[
   const [selected, setSelected] = useState<string[]>([]);
   const toggle = (id: string) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
   const all = problems.length > 0 && selected.length === problems.length;
+  const { covered } = exposureTotal(problems);
+  const coveredNote = (id: string) =>
+    covered.has(id) && <span className="block text-[11px] font-normal text-muted">уже учтено в другой карточке</span>;
 
   return (
     <div className="relative">
@@ -199,7 +203,7 @@ export function LossesList({ problems, selectable = true }: { problems: Problem[
               <th className="px-4 py-3 font-medium">Приоритет</th>
               <th className="px-4 py-3 font-medium">Кампания / Площадка</th>
               <th className="px-4 py-3 font-medium">Проблема</th>
-              <th className="px-4 py-3 text-right font-medium">Потеряно</th>
+              <th className="px-4 py-3 text-right font-medium">{EXPOSURE_SHORT}, оценка</th>
               <th className="px-4 py-3 text-right font-medium">Действие</th>
             </tr>
           </thead>
@@ -233,7 +237,10 @@ export function LossesList({ problems, selectable = true }: { problems: Problem[
                   <p className="font-medium">{p.title}</p>
                   <p className="text-xs text-muted">{p.reason}</p>
                 </td>
-                <td className="money px-4 py-4 text-right whitespace-nowrap text-danger">≈ {rub(p.loss)}</td>
+                <td className="money px-4 py-4 text-right whitespace-nowrap text-danger">
+                  ≈ {rub(p.loss)}
+                  {coveredNote(p.id)}
+                </td>
                 <td className="px-4 py-4 text-right">
                   <button className="btn btn-secondary btn-sm" onClick={() => openWhy(p.id)}>
                     {p.action}
@@ -263,7 +270,10 @@ export function LossesList({ problems, selectable = true }: { problems: Problem[
             <p className="mt-3 font-bold">{p.title}</p>
             <p className="text-xs text-muted">{p.campaign}</p>
             <div className="mt-3 flex items-center justify-between">
-              <Approx className="text-xl text-danger">{rub(p.loss)}</Approx>
+              <div>
+                <Approx className="text-xl text-danger">{rub(p.loss)}</Approx>
+                {coveredNote(p.id)}
+              </div>
               <button className="btn btn-secondary btn-sm" onClick={() => openWhy(p.id)}>
                 {p.action}
               </button>

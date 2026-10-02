@@ -1,7 +1,7 @@
 import { Bars, Donut } from "@/components/charts";
 import { Approx, PageHeader } from "@/components/ui";
 import { CAMPAIGNS, MONTH, MONTH_LOSS, MONTH_SPEND, PERIOD, RECOVERABLE, SAVED, SAVINGS } from "@/lib/demo";
-import { rub } from "@/lib/site";
+import { EXPOSURE, EXPOSURE_SHORT, rub, SAVED_NOTE } from "@/lib/site";
 
 const COLORS = ["var(--brand)", "var(--info)", "var(--warning)"];
 
@@ -20,25 +20,25 @@ export default function Finance() {
   const spend7 = CAMPAIGNS.reduce((s, c) => s + c.spend, 0);
   return (
     <>
-      <PageHeader title="Финансы" sub="Сентябрь 2026. Потраченное, потерянное и сэкономленное — разные деньги, мы их не смешиваем." />
+      <PageHeader title="Финансы" sub="Сентябрь 2026. Потраченное, расход с признаками неэффективности и сэкономленное — разные деньги, мы их не смешиваем." />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Tile label="Потрачено" value={MONTH_SPEND} tone="" bar="bg-text/20" note="факт по Яндекс Директу" />
-        <Tile label="Потери" value={MONTH_LOSS} tone="text-danger" bar="bg-danger" note="расход без результата по правилам" approx />
-        <Tile label="Можно вернуть" value={RECOVERABLE} tone="text-warning" bar="bg-warning" note={`открытые рекомендации, ${PERIOD}`} approx />
-        <Tile label="Сэкономлено" value={SAVED} tone="text-success" bar="bg-success" note="расчётная оценка после замера" approx />
+        <Tile label={EXPOSURE} value={MONTH_LOSS} tone="text-danger" bar="bg-danger" note="оценка по правилам, без двойного счёта" approx />
+        <Tile label="Можно сэкономить" value={RECOVERABLE} tone="text-warning" bar="bg-warning" note={`оценка по открытым рекомендациям, ${PERIOD}`} approx />
+        <Tile label="Сэкономлено" value={SAVED} tone="text-success" bar="bg-success" note={SAVED_NOTE} approx />
       </div>
 
       <section className="card mt-4 p-5" aria-labelledby="trend">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 id="trend" className="font-bold">
-            Динамика расходов и потерь
+            Расход и неэффективный расход по дням
           </h2>
           <p className="flex gap-4 text-xs text-muted">
             <span className="inline-flex items-center gap-1.5">
-              <span className="size-2.5 rounded-sm bg-brand" /> Полезный расход
+              <span className="size-2.5 rounded-sm bg-brand" /> Остальной расход
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="size-2.5 rounded-sm bg-danger" /> Потери
+              <span className="size-2.5 rounded-sm bg-danger" /> {EXPOSURE_SHORT} ≈
             </span>
           </p>
         </div>
@@ -77,7 +77,7 @@ export default function Finance() {
           <h2 id="savings" className="font-bold">
             Сэкономлено ≈ {rub(SAVED)}
           </h2>
-          <p className="text-xs text-muted">Расчётная оценка: расход до решения минус расход за 7 дней после, при той же цене клика.</p>
+          <p className="text-xs text-muted">{SAVED_NOTE}: расход до решения минус расход за 7 дней после, при той же цене клика.</p>
           <ul className="mt-4 divide-y divide-line">
             {SAVINGS.map((s) => (
               <li key={s.title} className="flex items-center justify-between gap-3 py-3">
