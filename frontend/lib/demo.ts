@@ -29,7 +29,7 @@ export interface Problem {
   reason: string;
   /** Estimated spend with signs of inefficiency (internal name kept, API calls it `exposure`). */
   loss: number;
-  /** "campaign" covers the whole campaign's spend; "object" covers part of it (placements, queries). */
+  /** "campaign" covers the whole campaign's spend; "object" covers part of it (e.g. network placements). */
   level: "campaign" | "object";
   recommendation: string;
   action: string;
@@ -71,8 +71,11 @@ const CUT = bidCut(DEV);
 export const CAMPAIGNS = [
   { name: "Поиск · Москва · Услуги", platform: "search" as Platform, spend: CPA_SEARCH * CONV_SEARCH, conversions: CONV_SEARCH },
   { name: "РСЯ · Москва", platform: "network" as Platform, spend: 41_300, conversions: 9 },
-  { name: "Поиск · Регионы", platform: "search" as Platform, spend: 43_150, conversions: 19 },
+  { name: "РСЯ · Регионы", platform: "network" as Platform, spend: 43_150, conversions: 19 },
 ];
+
+// Second placements finding (rule zero_conv_placements): network placements in the regions campaign.
+const REG_PLACEMENTS = { count: 6, clicks: 410, spend: 3_800 };
 
 export const PROBLEMS: Problem[] = [
   {
@@ -105,7 +108,7 @@ export const PROBLEMS: Problem[] = [
     priority: "medium",
     campaign: CAMPAIGNS[1].name,
     platform: "network",
-    title: "Расход без конверсий",
+    title: "Площадки РСЯ без конверсий",
     reason: "14 площадок РСЯ: 1 860 кликов, 0 конверсий за 7 дней",
     loss: 12_400,
     level: "object",
@@ -126,28 +129,28 @@ export const PROBLEMS: Problem[] = [
     status: "new",
   },
   {
-    id: "queries",
+    id: "network_regions",
     priority: "low",
     campaign: CAMPAIGNS[2].name,
-    platform: "search",
-    title: "Нерелевантные запросы",
-    reason: "23 запроса с расходом и без конверсий",
-    loss: 3_800,
+    platform: "network",
+    title: "Площадки РСЯ без конверсий",
+    reason: `${REG_PLACEMENTS.count} площадок РСЯ: ${fmt(REG_PLACEMENTS.clicks)} кликов, 0 конверсий за 7 дней`,
+    loss: REG_PLACEMENTS.spend,
     level: "object",
-    recommendation: "Добавить 23 минус-слова",
-    action: "Проверить запросы",
+    recommendation: `Проверить и исключить ${REG_PLACEMENTS.count} площадок без конверсий`,
+    action: "Проверить площадки",
     days: 7,
     conversions: 0,
     quality: "Средняя",
     facts: [
-      { label: "Расход", value: "3 800 ₽" },
-      { label: "Запросы", value: "23" },
+      { label: "Расход", value: `${fmt(REG_PLACEMENTS.spend)} ₽` },
+      { label: "Клики", value: fmt(REG_PLACEMENTS.clicks) },
       { label: "Конверсии", value: "0" },
     ],
-    calc: "Σ расход запросов без конверсий за период",
-    rule: "irrelevant_queries v1",
-    checks: ["7 дней данных", "Часть запросов скрыта Директом — данные неполные"],
-    ai: "По этим запросам были клики без конверсий. Проверьте список перед добавлением минус-слов: часть запросов может быть полезной.",
+    calc: "Σ расход площадок, где клики ≥ 50 и конверсии = 0",
+    rule: "zero_conv_placements v2",
+    checks: ["7 дней данных", `${fmt(REG_PLACEMENTS.clicks)} кликов (нужно ≥ 50 на площадку)`, "Часть площадок близка к порогу — проверьте список вручную"],
+    ai: "На этих площадках были клики, но не было конверсий. Объём по каждой площадке невелик, поэтому проверьте список перед исключением: исключение делается вручную в Директе.",
     status: "accepted",
   },
 ];
@@ -207,7 +210,7 @@ export const RECOVERABLE = exposureTotal(PROBLEMS.filter((p) => p.quality === "�
 
 export const SAVINGS = [
   { title: "Исключены 9 площадок РСЯ", campaign: "РСЯ · Москва", value: 21_200, period: "15–21 сентября" },
-  { title: "Добавлены 17 минус-слов", campaign: "Поиск · Регионы", value: 9_800, period: "8–14 сентября" },
+  { title: "Исключены 5 площадок РСЯ", campaign: "РСЯ · Регионы", value: 9_800, period: "8–14 сентября" },
 ];
 export const SAVED = sum(SAVINGS.map((s) => s.value));
 
@@ -231,8 +234,8 @@ export const HISTORY: { date: string; kind: HistoryKind; title: string; detail: 
   { date: "16 сентября, 10:41", kind: "verify", title: "Сверка: исключение 9 площадок найдено в данных Директа", detail: "РСЯ · Москва · следующий снимок после ручного изменения" },
   { date: "15 сентября, 14:30", kind: "action", title: "Вы исключили 9 площадок РСЯ", detail: "Изменение внесено вручную в Яндекс Директе" },
   { date: "15 сентября, 10:40", kind: "rec", title: "Создана рекомендация: исключить 9 площадок", detail: "Правило zero_conv_placements v2" },
-  { date: "15 сентября, 09:05", kind: "measure", title: "Замер эффекта: минус-слова", detail: "Расчётный эффект · 7 дней до и после, без контрольной группы", amount: SAVINGS[1].value },
-  { date: "8 сентября, 16:20", kind: "action", title: "Вы добавили 17 минус-слов", detail: "Поиск · Регионы" },
+  { date: "15 сентября, 09:05", kind: "measure", title: "Замер эффекта: исключение площадок РСЯ (Регионы)", detail: "Расчётный эффект · 7 дней до и после, без контрольной группы", amount: SAVINGS[1].value },
+  { date: "8 сентября, 16:20", kind: "action", title: "Вы исключили 5 площадок РСЯ", detail: "РСЯ · Регионы · изменение внесено вручную в Яндекс Директе" },
 ];
 
 export const SYSTEM_LOG = [
