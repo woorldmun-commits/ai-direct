@@ -22,3 +22,10 @@ graphify-out/cache/
 
 # Артефакты прогонов MVP-0 (scripts/e2e_account.py)
 e2e-result/
+
+# Локальные агентские/сессионные данные
+.claude/
+.swarm/
+.claude-flow/
+.agents/
+graphify-out/
