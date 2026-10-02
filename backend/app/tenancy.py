@@ -37,6 +37,9 @@ def workspace_scope(conn: psycopg.Connection, workspace_id: int) -> Iterator[Non
     Соединение, которое не удалось вернуть в прежнее состояние, закрывается: в пул оно не вернётся."""
     value = _id(workspace_id)
     previous = conn.execute("SELECT current_setting(%s, true)", (_KEY,)).fetchone()[0] or ""
+    if previous and previous != value:
+        # Задача одного workspace не переходит в другой: такой переход — ошибка кода, а не смена клиента.
+        raise RuntimeError("workspace_scope: nested switch to another workspace")
     conn.execute("SELECT set_config(%s, %s, false)", (_KEY, value))
     try:
         yield

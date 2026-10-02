@@ -151,8 +151,10 @@ def test_scope_is_reset_after_task_even_on_error(app, chain, other):
         assert one(app, "SELECT count(*) FROM issues") == 1
         1 / 0
     assert one(app, "SELECT count(*) FROM issues") == 0  # соединение вернётся в пул без чужого workspace
-    with workspace_scope(app, chain["ws"]), workspace_scope(app, other["ws"]):
-        assert one(app, "SELECT count(*) FROM issues") == 0
+    with pytest.raises(RuntimeError), workspace_scope(app, chain["ws"]), workspace_scope(app, other["ws"]):
+        pass  # задача одного workspace не переходит в чужой
+    with workspace_scope(app, chain["ws"]), workspace_scope(app, chain["ws"]):  # повторный вход в тот же — можно
+        assert one(app, "SELECT count(*) FROM issues") == 1
     assert one(app, "SELECT current_setting('app.workspace_id', true)") == ""
 
 
