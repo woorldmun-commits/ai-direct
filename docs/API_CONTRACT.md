@@ -443,7 +443,7 @@ high = 1, critical = 2; меняет owner/admin, снизить critical до 1
 
 Управление — только `owner` / `admin`: `GET/POST /organizations/{org}/invitations`;
 `PATCH/DELETE /organizations/{org}/members/{user}` (`org_role`; удаление снимает и все ws-роли; последнего `owner`
-удалить или понизить нельзя — `409 last_owner`); `GET /workspaces/{ws}/members`,
+удалить или понизить нельзя — `409 last_owner`; назначать, менять и удалять `owner` может только `owner`); `GET /workspaces/{ws}/members`,
 `PUT/DELETE /workspaces/{ws}/members/{user}` `{ws_role}` — только для участника той же организации, иначе `404`.
 `PATCH /workspaces/{ws}/settings` `{approval_policy}` — owner/admin; снизить `critical` до 1 — только owner
 (`403 forbidden_role`), изменение пишется в журнал.
