@@ -2,3 +2,4 @@
 # Строку добавляют вместе с новой миграцией; менять существующие строки нельзя — tests/test_migrations.py
 # сверяет файлы с этим списком. 0001 = backend/db/schema.sql на коммите bd03698 (тот же sha256).
 0001_baseline 348772e6e446ca1c66ac32523d6c81dc9c3c722f4009c9469ff958f7d8681dd0
+0002_phone_auth_protection 0a8e1e04c34f8f28c1be93fbc224f22f59b17ec63825dcc64626703ce36343d5
