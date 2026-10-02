@@ -1,8 +1,8 @@
 -- Схема MVP. Источник правды для первой миграции alembic.
 -- Описание сущностей и состояний: docs/DATA_MODEL.md.
 -- Выполняется ролью app_migrator (владелец всех объектов).
--- Роли app_rw, app_token (член app_rw), app_deleter, app_migrator создаются на уровне кластера
--- (Managed PostgreSQL / тестовый стенд): см. tests/conftest.py.
+-- Роли app_rw, app_token (член app_rw), app_system (член app_rw), app_deleter, app_migrator создаются на уровне
+-- кластера (Managed PostgreSQL / тестовый стенд): см. tests/conftest.py. Изоляция арендаторов (RLS) — в конце файла.
 
 -- ============================================================================
 -- Контракт данных
@@ -116,31 +116,167 @@ CREATE TABLE sessions (
 -- Принятие документов — доказательство на операторе (ч. 3 ст. 9 152-ФЗ). Каждый документ — отдельная строка:
 -- согласие на обработку ПД оформляется отдельно от оферты (ч. 1 ст. 9, ред. 156-ФЗ с 01.09.2025). Append-only:
 -- новая редакция или отзыв — новая строка, не правка старой.
+-- document_sha256 — sha256 точного текста версии, который видел пользователь (реестр app/legal/documents.py);
+-- locale — язык показанного текста; ip и user_agent — обстоятельства принятия, если известны.
+-- agency_client_mandate — подтверждение агентства по клиенту (право передавать данные клиента, поручение клиента,
+-- право давать доступ к Директу клиента): строка привязана к workspace клиента. workspace_id без FK, как у
+-- deletion_requests: доказательство переживает удалённый workspace; существование и право — триггер при вставке.
 CREATE TABLE legal_acceptances (
-  id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  user_id     bigint NOT NULL REFERENCES users,
-  document    text NOT NULL CHECK (document IN ('offer', 'pd_consent', 'marketing')),
-  version     text NOT NULL CHECK (version ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}(\.[0-9]+)?$'),
-  accepted_at timestamptz NOT NULL
+  id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  user_id         bigint NOT NULL REFERENCES users,
+  document        text NOT NULL CHECK (document IN ('offer', 'pd_consent', 'marketing', 'agency_client_mandate')),
+  version         text NOT NULL CHECK (version ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}(\.[0-9]+)?$'),
+  accepted_at     timestamptz NOT NULL,
+  document_sha256 char(64) CHECK (document_sha256 ~ '^[0-9a-f]{64}$'),
+  locale          text CHECK (locale ~ '^[a-z]{2}(-[A-Z]{2})?$'),
+  ip              inet,
+  user_agent      text CHECK (length(user_agent) <= 256),
+  workspace_id    bigint,
+  -- мандат — всегда по конкретному клиенту (workspace); остальные документы — пользовательские, без workspace
+  CHECK ((document = 'agency_client_mandate') = (workspace_id IS NOT NULL))
 );
+-- Хэш текста и язык обязательны для новых записей. NOT VALID: строки, принятые до появления реестра текстов
+-- (при миграции существующей БД), задним числом не проверяются; любая новая вставка — проверяется.
+ALTER TABLE legal_acceptances ADD CONSTRAINT legal_acceptances_text_evidence
+  CHECK (document_sha256 IS NOT NULL AND locale IS NOT NULL) NOT VALID;
 CREATE INDEX legal_acceptances_user ON legal_acceptances (user_id, document);
+CREATE INDEX legal_acceptances_workspace ON legal_acceptances (workspace_id) WHERE workspace_id IS NOT NULL;
+
+-- ============================================================================
+-- Организации и доступ (D3): роль в организации + роль в workspace
+-- ============================================================================
+-- owner/admin организации видят и ведут все её workspace; member — только те, где у него есть
+-- workspace_memberships. Эффективная роль считается в одном месте — effective_workspace_access / workspace_role.
+
+CREATE TABLE organizations (
+  id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  name       text NOT NULL,
+  kind       text NOT NULL CHECK (kind IN ('business', 'agency')),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE organization_memberships (
+  user_id         bigint NOT NULL REFERENCES users,
+  organization_id bigint NOT NULL REFERENCES organizations,
+  org_role        text NOT NULL CHECK (org_role IN ('owner', 'admin', 'member')),
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, organization_id)
+);
+CREATE INDEX organization_memberships_org ON organization_memberships (organization_id);
 
 CREATE TABLE workspaces (
-  id             bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  name           text NOT NULL,
-  status         text NOT NULL DEFAULT 'active'
-                 CHECK (status IN ('active', 'deactivated', 'deletion_pending')),
-  created_at     timestamptz NOT NULL DEFAULT now(),
-  deactivated_at timestamptz,
-  CHECK ((status = 'active') = (deactivated_at IS NULL))
+  id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  organization_id bigint NOT NULL REFERENCES organizations,
+  name            text NOT NULL,
+  status          text NOT NULL DEFAULT 'active'
+                  CHECK (status IN ('active', 'deactivated', 'deletion_pending')),
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  deactivated_at  timestamptz,
+  CHECK ((status = 'active') = (deactivated_at IS NULL)),
+  UNIQUE (id, organization_id)  -- цель составного FK workspace_memberships
 );
+CREATE INDEX workspaces_organization ON workspaces (organization_id);
 
-CREATE TABLE memberships (
-  user_id      bigint NOT NULL REFERENCES users,
-  workspace_id bigint NOT NULL REFERENCES workspaces,
-  role         text NOT NULL DEFAULT 'owner' CHECK (role IN ('owner')),
-  PRIMARY KEY (user_id, workspace_id)
+-- Участник workspace — обязательно участник организации этого workspace: составные FK, а не проверка кодом
+-- (без гонки «удалили из организации, пока добавляли в workspace»). organization_id заполняет триггер из
+-- workspaces — приложение передаёт только user, workspace и роль. Удаление участника из организации каскадно
+-- удаляет его workspace_memberships (ON DELETE CASCADE).
+CREATE TABLE workspace_memberships (
+  user_id         bigint NOT NULL,
+  workspace_id    bigint NOT NULL,
+  organization_id bigint NOT NULL,
+  ws_role         text NOT NULL CHECK (ws_role IN ('approver', 'analyst', 'viewer')),
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, workspace_id),
+  FOREIGN KEY (workspace_id, organization_id) REFERENCES workspaces (id, organization_id),
+  FOREIGN KEY (user_id, organization_id) REFERENCES organization_memberships (user_id, organization_id)
+    ON DELETE CASCADE
 );
+CREATE INDEX workspace_memberships_workspace ON workspace_memberships (workspace_id);
+CREATE INDEX workspace_memberships_org_user ON workspace_memberships (user_id, organization_id);
+
+CREATE FUNCTION fill_membership_organization() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.organization_id := (SELECT organization_id FROM workspaces WHERE id = NEW.workspace_id);
+  RETURN NEW;
+END
+$$;
+CREATE TRIGGER workspace_memberships_organization BEFORE INSERT OR UPDATE ON workspace_memberships
+  FOR EACH ROW EXECUTE FUNCTION fill_membership_organization();
+
+-- Хотя бы один owner у организации. Проверка отложена до COMMIT: передача владения (добавить нового owner,
+-- понизить старого) — в любом порядке внутри транзакции; организация и её owner создаются одной транзакцией.
+-- Строка организации блокируется: два параллельных понижения двух владельцев не оставят организацию без owner.
+-- SECURITY DEFINER: проверка видит всех участников независимо от RLS вызывающего. Удалённую организацию
+-- (delete_workspace_data) не проверяем.
+CREATE FUNCTION check_organization_has_owner() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+DECLARE org bigint;
+BEGIN
+  IF TG_TABLE_NAME = 'organizations' THEN
+    org := NEW.id;
+  ELSE
+    org := OLD.organization_id;
+  END IF;
+  PERFORM 1 FROM organizations WHERE id = org FOR UPDATE;
+  IF FOUND AND NOT EXISTS (SELECT 1 FROM organization_memberships
+                           WHERE organization_id = org AND org_role = 'owner') THEN
+    RAISE EXCEPTION 'organization % must have at least one owner', org
+      USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  RETURN NULL;
+END
+$$;
+CREATE CONSTRAINT TRIGGER organizations_has_owner AFTER INSERT ON organizations
+  DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION check_organization_has_owner();
+CREATE CONSTRAINT TRIGGER organization_memberships_has_owner AFTER UPDATE OR DELETE ON organization_memberships
+  DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION check_organization_has_owner();
+
+-- Эффективный доступ пользователя к workspace — единственная точка проверки. role: owner · admin (всё в любом
+-- workspace организации) · approver · analyst · viewer (только свой workspace). Нет строки — нет доступа (API: 404,
+-- не 403). Деактивированный пользователь доступа не имеет. security_invoker: прикладная роль видит через
+-- представление только то, что ей разрешает RLS.
+CREATE VIEW effective_workspace_access WITH (security_invoker = true) AS
+SELECT om.user_id, w.id AS workspace_id, w.organization_id, om.org_role, wm.ws_role,
+       CASE WHEN om.org_role IN ('owner', 'admin') THEN om.org_role ELSE wm.ws_role END AS role
+FROM organization_memberships om
+JOIN users u ON u.id = om.user_id AND u.status = 'active'
+JOIN workspaces w ON w.organization_id = om.organization_id
+LEFT JOIN workspace_memberships wm ON wm.user_id = om.user_id AND wm.workspace_id = w.id
+WHERE om.org_role IN ('owner', 'admin') OR wm.ws_role IS NOT NULL;
+
+-- Проверка выполняется до входа в workspace (app.workspace_id ещё не выставлен), поэтому SECURITY DEFINER:
+-- отвечает только на вопрос «какая роль у пользователя в этом workspace» и ничего больше не раскрывает.
+CREATE FUNCTION workspace_role(usr bigint, ws bigint) RETURNS text
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+  SELECT role FROM effective_workspace_access WHERE user_id = usr AND workspace_id = ws
+$$;
+
+-- Workspace пользователя (переключатель в UI) — из того же представления.
+CREATE FUNCTION user_workspaces(usr bigint) RETURNS TABLE (workspace_id bigint, organization_id bigint, role text)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+  SELECT a.workspace_id, a.organization_id, a.role FROM effective_workspace_access a WHERE a.user_id = usr
+  ORDER BY a.workspace_id
+$$;
+
+-- Мандат агентства: workspace существует, принадлежит агентству, и подтверждает его owner/admin организации.
+CREATE FUNCTION check_mandate() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+BEGIN
+  -- без workspace строку отклонит CHECK таблицы
+  IF NEW.document = 'agency_client_mandate' AND NEW.workspace_id IS NOT NULL AND NOT EXISTS (
+       SELECT 1 FROM effective_workspace_access a JOIN organizations o ON o.id = a.organization_id
+       WHERE a.user_id = NEW.user_id AND a.workspace_id = NEW.workspace_id
+         AND a.role IN ('owner', 'admin') AND o.kind = 'agency') THEN
+    RAISE EXCEPTION 'agency_client_mandate: workspace % is not an agency client managed by user %',
+      NEW.workspace_id, NEW.user_id USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  RETURN NEW;
+END
+$$;
+CREATE TRIGGER legal_acceptances_mandate BEFORE INSERT ON legal_acceptances
+  FOR EACH ROW EXECUTE FUNCTION check_mandate();
 
 CREATE TABLE workspace_settings (
   workspace_id         bigint PRIMARY KEY REFERENCES workspaces,
@@ -197,9 +333,9 @@ CREATE TABLE direct_accounts (
 );
 CREATE UNIQUE INDEX direct_accounts_login_uq
   ON direct_accounts (direct_connection_id, coalesce(client_login, ''));
--- ponytail: в MVP один выбранный аккаунт на подключение; снять индекс для Бизнес+
-CREATE UNIQUE INDEX direct_accounts_one_selected
-  ON direct_accounts (direct_connection_id) WHERE is_selected;
+-- is_selected = «включён в анализ» (D4): выбранных кабинетов может быть несколько. Синхронизация, снимок и аудит —
+-- по каждому выбранному кабинету отдельно. Сколько кабинетов можно включить — лимит тарифа (max_ad_accounts),
+-- проверяется кодом, а не схемой.
 
 CREATE TABLE metrika_connections (
   id                bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -848,12 +984,17 @@ CREATE TABLE deletion_requests (
 -- без ПД) намеренно переживает удаление — исключение политики хранения (ARCHITECTURE.md §2.5).
 -- Возвращает число удалённых строк по таблицам —
 -- это и есть содержимое deletion_requests.verification. Платежи обезличиваются, а не удаляются (бухучёт).
+-- Последний workspace организации уносит с собой организацию, её участников и пользователей, у которых других
+-- организаций нет (как раньше — пользователей без других workspace). Мандаты агентства (legal_acceptances)
+-- остаются: это доказательство, без FK на workspace.
 CREATE FUNCTION delete_workspace_data(ws bigint) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
 DECLARE
   counts jsonb := '{}';
   n bigint;
-  sole_users bigint[];
+  org bigint;
+  last_in_org boolean;
+  sole_users bigint[] := '{}';
 BEGIN
   PERFORM pg_advisory_xact_lock(ws);  -- ждёт записи снимков/аудитов, не пускает новые (DATA_MODEL.md §9.2)
   PERFORM set_config('app.deleting', 'on', true);
@@ -861,10 +1002,16 @@ BEGIN
     RAISE EXCEPTION 'workspace % is not in deletion_pending', ws;
   END IF;
 
-  SELECT coalesce(array_agg(m.user_id), '{}') INTO sole_users
-  FROM memberships m
-  WHERE m.workspace_id = ws
-    AND NOT EXISTS (SELECT 1 FROM memberships o WHERE o.user_id = m.user_id AND o.workspace_id <> ws);
+  SELECT organization_id INTO org FROM workspaces WHERE id = ws;
+  PERFORM 1 FROM organizations WHERE id = org FOR UPDATE;  -- параллельное удаление соседнего workspace ждёт
+  last_in_org := NOT EXISTS (SELECT 1 FROM workspaces WHERE organization_id = org AND id <> ws);
+  IF last_in_org THEN
+    SELECT coalesce(array_agg(m.user_id), '{}') INTO sole_users
+    FROM organization_memberships m
+    WHERE m.organization_id = org
+      AND NOT EXISTS (SELECT 1 FROM organization_memberships o
+                      WHERE o.user_id = m.user_id AND o.organization_id <> org);
+  END IF;
 
   DELETE FROM outbox_events WHERE workspace_id = ws;
   GET DIAGNOSTICS n = ROW_COUNT; counts := counts || jsonb_build_object('outbox_events', n);
@@ -923,9 +1070,14 @@ BEGIN
   DELETE FROM direct_connections WHERE workspace_id = ws;
   GET DIAGNOSTICS n = ROW_COUNT; counts := counts || jsonb_build_object('direct_connections', n);
   DELETE FROM workspace_settings WHERE workspace_id = ws;
-  DELETE FROM memberships WHERE workspace_id = ws;
+  DELETE FROM workspace_memberships WHERE workspace_id = ws;
   DELETE FROM workspaces WHERE id = ws;
   GET DIAGNOSTICS n = ROW_COUNT; counts := counts || jsonb_build_object('workspaces', n);
+  IF last_in_org THEN
+    DELETE FROM organization_memberships WHERE organization_id = org;
+    DELETE FROM organizations WHERE id = org;
+    GET DIAGNOSTICS n = ROW_COUNT; counts := counts || jsonb_build_object('organizations', n);
+  END IF;
 
   DELETE FROM sessions WHERE user_id = ANY (sole_users);
   DELETE FROM telegram_links WHERE user_id = ANY (sole_users);
@@ -1176,6 +1328,19 @@ BEGIN
   RETURN t;
 END $$;
 
+-- Workspace задачи воркера по её объекту — чтобы войти в workspace (app.workspace_id) до чтения самой задачи.
+-- Раскрывает только номер workspace; NULL — объекта нет (удалён вместе с workspace).
+CREATE FUNCTION task_workspace(kind text, obj bigint) RETURNS bigint
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+  SELECT CASE kind
+    WHEN 'sync_run' THEN (SELECT workspace_id FROM sync_runs WHERE id = task_workspace.obj)
+    WHEN 'direct_account' THEN (SELECT c.workspace_id FROM direct_accounts a
+                                JOIN direct_connections c ON c.id = a.direct_connection_id WHERE a.id = task_workspace.obj)
+    WHEN 'measurement' THEN (SELECT i.workspace_id FROM measurements m JOIN issues i ON i.id = m.issue_id
+                             WHERE m.id = task_workspace.obj)
+  END
+$$;
+
 -- ============================================================================
 -- Права
 -- ============================================================================
@@ -1186,13 +1351,15 @@ REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 
 -- Приложение: читать всё, добавлять везде, изменять — только операционные таблицы. Без DELETE, без DDL.
 GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA public TO app_rw;
-GRANT UPDATE ON users, workspaces, memberships, workspace_settings, telegram_links,
+GRANT UPDATE ON users, organizations, organization_memberships, workspaces, workspace_memberships,
+                workspace_settings, telegram_links,
                 direct_accounts, metrika_counters,
                 sync_runs, snapshots, issues, notifications, outbox_events, subscriptions, payments,
                 deletion_requests
              TO app_rw;
 -- Сессии и привязки Telegram — служебные, не доказательные: выход из аккаунта удаляет строку.
-GRANT DELETE ON sessions, telegram_links TO app_rw;
+-- Участие в организации и workspace — управление командой: удаление участника удаляет строку.
+GRANT DELETE ON sessions, telegram_links, organization_memberships, workspace_memberships TO app_rw;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO app_rw;
 
 -- Подключения: всё, кроме шифротекста токена. SELECT * по этим таблицам приложению недоступен — только перечисленные
@@ -1221,8 +1388,92 @@ GRANT EXECUTE ON FUNCTION delete_workspace_data(bigint) TO app_deleter;
 GRANT EXECUTE ON FUNCTION purge_search_query_texts(date, integer) TO app_deleter;
 GRANT EXECUTE ON FUNCTION purge_personal_data(timestamptz) TO app_deleter;
 
+-- Доступ к workspace и привязка задачи к workspace — до входа в него (app.workspace_id ещё не выставлен).
+REVOKE EXECUTE ON FUNCTION workspace_role(bigint, bigint), user_workspaces(bigint),
+                           task_workspace(text, bigint) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION workspace_role(bigint, bigint), user_workspaces(bigint),
+                          task_workspace(text, bigint) TO app_rw;
+
 -- Таблицы из будущих миграций получают те же базовые права автоматически. Удаление их данных
 -- delete_workspace_data само не узнает: новую таблицу с workspace нужно добавить в функцию и в test_lifecycle.
+-- RLS тоже не включится сам: новой таблице с данными workspace нужна политика ниже (проверяет test_rls).
 ALTER DEFAULT PRIVILEGES FOR ROLE app_migrator IN SCHEMA public GRANT SELECT, INSERT ON TABLES TO app_rw;
 ALTER DEFAULT PRIVILEGES FOR ROLE app_migrator IN SCHEMA public GRANT USAGE ON SEQUENCES TO app_rw;
+
+-- ============================================================================
+-- Изоляция арендаторов: RLS — второй барьер после проверки доступа в коде (D13)
+-- ============================================================================
+-- Роли (создаются на уровне кластера, см. tests/conftest.py):
+--   app_rw     — прикладная роль: API и воркеры задач одного workspace. Видит строки только того workspace,
+--                что выставлен в app.workspace_id (API — SET LOCAL после workspace_role; воркер — на задачу,
+--                app/tenancy.py). Не выставлен — 0 строк: запрос без фильтра не вернёт чужого клиента.
+--                Организационный контекст app.organization_id открывает workspaces и workspace_memberships
+--                своей организации (owner/admin: список клиентов, команда, создание workspace).
+--   app_token  — член app_rw (+ чтение токена): те же политики, что у app_rw.
+--   app_system — член app_rw с отдельной разрешающей политикой «все строки»: системные задачи по многим
+--                workspace (планировщик, захват и доставка outbox, уведомления, выбор замеров к запуску).
+--                Те же права на таблицы, что у app_rw — только без фильтра по workspace.
+--   app_deleter и функции SECURITY DEFINER (удаление, ретеншн, токены, проверка доступа) работают от владельца
+--                таблиц и RLS не подчиняются; workspace у них — явный параметр.
+-- Без RLS: users, yandex_identities, sessions, telegram_links (данные пользователя, не workspace; приложение
+-- фильтрует по пользователю сессии), organizations и organization_memberships (нужны до выбора workspace),
+-- releases и free_audit_claims (глобальные, без данных клиента).
+
+CREATE FUNCTION app_workspace_id() RETURNS bigint
+LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('app.workspace_id', true), '')::bigint $$;
+CREATE FUNCTION app_organization_id() RETURNS bigint
+LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('app.organization_id', true), '')::bigint $$;
+
+DO $$
+DECLARE
+  t text;
+  -- таблица → условие строки своего workspace
+  rules jsonb := jsonb_build_object(
+    'workspace_settings',   'workspace_id = app_workspace_id()',
+    'direct_connections',   'workspace_id = app_workspace_id()',
+    'metrika_connections',  'workspace_id = app_workspace_id()',
+    'sync_runs',            'workspace_id = app_workspace_id()',
+    'snapshots',            'workspace_id = app_workspace_id()',
+    'search_query_texts',   'workspace_id = app_workspace_id()',
+    'audit_runs',           'workspace_id = app_workspace_id()',
+    'issues',               'workspace_id = app_workspace_id()',
+    'outbox_events',        'workspace_id = app_workspace_id()',
+    'digests',              'workspace_id = app_workspace_id()',
+    'notifications',        'workspace_id = app_workspace_id()',
+    'subscriptions',        'workspace_id = app_workspace_id()',
+    'deletion_requests',    'workspace_id = app_workspace_id()',
+    -- пользовательские документы (оферта, согласия) — без workspace; мандат агентства — только в своём
+    'legal_acceptances',    'workspace_id IS NULL OR workspace_id = app_workspace_id()',
+    'workspaces',           'id = app_workspace_id() OR organization_id = app_organization_id()',
+    'workspace_memberships', 'workspace_id = app_workspace_id() OR organization_id = app_organization_id()',
+    -- без собственного workspace_id — через родителя (подзапрос по первичному ключу родителя)
+    'direct_accounts',      'EXISTS (SELECT 1 FROM direct_connections p WHERE p.id = direct_accounts.direct_connection_id
+                                     AND p.workspace_id = app_workspace_id())',
+    'metrika_counters',     'EXISTS (SELECT 1 FROM metrika_connections p WHERE p.id = metrika_counters.metrika_connection_id
+                                     AND p.workspace_id = app_workspace_id())',
+    'stat_rows',            'EXISTS (SELECT 1 FROM snapshots p WHERE p.id = stat_rows.snapshot_id
+                                     AND p.workspace_id = app_workspace_id())',
+    'search_query_sightings', 'EXISTS (SELECT 1 FROM search_query_texts p WHERE p.id = search_query_sightings.query_id
+                                       AND p.workspace_id = app_workspace_id())',
+    'audit_run_snapshots',  'EXISTS (SELECT 1 FROM audit_runs p WHERE p.id = audit_run_snapshots.audit_run_id
+                                     AND p.workspace_id = app_workspace_id())',
+    'findings',             'EXISTS (SELECT 1 FROM issues p WHERE p.id = findings.issue_id AND p.workspace_id = app_workspace_id())',
+    'recommendations',      'EXISTS (SELECT 1 FROM issues p WHERE p.id = recommendations.issue_id AND p.workspace_id = app_workspace_id())',
+    'recommendation_events', 'EXISTS (SELECT 1 FROM issues p WHERE p.id = recommendation_events.issue_id AND p.workspace_id = app_workspace_id())',
+    'recommendation_results', 'EXISTS (SELECT 1 FROM issues p WHERE p.id = recommendation_results.issue_id AND p.workspace_id = app_workspace_id())',
+    'measurements',         'EXISTS (SELECT 1 FROM issues p WHERE p.id = measurements.issue_id AND p.workspace_id = app_workspace_id())',
+    'explanations',         'EXISTS (SELECT 1 FROM findings f JOIN issues p ON p.id = f.issue_id WHERE f.id = explanations.finding_id
+                                     AND p.workspace_id = app_workspace_id())',
+    'subscription_events',  'EXISTS (SELECT 1 FROM subscriptions p WHERE p.id = subscription_events.subscription_id
+                                     AND p.workspace_id = app_workspace_id())',
+    -- платёж обезличенного (удалённого) workspace — только системе
+    'payments',             'EXISTS (SELECT 1 FROM subscriptions p WHERE p.id = payments.subscription_id
+                                     AND p.workspace_id = app_workspace_id())');
+BEGIN
+  FOR t IN SELECT jsonb_object_keys(rules) LOOP
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('CREATE POLICY tenant ON %I TO app_rw USING (%s)', t, rules->>t);
+    EXECUTE format('CREATE POLICY system ON %I TO app_system USING (true) WITH CHECK (true)', t);
+  END LOOP;
+END $$;
 

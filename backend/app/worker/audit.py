@@ -17,6 +17,7 @@ from app.audit.selection import Included, Selection, select_accounts
 from app.rules import RULES
 from app.rules.domain import AuditSettings, Finding, run
 from app.sync.store import load_view
+from app.tenancy import workspace_scope
 from app.worker.guard import Skip, Task, guard, load_state
 from app.worker.locks import audit_exclusive, workspace_shared
 from app.worker.sync import Skipped
@@ -90,6 +91,13 @@ def _write(conn: psycopg.Connection, workspace_id: int, task_key: str, release_i
 def run_audit(conn: psycopg.Connection, *, workspace_id: int, task_key: str, data_cutoff: date, release_id: int,
               now: datetime) -> Audited | Skipped:
     assert conn.autocommit, "воркер требует соединение с autocommit=True"
+    with workspace_scope(conn, workspace_id):  # RLS: задача видит только свой workspace
+        return _run_audit(conn, workspace_id=workspace_id, task_key=task_key, data_cutoff=data_cutoff,
+                          release_id=release_id, now=now)
+
+
+def _run_audit(conn: psycopg.Connection, *, workspace_id: int, task_key: str, data_cutoff: date, release_id: int,
+               now: datetime) -> Audited | Skipped:
     if (existing := _existing(conn, workspace_id, task_key)) is not None:
         return Audited(existing)
     if isinstance(d := guard(Task.AUDIT, load_state(conn, workspace_id, None, now)), Skip):

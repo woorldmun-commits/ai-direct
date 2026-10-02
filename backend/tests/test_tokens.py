@@ -4,7 +4,8 @@
 import psycopg
 import pytest
 
-from test_schema import chain, connected, one  # noqa: F401 — chain: фикстура
+from app.tenancy import workspace_scope
+from test_schema import chain, connected, new_workspace, one  # noqa: F401 — chain: фикстура
 
 TOKEN = b"\xde\xad\xbe\xef"
 
@@ -42,17 +43,20 @@ def test_app_role_sees_everything_but_the_token(rw, chain, conn_id):
 
 def test_worker_reads_token_only_within_its_workspace(rw, chain, conn_id, token_role):
     assert bytes(one(token_role, "SELECT connection_token('direct', %s, %s)", chain["ws"], conn_id)) == TOKEN
-    other_ws = one(rw, "INSERT INTO workspaces (name) VALUES ('x') RETURNING id")
+    other_ws = new_workspace(rw, "x")
     with pytest.raises(psycopg.errors.NoDataFound):             # чужой workspace — как будто подключения нет
         token_role.execute("SELECT connection_token('direct', %s, %s)", (other_ws, conn_id))
 
 
 def test_worker_role_keeps_app_rights(token_role, chain):
-    assert one(token_role, "SELECT count(*) FROM workspaces WHERE id = %s", chain["ws"]) == 1
+    """Права приложения — и его изоляция RLS: в своём workspace (workspace_scope) видно, вне его — нет."""
+    assert one(token_role, "SELECT count(*) FROM workspaces WHERE id = %s", chain["ws"]) == 0
+    with workspace_scope(token_role, chain["ws"]):
+        assert one(token_role, "SELECT count(*) FROM workspaces WHERE id = %s", chain["ws"]) == 1
 
 
 def test_set_token_cannot_target_another_workspace(rw, chain, conn_id):
-    other_ws = one(rw, "INSERT INTO workspaces (name) VALUES ('x') RETURNING id")
+    other_ws = new_workspace(rw, "x")
     with pytest.raises(psycopg.errors.NoDataFound):
         rw.execute("SELECT set_connection_token('direct', %s, %s, %s, NULL)", (other_ws, conn_id, b"\x01"))
 
@@ -71,5 +75,8 @@ def test_security_definer_functions_have_fixed_search_path(rw):
     rows = rw.execute("""SELECT p.proname, p.proconfig FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
                          WHERE n.nspname = 'public' AND p.prosecdef""").fetchall()
     assert {name for name, _ in rows} == {"delete_workspace_data", "purge_search_query_texts", "set_connection_token",
-                                          "drop_connection_token", "connection_token", "purge_personal_data"}
+                                          "drop_connection_token", "connection_token", "purge_personal_data",
+                                          # доступ и изоляция (D3, D13, D16)
+                                          "workspace_role", "user_workspaces", "task_workspace",
+                                          "check_organization_has_owner", "check_mandate"}
     assert all(cfg and any(c.startswith("search_path=") for c in cfg) for _, cfg in rows)

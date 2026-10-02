@@ -12,6 +12,7 @@ import pytest
 
 from app.auth.login import SCOPES, LoginError, sign_in
 from app.auth.yandex_oauth import OAuthApp, OAuthError, ReauthorizationRequired, authorize_url, refresh
+from app.legal.documents import text_path
 from test_schema import one
 
 NOW = datetime(2026, 9, 30, 12, tzinfo=timezone.utc)
@@ -184,6 +185,23 @@ def test_existing_user_signs_in_without_new_acceptance(rw):
     first = login(rw, FakeYandex({"c1": p}))
     again = login(rw, FakeYandex({"c2": p}), code="c2", accepted={})
     assert again.user_id == first.user_id and len(acceptances(rw, first.user_id)) == 1
+
+
+def test_acceptance_stores_hash_of_exact_text_locale_ip_and_user_agent(rw):
+    """D16: хэш — из файла текста этой версии (реестр), а не из запроса; User-Agent обрезается до 256 символов."""
+    out = sign_in(rw, http(FakeYandex({"c1": profile()})), APP, code="c1", state="s", expected_state="s", now=NOW,
+                  accepted=OFFER, ip="203.0.113.7", user_agent="Mozilla/5.0 " + "x" * 400)
+    sha, locale, ip, ua = rw.execute("""SELECT document_sha256, locale, host(ip), user_agent FROM legal_acceptances
+                                        WHERE user_id = %s""", (out.user_id,)).fetchone()
+    assert sha == hashlib.sha256(text_path("offer", "2026-10-01").read_bytes()).hexdigest()
+    assert (locale, ip, len(ua)) == ("ru-RU", "203.0.113.7", 256)
+
+
+@pytest.mark.parametrize("accepted", [{"offer": "2026-09-01"},              # версии нет в реестре текстов
+                                      {"offer": "2026-10-01", "agency_client_mandate": "2026-10-01"}])
+def test_unpublished_version_or_workspace_document_is_rejected_at_login(rw, accepted):
+    with pytest.raises(LoginError, match="terms_not_accepted"):
+        login(rw, FakeYandex({"c1": profile()}), accepted=accepted)
 
 
 @pytest.mark.parametrize("accepted", [{"offer": ""}, {"offer": "v1; DROP"}, {"unknown_doc": "2026-10-01", **OFFER}])

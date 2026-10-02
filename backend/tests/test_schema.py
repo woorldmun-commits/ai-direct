@@ -43,13 +43,24 @@ def one(conn, sql, *params):
     return conn.execute(sql, params).fetchone()[0]
 
 
+def new_workspace(conn, name="w", *, user=None, kind="business") -> int:
+    """Workspace в своей организации; её owner — user (или новый пользователь): без owner организации не бывает."""
+    with conn.transaction():
+        if user is None:
+            user = one(conn, "INSERT INTO users (email) VALUES (%s) RETURNING id", f"owner{next(_seq)}@example.test")
+        org = one(conn, "INSERT INTO organizations (name, kind) VALUES (%s, %s) RETURNING id", name, kind)
+        conn.execute("INSERT INTO organization_memberships (user_id, organization_id, org_role) VALUES (%s, %s, 'owner')",
+                     (user, org))
+        return one(conn, "INSERT INTO workspaces (organization_id, name) VALUES (%s, %s) RETURNING id", org, name)
+
+
 @pytest.fixture
 def chain(rw):
     """Полная доказательная цепочка до рекомендации. Возвращает словарь ID."""
     n = next(_seq)
     ids = {}
     ids["user"] = one(rw, "INSERT INTO users (email) VALUES (%s) RETURNING id", f"u{n}@example.test")
-    ids["ws"] = one(rw, "INSERT INTO workspaces (name) VALUES ('w') RETURNING id")
+    ids["ws"] = new_workspace(rw, user=ids["user"])  # пользователь цепочки — owner организации workspace
     conn_id = connected(rw, "direct", ids["ws"], f"login{n}")
     ids["account"] = one(rw, "INSERT INTO direct_accounts (direct_connection_id, is_selected) VALUES (%s, true) RETURNING id", conn_id)
     ids["release"] = one(rw, "INSERT INTO releases (commit_sha, build_id) VALUES (%s, %s) RETURNING id", "a" * 40, f"b{n}")

@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 import psycopg
 import pytest
 
+from app.tenancy import workspace_scope
 from app.worker.retention import purge_personal_data, purge_search_queries, retention_cutoff
 from test_schema import chain, key, one  # noqa: F401 — chain: фикстура
 
@@ -92,7 +93,7 @@ def test_text_seen_again_by_running_sync_is_kept_and_purge_does_not_wait(rw, db,
     её и не падает — остальное удаляет."""
     seen_again = query_seen(rw, chain, "снова встретился", 90)
     gone = query_seen(rw, chain, "давно не встречался", 90)
-    with db("app_rw") as sync:
+    with db("app_rw") as sync, workspace_scope(sync, chain["ws"]):  # воркер синхронизации — в своём workspace
         sync.autocommit = False
         sync.execute("INSERT INTO search_query_sightings (query_id, seen_on) VALUES (%s, %s)", (seen_again, TODAY))
         deleter.execute("SET lock_timeout = '2s'")

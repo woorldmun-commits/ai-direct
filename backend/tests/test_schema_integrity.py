@@ -4,13 +4,13 @@
 import psycopg
 import pytest
 
-from test_schema import connected, chain, key, one  # noqa: F401 — chain: фикстура
+from test_schema import connected, chain, key, new_workspace, one  # noqa: F401 — chain: фикстура
 
 
 @pytest.fixture
 def other(rw, chain):
     """Чужой workspace со своим подключением Директа и аккаунтом."""
-    ws = one(rw, "INSERT INTO workspaces (name) VALUES ('other') RETURNING id")
+    ws = new_workspace(rw, "other")
     conn = connected(rw, "direct", ws, f"other{ws}")
     account = one(rw, "INSERT INTO direct_accounts (direct_connection_id) VALUES (%s) RETURNING id", conn)
     return {"ws": ws, "account": account}

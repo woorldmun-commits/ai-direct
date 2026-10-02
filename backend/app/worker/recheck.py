@@ -10,6 +10,7 @@ from datetime import datetime
 import psycopg
 
 from app.sources.direct import AccountUnavailable, ConnectionUnavailable, DirectSource, RetryLater
+from app.tenancy import task_workspace, workspace_scope
 from app.worker.guard import Skip, Task, guard, load_state
 from app.worker.health import direct_failure, direct_success
 from app.worker.locks import workspace_shared
@@ -37,6 +38,15 @@ def _record(conn: psycopg.Connection, ws: int, account: int, now: datetime, erro
 def run_recheck(conn: psycopg.Connection, direct_account_id: int, *, direct: DirectSource,
                 now: datetime) -> Available | Skipped | Failed | RetryAt:
     assert conn.autocommit, "воркер требует соединение с autocommit=True"
+    workspace_id = task_workspace(conn, "direct_account", direct_account_id)
+    if workspace_id is None:
+        return Skipped("account_not_found")
+    with workspace_scope(conn, workspace_id):  # RLS: задача видит только свой workspace
+        return _run_recheck(conn, direct_account_id, direct=direct, now=now)
+
+
+def _run_recheck(conn: psycopg.Connection, direct_account_id: int, *, direct: DirectSource,
+                 now: datetime) -> Available | Skipped | Failed | RetryAt:
     row = conn.execute("""SELECT c.workspace_id, coalesce(a.client_login, c.yandex_login)
                           FROM direct_accounts a JOIN direct_connections c ON c.id = a.direct_connection_id
                           WHERE a.id = %s""", (direct_account_id,)).fetchone()

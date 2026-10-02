@@ -95,7 +95,7 @@ def test_crash_after_send_before_mark_is_redelivered_idempotently(rw, chain):
 def test_two_workers_never_take_the_same_event(rw, chain, db):
     eids = {event(rw, chain) for _ in range(5)}
     t = now()
-    with db("app_rw") as other:
+    with db("app_system") as other:  # доставка outbox — системная задача по всем workspace
         first = {e.id for e in _claim(rw, t, 10000)}
         second = {e.id for e in _claim(other, t, 10000)}
     assert eids <= first and not (eids & second)

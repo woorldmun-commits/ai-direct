@@ -15,6 +15,7 @@ from app.sources.direct import DirectSource, RetryLater
 from app.sources.metrika import MetrikaSource
 from app.sync.snapshot import Snapshot, SyncFailure, sync_account, sync_metrika, with_metrika
 from app.sync.store import SyncRunStateError, record_failure, write_snapshot
+from app.tenancy import task_workspace, workspace_scope
 from app.worker.guard import Skip, Task, guard, load_state
 from app.worker.health import direct_failure, direct_success, metrika_result
 from app.worker.locks import workspace_shared
@@ -134,6 +135,16 @@ def run_sync(conn: psycopg.Connection, sync_run_id: int, *, direct: DirectSource
              release_id: int, period_to: date, now: datetime) -> Outcome:
     # без autocommit первый SELECT открыл бы транзакцию, и запрос к API шёл бы внутри неё — вместе с блокировкой
     assert conn.autocommit, "run_sync требует соединение с autocommit=True"
+    workspace_id = task_workspace(conn, "sync_run", sync_run_id)
+    if workspace_id is None:
+        return Skipped("sync_run_not_found")  # удалён вместе с workspace
+    with workspace_scope(conn, workspace_id):  # RLS: задача видит только свой workspace
+        return _run_sync(conn, sync_run_id, direct=direct, metrika=metrika, release_id=release_id,
+                         period_to=period_to, now=now)
+
+
+def _run_sync(conn: psycopg.Connection, sync_run_id: int, *, direct: DirectSource, metrika: MetrikaSource | None,
+              release_id: int, period_to: date, now: datetime) -> Outcome:
     run = _load_run(conn, sync_run_id)
     if run is None:
         return Skipped("sync_run_not_found")  # удалён вместе с workspace
