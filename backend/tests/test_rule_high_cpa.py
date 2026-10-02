@@ -59,6 +59,7 @@ def test_target_high_cpa_exact_contract():
     assert dict(f.action) == {"type": "decrease_bid", "change_pct": -15}
     assert f.lost.amount == Decimal("18000.00") and f.lost.calculation_type == "estimated" and f.lost.formula
     assert f.lost.source == "yandex_direct+yandex_metrika+user_input"
+    assert f.recoverable == f.lost  # target-режим: действие с шагом ставки, прогноз = lost
     assert f.current_data_quality == "medium"  # 8 конверсий в периоде
     assert set(f.evidence) == {"cost", "conversions", "cpa", "target_cpa"}
     assert f.evidence["target_cpa"].source == "user_input"
@@ -124,6 +125,8 @@ def test_baseline_high_cpa_exact_contract():
     assert (f.actual, f.reference, f.delta_pct) == (Decimal("5250.00"), Decimal("3840.00"), Decimal("36.7"))
     assert dict(f.action) == {"type": "investigate_cpa_growth", "suggest": "set_target_cpa"}
     assert f.lost.amount == Decimal("11280.00") and f.lost.source == "yandex_direct+yandex_metrika"
+    # «Проверить»: прогноза эффекта нет — «Можно сэкономить» недоступно, а не копия lost (ARCHITECTURE §4)
+    assert (f.recoverable.amount, f.recoverable.calculation_type) == (None, "unavailable")
     assert dict(f.evidence_meta) == {"baseline_data_quality": "high"}
     assert set(f.evidence) == {"cost", "conversions", "cpa", "baseline_cost", "baseline_conversions", "baseline_cpa"}
     b = f.evidence["baseline_cpa"]

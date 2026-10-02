@@ -112,7 +112,9 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings,
         rule_version=rule.rule_version, issue_type=rule.family, object_type="campaign", object_id=campaign_id,
         issue_key=issue_key(snap.workspace_id, snap.direct_account_id, rule.family, "campaign", campaign_id),
         reason_code=f"cpa_above_{mode}", metric="cpa", actual=cpa, reference=reference, reference_type=mode,
-        delta_pct=delta.quantize(Decimal("0.1"), ROUND_HALF_UP), lost=lost, recoverable=lost,
+        delta_pct=delta.quantize(Decimal("0.1"), ROUND_HALF_UP), lost=lost,
+        # «Проверить» (baseline) — обоснованной формулы прогноза нет: «Можно сэкономить» не копирует lost (ARCHITECTURE §4).
+        recoverable=lost if mode == "target" else Fact.unavailable("rub", source, evaluation),
         current_data_quality=_current_data_quality(conv, p),
         evidence=frozen(evidence), evidence_meta=frozen(meta), action=frozen(action),
         exposure_basis=FORMULA,  # (cpa − ориентир) × конверсии: на единицы расхода не раскладывается
