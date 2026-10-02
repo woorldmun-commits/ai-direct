@@ -9,10 +9,12 @@ import type { RecStatus } from "@/lib/demo";
 const TABS: { key: RecStatus | "all"; label: string }[] = [
   { key: "all", label: "Все" },
   { key: "new", label: "Новые" },
-  { key: "in_progress", label: "В работе" },
-  { key: "done", label: "Выполненные" },
+  { key: "viewed", label: "Просмотренные" },
+  { key: "accepted", label: "Приняты к выполнению" },
+  { key: "applied", label: "Выполнены вручную" },
+  { key: "measured", label: "Эффект измерен" },
   { key: "postponed", label: "Отложенные" },
-  { key: "rejected", label: "Отклонённые" },
+  { key: "rejected", label: "Не буду" },
 ];
 
 export default function Recommendations() {
@@ -22,7 +24,7 @@ export default function Recommendations() {
 
   return (
     <>
-      <PageHeader title="Рекомендации" sub="Каждое действие вы выполняете сами в Яндекс Директе, а здесь отмечаете решение." />
+      <PageHeader title="Рекомендации" sub="AdPilot не меняет кабинет. Вы принимаете решение, вносите изменение в Яндекс Директе вручную, а AdPilot сверяет его по данным Директа и измеряет эффект." />
       <div className="mb-4 flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Статус">
         {TABS.map((t) => {
           const n = t.key === "all" ? problems.length : problems.filter((p) => p.status === t.key).length;
@@ -40,7 +42,15 @@ export default function Recommendations() {
           ))}
         </div>
       ) : (
-        <StateBox kind="empty" title="Здесь пока пусто" text="Рекомендации появятся, когда вы примете по ним решение." />
+        <StateBox
+          kind="empty"
+          title="Здесь пока пусто"
+          text={
+            tab === "measured"
+              ? "Эффект измеряется через 7 дней после сверки ручного изменения. Прошлые замеры — в «Истории решений»."
+              : "Рекомендации появятся здесь, когда вы примете по ним решение."
+          }
+        />
       )}
     </>
   );

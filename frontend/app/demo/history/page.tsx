@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Hand, Lightbulb, Ruler, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Hand, Lightbulb, Ruler, ScanSearch, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { useDemo } from "@/components/app/store";
 import { Approx, PageHeader } from "@/components/ui";
@@ -11,6 +11,7 @@ const KIND: Record<HistoryKind, { icon: LucideIcon; tone: string; label: string 
   found: { icon: AlertTriangle, tone: "bg-danger-bg text-danger", label: "Проблема" },
   rec: { icon: Lightbulb, tone: "bg-info-bg text-info", label: "Рекомендация" },
   action: { icon: Hand, tone: "bg-brand-soft text-brand", label: "Ваше решение" },
+  verify: { icon: ScanSearch, tone: "bg-info-bg text-info", label: "Сверка с Директом" },
   measure: { icon: Ruler, tone: "bg-success-bg text-success", label: "Замер · сэкономлено" },
 };
 
@@ -24,7 +25,7 @@ export default function HistoryPage() {
 
   return (
     <>
-      <PageHeader title="История решений" sub="Проблема → рекомендация → ваше действие → замер → сэкономлено ≈ (расчётный эффект без контрольной группы).">
+      <PageHeader title="История решений" sub="Проблема → рекомендация → ваше решение → изменение вручную → сверка с Директом → замер ≈ (расчётный эффект без контрольной группы).">
         <div role="group" aria-label="Раздел истории" className="flex gap-2">
           <button className="chip" aria-pressed={tab === "decisions"} onClick={() => setTab("decisions")}>
             Решения

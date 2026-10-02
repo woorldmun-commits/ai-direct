@@ -1,57 +1,15 @@
 "use client";
 
-import { ArrowRight, Check, Clock, Database, X } from "lucide-react";
+import { ArrowRight, Database, X } from "lucide-react";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { Approx, PlatformIcon, PriorityBadge, PriorityIcon } from "@/components/ui";
-import { exposureTotal, PERIOD, STATUS_LABEL, type Problem, type RecStatus } from "@/lib/demo";
+import { exposureTotal, PERIOD, type Problem } from "@/lib/demo";
 import { EXPOSURE, EXPOSURE_SHORT, rub } from "@/lib/site";
+import { RecActions, StatusBadge } from "./rec-actions";
 import { useDemo } from "./store";
 
-const STATUS_STYLE: Record<RecStatus, string> = {
-  new: "bg-info-bg text-info",
-  in_progress: "bg-warning-bg text-warning",
-  done: "bg-success-bg text-success",
-  postponed: "bg-surface-2 text-muted",
-  rejected: "bg-surface-2 text-muted line-through",
-};
-
-export function StatusBadge({ status }: { status: RecStatus }) {
-  return <span className={`badge ${STATUS_STYLE[status]}`}>{STATUS_LABEL[status]}</span>;
-}
-
-/** Human decision buttons. The product never applies changes itself. */
-export function RecActions({ id, status, onDone, compact = false }: { id: string; status: RecStatus; onDone?: () => void; compact?: boolean }) {
-  const { setStatus } = useDemo();
-  const set = (s: RecStatus) => {
-    setStatus(id, s);
-    onDone?.();
-  };
-  if (status === "done" || status === "rejected") {
-    return (
-      <div className="flex items-center gap-3">
-        <StatusBadge status={status} />
-        <button className="text-xs font-semibold text-muted underline-offset-2 hover:underline" onClick={() => setStatus(id, "new")}>
-          Вернуть в новые
-        </button>
-      </div>
-    );
-  }
-  const sm = compact ? "btn-sm" : "";
-  return (
-    <div className="flex flex-wrap gap-2">
-      <button className={`btn btn-primary ${sm}`} onClick={() => set("done")}>
-        <Check size={16} /> Выполнено
-      </button>
-      <button className={`btn btn-secondary ${sm}`} onClick={() => set("postponed")} disabled={status === "postponed"}>
-        <Clock size={16} /> Отложить
-      </button>
-      <button className={`btn btn-ghost ${sm}`} onClick={() => set("rejected")}>
-        <X size={16} /> Отклонить
-      </button>
-    </div>
-  );
-}
+export { RecActions, StatusBadge };
 
 export function MetricCard({
   label,
