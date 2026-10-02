@@ -161,10 +161,10 @@ new ──▶ requires_decision ──▶ approved ──▶ applied
 | `check` | `requires_decision → applied` (`none`) | decide | только `inspect_only` |
 | `mark_done_manually` | `requires_decision → applied` (`manual`) | decide | `review` / `change` |
 | `approve` | `requires_decision → approved` | approve | `change`; данные полные; есть право записи в Директ |
-| `apply` | `approved → applied` / `failed` | apply | `approval_mode = two_step`; одобренная версия всё ещё последняя |
-| `approve_and_apply` | `requires_decision → approved → applied` / `failed` | approve **и** apply | `approval_mode = single_step` (SMB, «Применить»); условия `approve` |
+| `apply` | `approved → applied` / `failed` | execute | `approval_mode = two_step`; одобренная версия всё ещё последняя |
+| `approve_and_apply` | `requires_decision → approved → applied` / `failed` | approve **и** execute | `approval_mode = single_step` (SMB, «Применить»); условия `approve` |
 | `cancel` | `approved → cancelled` | approve | исполнение ещё не начато |
-| `rollback` | `rollback_status: not_requested → pending → …` | apply | `applied` через API, изменение технически откатываемо |
+| `rollback` | `rollback_status: not_requested → pending → …` | execute | `applied` через API, изменение технически откатываемо |
 
 `postponed` можно решить раньше даты: из `postponed` доступны те же действия, что из `requires_decision`.
 
@@ -414,7 +414,7 @@ workspace, полноты данных (`data_status`), права записи 
 - AI отвечает только по данным workspace: рекомендации, их доказательства, замеры, агрегаты аналитики за период.
   Каждое число ответа есть в цитируемых данных (та же проверка чисел, что у объяснений) — иначе ответ отбрасывается.
 - Данных нет → `data_sufficiency = insufficient` и прямой ответ «Недостаточно данных» с тем, что подключить.
-- Текст вопроса не хранится и не пишется в логи; в LLM уходят агрегаты без названий кампаний и текстов запросов.
+- Истории вопросов и ответов в кабинете нет: она не хранится как пользовательские данные, текст вопроса не пишется в обычные логи приложения. Хранятся только технические метаданные (время, экран, исход) — ARCHITECTURE.md §2.5. В LLM уходят агрегаты без названий кампаний и текстов запросов.
 - Лимит — по тарифу и `429 rate_limited`.
 
 ## 10. Организация, команда, роли
@@ -429,7 +429,7 @@ workspace, полноты данных (`data_status`), права записи 
 
 Агентство переключает клиентов сменой `{workspace_id}` в пути — скрытого «активного workspace» в сессии нет.
 
-| Роль | Смотреть | decide (`view`, `postpone`, `reject`, `check`, `mark_done_manually`) | approve (`approve`, `cancel`) | apply (`apply`, `rollback`) | Команда, интеграции, биллинг |
+| Роль | Смотреть | decide (`view`, `postpone`, `reject`, `check`, `mark_done_manually`) | approve (`approve`, `cancel`) | execute (`apply`, `rollback`) | Команда, интеграции, биллинг |
 |---|---|---|---|---|---|
 | `owner` | да | да | да | да | да |
 | `admin` | да | да | да | да | да (кроме удаления организации) |
@@ -437,8 +437,11 @@ workspace, полноты данных (`data_status`), права записи 
 | `analyst` | да | да | нет | да | нет |
 | `viewer` | да | только `view` | нет | нет | нет |
 
+**`approve` ≠ `execute`.** Роль без права approve не может создать одобрение; право execute позволяет исполнить или
+откатить только уже одобренную версию действия (analyst исполняет одобренное, но не одобряет).
+
 `approval_mode` workspace: `single_step` (по умолчанию для `kind = business`: одна кнопка «Применить» =
-`approve_and_apply`) или `two_step` (по умолчанию для `agency`: одобряет approve-роль, применяет apply-роль).
+`approve_and_apply`) или `two_step` (по умолчанию для `agency`: одобряет approve-роль, исполняет роль с правом execute).
 
 Команда: `GET/POST /organizations/{org}/invitations`, `PATCH/DELETE /organizations/{org}/members/{user}` — только
 `owner` / `admin`. Последнего `owner` удалить или понизить нельзя (`409 last_owner`).
