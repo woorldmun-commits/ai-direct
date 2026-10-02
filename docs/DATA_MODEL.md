@@ -264,7 +264,7 @@ PK (`user_id`, `workspace_id`), `ws_role`: `approver` (смотреть, decide;
  "calculation_type": "actual", "data_status": "partial", "data_sufficiency": "sufficient",
  "snapshot_id": 1847, "rule_version": null, "formula": null}
 ```
-`value_is_valid` проверяет: все ключи есть; перечисления допустимы; `insufficient ⇔ unavailable ⇔ amount = null`; `estimated ⇒ formula not null`; `period_from ≤ period_to`.
+`value_is_valid` проверяет: все ключи есть; перечисления допустимы; `insufficient ⇔ unavailable ⇔ amount = null`; `estimated ⇒ formula not null`; `period_from ≤ period_to`. Необязательный `unavailable_reason` (миграция 0004): код из закрытого списка (`source_missing` · `no_conversions` · `history_insufficient` · `volume_insufficient` · `no_forecast` · `no_data`), допустим только при `unavailable`; в модели и API обязателен для `unavailable`, строки до 0004 читаются как `no_data` (API_CONTRACT §2).
 
 ## 6. Дайджесты и уведомления
 
