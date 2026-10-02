@@ -43,6 +43,7 @@ flowchart LR
 ```
 
 **Три процесса одного кодбейза:** `api` (FastAPI), `worker` (arq), `web` (Next.js). Плюс PostgreSQL и Redis.
+Граница `web` ↔ `api` — [API_CONTRACT.md](API_CONTRACT.md): бизнес-сущности, а не таблицы БД.
 
 | Решение | Почему | Потом |
 |---|---|---|
