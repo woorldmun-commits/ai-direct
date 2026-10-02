@@ -16,7 +16,7 @@ from app.worker.audit import Audited, run_audit
 from app.worker.sync import Done, Skipped
 from test_direct_sync import TO, campaign_tsv, root  # noqa: F401 — root: фикстура
 from test_metrika_sync import METRIKA_RULE, metrika  # noqa: F401 — metrika: фикстура
-from test_schema import EVENT_AT, EXECUTED, connected, chain, one  # noqa: F401 — chain: фикстура
+from test_schema import EVENT_AT, EXECUTED, connected, chain, new_workspace, one  # noqa: F401 — chain: фикстура
 from test_snapshot_store import DATA_UNTIL
 from test_worker_sync import NOW, new_run, work, ws  # noqa: F401 — ws: фикстура
 
@@ -108,6 +108,26 @@ def test_two_accounts_same_cutoff_one_audit(rw, two):
     objects = sorted(r[0] for r in rw.execute("""SELECT i.object_id FROM findings f JOIN issues i ON i.id = f.issue_id
                                                  WHERE f.audit_run_id = %s""", (out.audit_run_id,)).fetchall())
     assert objects == [B_CAMPAIGN, 12345]  # по выводу на каждый аккаунт, проблемы — у своих аккаунтов
+
+
+def test_several_selected_accounts_of_one_connection_are_all_audited(rw, ws, db):
+    """D4: is_selected = «включён в анализ», выбранных кабинетов в одном подключении может быть несколько
+    (агентский доступ через Client-Login). Каждый синхронизируется своим sync_run и входит в аудит со своим снимком.
+    Воркеры работают прикладной ролью под RLS — в свой workspace входят сами."""
+    conn_id = one(rw, "SELECT direct_connection_id FROM direct_accounts WHERE id = %s", ws["account"])
+    client = f"client{ws['ws']}"
+    c = one(rw, """INSERT INTO direct_accounts (direct_connection_id, client_login, is_selected)
+                   VALUES (%s, %s, true) RETURNING id""", conn_id, client)
+    ws["root"](client, campaign=campaign_tsv(cid=B_CAMPAIGN))
+    runs = {a: one(rw, """INSERT INTO sync_runs (workspace_id, direct_account_id, metrika_counter_id, kind)
+                          VALUES (%s, %s, %s, 'scheduled') RETURNING id""", ws["ws"], a, ws["counter"])
+            for a in (ws["account"], c)}
+    with db("app_rw") as app:
+        snaps = {a: work(app, ws, run).snapshot_id for a, run in runs.items()}
+        out = audit(app, ws)
+    assert isinstance(out, Audited)
+    assert composition(rw, out.audit_run_id) == snaps and len(set(snaps.values())) == 2
+    assert open_issues(rw, ws, c) == 1  # вывод — у своего кабинета
 
 
 def test_different_cutoffs_are_not_mixed(rw, two):
@@ -246,7 +266,7 @@ def test_task_key_of_another_workspace_does_not_return_its_audit(rw, ws):
     sync(rw, ws)
     mine = audit(rw, ws, key="shared")
     assert isinstance(mine, Audited)
-    other = one(rw, "INSERT INTO workspaces (name) VALUES ('other') RETURNING id")
+    other = new_workspace(rw, "other")
     out = run_audit(rw, workspace_id=other, task_key=f"{ws['ws']}:shared", data_cutoff=CUTOFF,
                     release_id=ws["release"], now=NOW)
     assert out != mine

@@ -26,6 +26,7 @@ from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from app.auth.yandex_oauth import OAuthApp, ReauthorizationRequired, Tokens, refresh
+from app.tenancy import workspace_scope
 
 FORMAT = 1
 _HEADER = struct.Struct(">BH")  # формат, версия ключа
@@ -129,6 +130,12 @@ def fresh_access_token(conn: psycopg.Connection, http: httpx.Client, app: OAuthA
     invalid_grant → статус token_expired (нужно переподключить), шифротекст остаётся; удаление токена — отдельное
     явное действие (drop_connection_token)."""
     assert conn.autocommit, "блокировка сессионная, HTTP вне транзакции: нужен autocommit"
+    with workspace_scope(conn, ref.workspace_id):  # RLS: срок и статус подключения — только своего workspace
+        return _fresh_access_token(conn, http, app, keys, ref, now)
+
+
+def _fresh_access_token(conn: psycopg.Connection, http: httpx.Client, app: OAuthApp, keys: KeyProvider,
+                        ref: ConnectionRef, now: datetime) -> str:
     lock = (f"token:{ref.kind}:{ref.connection_id}",)  # тот же ключ берёт drop_connection_token (schema.sql)
     conn.execute("SELECT pg_advisory_lock(hashtextextended(%s, 0))", lock)
     try:

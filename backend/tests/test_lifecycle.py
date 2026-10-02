@@ -78,13 +78,20 @@ def current_status(rw, rec):
 
 
 def test_workspace_lifecycle(db):
+    # Прикладная роль под RLS: весь путь идёт внутри своей организации и своего workspace, как в API и воркерах.
     rw = db("app_rw")
 
-    # --- signup ---
+    # --- signup: пользователь → организация (он owner) → workspace в ней ---
     user = one(rw, "INSERT INTO users (email) VALUES ('owner@example.test') RETURNING id")
     rw.execute("INSERT INTO yandex_identities (user_id, yandex_uid, login) VALUES (%s, 'uid-lc', 'owner')", (user,))
-    ws = one(rw, "INSERT INTO workspaces (name) VALUES ('ООО Ромашка') RETURNING id")
-    rw.execute("INSERT INTO memberships (user_id, workspace_id) VALUES (%s, %s)", (user, ws))
+    with rw.transaction():  # организация без owner не фиксируется (отложенная проверка на COMMIT)
+        org = one(rw, "INSERT INTO organizations (name, kind) VALUES ('ООО Ромашка', 'business') RETURNING id")
+        rw.execute("INSERT INTO organization_memberships (user_id, organization_id, org_role) VALUES (%s, %s, 'owner')",
+                   (user, org))
+        rw.execute("SELECT set_config('app.organization_id', %s, false)", (str(org),))
+        ws = one(rw, "INSERT INTO workspaces (organization_id, name) VALUES (%s, 'ООО Ромашка') RETURNING id", org)
+    assert one(rw, "SELECT workspace_role(%s, %s)", user, ws) == "owner"
+    rw.execute("SELECT set_config('app.workspace_id', %s, false)", (str(ws),))  # как app.tenancy.workspace_scope
     rw.execute("INSERT INTO workspace_settings (workspace_id, target_cpa) VALUES (%s, 3000)", (ws,))
     rw.execute("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (%s, %s, now() + interval '30 days')",
                (hashlib.sha256(b"cookie").digest(), user))
@@ -202,6 +209,9 @@ def test_workspace_lifecycle(db):
         counts = one(dl, "SELECT delete_workspace_data(%s)", ws)
 
     assert counts["snapshots"] == 3 and counts["recommendations"] == 1 and counts["users"] == 1
+    assert counts["organizations"] == 1  # последний workspace организации уносит организацию
+    rw.close()
+    rw = db("app_system")  # проверка «ничего не осталось» — по всем строкам, без фильтра RLS
     assert counts["digests"] == 1 and counts["notifications"] == 1 and counts["search_query_texts"] == 1
     assert counts["payments_anonymized"] == 1
     # проверка: по workspace не осталось ничего, кроме обезличенного платежа и отметки бесплатного аудита
@@ -210,6 +220,7 @@ def test_workspace_lifecycle(db):
                            "direct_connections", "metrika_connections", "sync_runs", "digests", "notifications")}
     assert leftovers == {t: 0 for t in leftovers}
     assert one(rw, "SELECT count(*) FROM workspaces WHERE id = %s", ws) == 0
+    assert one(rw, "SELECT count(*) FROM organizations WHERE id = %s", org) == 0
     assert one(rw, "SELECT count(*) FROM users WHERE id = %s", user) == 0
     assert one(rw, "SELECT subscription_id FROM payments WHERE provider_payment_id = 'pay-lc-1'") is None
     assert one(rw, "SELECT count(*) FROM free_audit_claims WHERE direct_account_hash = %s", claim) == 1

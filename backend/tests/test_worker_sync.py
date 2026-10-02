@@ -10,6 +10,7 @@ from app.rules import RULES
 from app.rules.domain import AuditSettings, Finding, run
 from app.sources.direct import DirectFixture, RetryLater
 from app.sync.store import load_view
+from app.tenancy import set_local_workspace
 from app.worker.guard import RULES as GUARD_RULES
 from app.worker.guard import Allow, Skip, State, Task, guard, load_state
 from app.worker.locks import workspace_exclusive, workspace_shared
@@ -169,7 +170,8 @@ def test_deletion_started_during_fetch_blocks_the_write(rw, ws, db):
     """Отчёт уже скачан, но пока он шёл, workspace перевели в удаление: под блокировкой guard видит это —
     снимок не пишется."""
     def start_deletion():
-        with db("app_rw") as other, other.transaction():
+        with db("app_rw") as other, other.transaction():  # запрос API пользователя: вход в свой workspace
+            set_local_workspace(other, ws["ws"])
             workspace_exclusive(other, ws["ws"])
             other.execute("UPDATE workspaces SET status = 'deletion_pending', deactivated_at = now() WHERE id = %s",
                           (ws["ws"],))

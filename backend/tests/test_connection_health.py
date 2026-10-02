@@ -11,7 +11,7 @@ from app.worker.recheck import Available, run_recheck
 from app.worker.sync import MAX_REPORT_WAIT, Done, Failed, RetryAt, Skipped, run_sync
 from test_direct_sync import TO, campaign_tsv, root  # noqa: F401 — root: фикстура
 from test_metrika_sync import metrika  # noqa: F401 — metrika: фикстура
-from test_schema import chain, one  # noqa: F401 — chain: фикстура
+from test_schema import chain, new_workspace, one  # noqa: F401 — chain: фикстура
 from test_worker_sync import NOW, Spy, new_run, run_status, work, ws  # noqa: F401 — ws: фикстура
 
 LATER = NOW + timedelta(hours=1)
@@ -174,7 +174,7 @@ def test_without_active_the_latest_ended_is_reported(rw, ws):
     subscription(rw, ws, "expired", -30)
     s = load_state(rw, ws["ws"], ws["account"], NOW)
     assert (s.subscription_status, s.subscription_period_end, s.paid) == ("expired", NOW + timedelta(10), False)
-    never_paid = one(rw, "INSERT INTO workspaces (name) VALUES ('new') RETURNING id")
+    never_paid = new_workspace(rw, "new")
     assert load_state(rw, never_paid, None, NOW).subscription_status is None
 
 

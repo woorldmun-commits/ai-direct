@@ -16,6 +16,7 @@ from app.audit.measurement import METHODS, measure_cpa
 from app.audit.values import to_value
 from app.rules.domain import Window
 from app.sync.store import load_view
+from app.tenancy import task_workspace, workspace_scope
 from app.worker.guard import Skip, Task, guard, load_state
 from app.worker.locks import workspace_shared
 from app.worker.outbox import emit
@@ -142,6 +143,15 @@ def _skip(conn: psycopg.Connection, m: _M, d: Skip) -> Measured | Skipped:
 def run_measurement(conn: psycopg.Connection, measurement_id: int, *, release_id: int,
                     now: datetime) -> Measured | Pending | Skipped:
     assert conn.autocommit, "воркер требует соединение с autocommit=True"
+    workspace_id = task_workspace(conn, "measurement", measurement_id)
+    if workspace_id is None:
+        return Skipped("measurement_not_found")
+    with workspace_scope(conn, workspace_id):  # RLS: задача видит только свой workspace
+        return _run_measurement(conn, measurement_id, release_id=release_id, now=now)
+
+
+def _run_measurement(conn: psycopg.Connection, measurement_id: int, *, release_id: int,
+                     now: datetime) -> Measured | Pending | Skipped:
     m = _load(conn, measurement_id)
     if m is None:
         return Skipped("measurement_not_found")
@@ -174,7 +184,8 @@ def run_measurement(conn: psycopg.Connection, measurement_id: int, *, release_id
 
 
 def due_measurements(conn: psycopg.Connection, today: date) -> list[int]:
-    """Замеры, у которых закрылось окно и ещё нет результата или пропуска — для планировщика."""
+    """Замеры, у которых закрылось окно и ещё нет результата или пропуска — для планировщика. Выборка по всем
+    workspace — системная задача (роль app_system); сам замер — run_measurement в своём workspace."""
     return [r[0] for r in conn.execute("""
         SELECT m.id FROM measurements m
         WHERE m.after_to < %s

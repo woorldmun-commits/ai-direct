@@ -76,7 +76,14 @@ def write_snapshot(conn: psycopg.Connection, *, sync_run_id: int, workspace_id: 
                 if r.query is not None:
                     last_seen[r.query] = max(r.date, last_seen.get(r.query, r.date))
             query_ids = _store_queries(conn, workspace_id, last_seen)
-            with conn.cursor().copy("""COPY stat_rows (snapshot_id, source, level, object_id, campaign_id, date,
+            # COPY прямо в таблицу под RLS PostgreSQL не умеет: быстрый COPY во временную таблицу транзакции,
+            # затем INSERT … SELECT — он проходит политику RLS (строки только своего снимка) и триггеры stat_rows.
+            conn.execute("DROP TABLE IF EXISTS pg_temp.stat_rows_load")  # второй снимок в той же внешней транзакции
+            conn.execute("""CREATE TEMP TABLE stat_rows_load (
+                              snapshot_id bigint, source text, level text, object_id bigint, campaign_id bigint,
+                              date date, impressions bigint, clicks bigint, cost numeric(14, 2),
+                              conversions numeric(12, 2)) ON COMMIT DROP""")
+            with conn.cursor().copy("""COPY stat_rows_load (snapshot_id, source, level, object_id, campaign_id, date,
                                          impressions, clicks, cost, conversions) FROM STDIN""") as copy:
                 for r in snapshot.rows:
                     object_id = query_ids[r.query] if r.level == "query" else r.campaign_id
@@ -85,6 +92,8 @@ def write_snapshot(conn: psycopg.Connection, *, sync_run_id: int, workspace_id: 
                 for g in snapshot.goal_rows:  # цель сайта: вне кампаний, только достижения
                     copy.write_row((snapshot_id, "yandex_metrika", "site_goal", g.goal_id, None, g.date,
                                     0, 0, 0, g.conversions))
+            cols = "snapshot_id, source, level, object_id, campaign_id, date, impressions, clicks, cost, conversions"
+            conn.execute(f"INSERT INTO stat_rows ({cols}) SELECT {cols} FROM stat_rows_load")
             conn.execute("UPDATE snapshots SET status = 'complete', sealed_at = now() WHERE id = %s", (snapshot_id,))
             done = conn.execute("""UPDATE sync_runs SET status = 'succeeded', finished_at = now()
                                    WHERE id = %s AND workspace_id = %s AND status IN ('running', 'waiting_report')""",

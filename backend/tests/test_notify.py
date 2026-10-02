@@ -14,8 +14,7 @@ NOW = datetime.now(timezone.utc) + timedelta(seconds=1)
 
 @pytest.fixture
 def ws(rw, chain):
-    """Оплаченный workspace, у владельца привязан Telegram."""
-    rw.execute("INSERT INTO memberships (user_id, workspace_id) VALUES (%s, %s)", (chain["user"], chain["ws"]))
+    """Оплаченный workspace, у владельца (owner организации — пользователь цепочки) привязан Telegram."""
     rw.execute("INSERT INTO telegram_links (user_id, chat_id) VALUES (%s, %s)", (chain["user"], 10_000 + chain["user"]))
     rw.execute("""INSERT INTO subscriptions (workspace_id, plan, status, price, current_period_start, current_period_end)
                   VALUES (%s, 'start', 'active', 4990, %s, %s)""", (chain["ws"], NOW - timedelta(10), NOW + timedelta(20)))
@@ -96,3 +95,28 @@ def test_outbox_event_is_delivered_whatever_the_decision(rw, ws):
     rows = rw.execute("SELECT delivered_at IS NOT NULL FROM outbox_events WHERE id = ANY(%s)", (ids,)).fetchall()
     assert rows == [(True,), (True,)]
     assert [n[2] for n in notifications(rw, ws)] == ["skipped"]
+
+
+# --- получатели по модели доступа D3 -------------------------------------------------------------
+
+def member(rw, ws, ws_role=None) -> int:
+    """Участник организации workspace (member) с Telegram; ws_role — ещё и участник самого workspace."""
+    usr = one(rw, "INSERT INTO users (email) VALUES (%s) RETURNING id", f"m{ws['ws']}-{ws_role}@example.test")
+    org = one(rw, "SELECT organization_id FROM workspaces WHERE id = %s", ws["ws"])
+    rw.execute("INSERT INTO organization_memberships (user_id, organization_id, org_role) VALUES (%s, %s, 'member')",
+               (usr, org))
+    if ws_role:
+        rw.execute("INSERT INTO workspace_memberships (user_id, workspace_id, ws_role) VALUES (%s, %s, %s)",
+                   (usr, ws["ws"], ws_role))
+    rw.execute("INSERT INTO telegram_links (user_id, chat_id) VALUES (%s, %s)", (usr, 20_000 + usr))
+    return usr
+
+
+@pytest.mark.parametrize("ws_role, status", [("viewer", "queued"),   # участник workspace — получатель
+                                             (None, "skipped")])     # member без доступа к workspace — нет
+def test_recipients_are_users_with_access_to_workspace(rw, ws, ws_role, status):
+    rw.execute("DELETE FROM telegram_links WHERE user_id = %s", (ws["user"],))  # у owner Telegram нет
+    member(rw, ws, ws_role)
+    Notifier(rw, NOW).publish(event(rw, ws))
+    [(_, _, got, payload)] = notifications(rw, ws)
+    assert got == status and payload.get("skip_reason") == (None if ws_role else "no_recipient")

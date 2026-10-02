@@ -5,6 +5,9 @@
 (guard NOTIFY, нет получателя), либо ничего, если событие сообщений не порождает. Любое из этих решений —
 успешная доставка события в этот слой: outbox отмечает его доставленным, но не удаляет.
 
+Доставка outbox — системная задача по многим workspace: соединение роли app_system (RLS не фильтрует по workspace,
+schema.sql «Изоляция арендаторов»).
+
 Идемпотентность — dedup_key = kind:workspace:object:день события (по часовому поясу данных): повторная доставка
 того же события (at-least-once) и повторный запуск не создают второе сообщение."""
 
@@ -48,10 +51,11 @@ class Notifier:
     def _skip_reason(self, workspace_id: int) -> str | None:
         if isinstance(d := guard(Task.NOTIFY, load_state(self.conn, workspace_id, None, self.now)), Skip):
             return d.reason
-        has_recipient = self.conn.execute("""SELECT 1 FROM memberships m
-                                             JOIN users u ON u.id = m.user_id AND u.status = 'active'
-                                             JOIN telegram_links t ON t.user_id = m.user_id
-                                             WHERE m.workspace_id = %s LIMIT 1""", (workspace_id,)).fetchone()
+        # Получатели — все, у кого есть доступ к workspace (owner/admin организации и участники workspace):
+        # та же точка проверки, что и для входа в workspace. Деактивированных представление не возвращает.
+        has_recipient = self.conn.execute("""SELECT 1 FROM effective_workspace_access a
+                                             JOIN telegram_links t ON t.user_id = a.user_id
+                                             WHERE a.workspace_id = %s LIMIT 1""", (workspace_id,)).fetchone()
         return None if has_recipient else "no_recipient"
 
 
