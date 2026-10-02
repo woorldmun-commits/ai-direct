@@ -5,6 +5,7 @@ guard ещё раз → запись снимка. Бизнес-логики з�
 Исходы: Done · Skipped (состояние не позволяет) · Failed (ошибка API/формата) · RetryAt (retryIn или временная
 ошибка API: вернуть в очередь на N секунд, не спать в процессе)."""
 
+import os
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
@@ -23,6 +24,17 @@ from app.worker.locks import workspace_shared
 
 # ponytail: предел ожидания офлайн-отчёта Директа от первого запроса; уточнить по реальным retryIn.
 MAX_REPORT_WAIT = timedelta(hours=3)
+
+# Отчёт площадок РСЯ (PLACEMENT_REPORT) — третий отчёт синхронизации, вход правила zero_conv_placements@1.
+# По умолчанию ВЫКЛЮЧЕН: поля и фильтр CUSTOM_REPORT помечены «проверить» (app/sources/direct.py) — включать
+# DIRECT_PLACEMENTS_REPORT=1 после проверки на песочнице Директа. Выключен — снимок без площадок, правило молчит
+# (нет расхода в сетях — нечего проверять), остальные правила не меняются. Читается на каждый запуск.
+PLACEMENTS_REPORT_ENV = "DIRECT_PLACEMENTS_REPORT"
+
+
+def placements_report_enabled() -> bool:
+    """Только явное «1» включает отчёт: опечатка или пустое значение не включают непроверенный запрос."""
+    return os.environ.get(PLACEMENTS_REPORT_ENV, "").strip() == "1"
 
 
 @dataclass(frozen=True)
@@ -125,7 +137,7 @@ def _retry(conn: psycopg.Connection, run: _Run, e: RetryLater, now: datetime) ->
 
 def _fetch(run: _Run, direct: DirectSource, metrika: MetrikaSource | None,
            period_to: date) -> Snapshot | SyncFailure:
-    snap = sync_account(direct, run.login, run.definition, period_to)
+    snap = sync_account(direct, run.login, run.definition, period_to, placements=placements_report_enabled())
     if isinstance(snap, Snapshot) and run.definition is not None and metrika is not None:
         snap = with_metrika(snap, sync_metrika(metrika, run.definition, snap.period_from, snap.period_to))
     return snap

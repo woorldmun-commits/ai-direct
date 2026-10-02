@@ -8,6 +8,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 import httpx
+import psycopg
 import pytest
 
 from app.sources.direct import (CAMPAIGN_REPORT, PLACEMENT_REPORT, QUERY_REPORT, DirectApi, DirectFixture,
@@ -15,6 +16,7 @@ from app.sources.direct import (CAMPAIGN_REPORT, PLACEMENT_REPORT, QUERY_REPORT,
 from app.sync.parse import FormatError, PlacementRow, ReportFormatError, StatRow, parse_report, placement_id
 from app.sync.sanitize import MASK, sanitize_placement
 from app.sync.snapshot import Snapshot, SyncFailure, sync_account, to_view
+from app.sync import store
 from app.sync.store import load_view, write_snapshot
 from test_direct_sync import CID, CONV, GOALS, TO, campaign_tsv, query_tsv, root  # noqa: F401 — root: фикстура
 from test_schema import chain, one  # noqa: F401 — chain: фикстура
@@ -238,8 +240,72 @@ def test_write_and_load_placements(rw, chain, root):
     assert stored == [(placement_id("dzen.ru"), CID, 9, Decimal("90.00")),
                       (placement_id("avito.ru"), CID, 40, Decimal("1200.00"))]
     loaded = load_view(rw, snapshot_id)
-    expected = to_view(snap, snapshot_id, chain["ws"], chain["account"])
-    # из БД имён нет (справочник имён площадок — отдельный DDL), остальное совпадает
-    assert loaded == dataclasses.replace(
-        expected, placement_days=tuple(dataclasses.replace(d, placement=None) for d in expected.placement_days))
+    # имена — из справочника placement_names: снимок из БД = снимок из памяти, включая имена
+    assert loaded == to_view(snap, snapshot_id, chain["ws"], chain["account"])
     assert loaded.partial_from == snap.partial_from
+    names = dict(rw.execute("SELECT id, name FROM placement_names WHERE id = ANY(%s)",
+                            ([placement_id("avito.ru"), placement_id("dzen.ru")],)).fetchall())
+    assert names == {placement_id("avito.ru"): "avito.ru", placement_id("dzen.ru"): "dzen.ru"}
+
+
+def test_masked_placement_is_not_named_and_stays_masked_after_load(rw, chain, root):
+    """Безымянная площадка (MASK) в справочник не пишется; из БД она читается как MASK, а не как «имя неизвестно»:
+    правило не предложит исключить площадку, которую нельзя найти в Директе."""
+    write_placements(root, "acc", placement_tsv((("evil@x.ru", "40", "1200.00", ("0", "0")),
+                                                 ("avito.ru", "9", "90.00", ("0", "0")))))
+    snap = sync_account(DirectFixture(root.path), "acc", GOALS, TO, placements=True)
+    snapshot_id = write_snapshot(rw, sync_run_id=sync_run(rw, chain), workspace_id=chain["ws"],
+                                 release_id=chain["release"], snapshot=snap, data_until=DATA_UNTIL)
+    assert rw.execute("SELECT count(*) FROM placement_names WHERE id = %s", (placement_id(MASK),)).fetchone()[0] == 0
+    loaded = load_view(rw, snapshot_id)
+    assert {d.placement for d in loaded.placement_days} == {MASK, "avito.ru"}
+    assert loaded == to_view(snap, snapshot_id, chain["ws"], chain["account"])
+
+
+def test_unknown_name_is_none_and_names_are_shared_across_snapshots(rw, chain, root, monkeypatch):
+    """Имя по id одно на все снимки и workspace (повторная запись — не ошибка); строки без справочника — None."""
+    write_placements(root, "acc", placement_tsv((("avito.ru", "40", "1200.00", ("0", "0")),)))
+    snap = sync_account(DirectFixture(root.path), "acc", GOALS, TO, placements=True)
+    first = write_snapshot(rw, sync_run_id=sync_run(rw, chain), workspace_id=chain["ws"],
+                           release_id=chain["release"], snapshot=snap, data_until=DATA_UNTIL)
+    second = write_snapshot(rw, sync_run_id=sync_run(rw, chain), workspace_id=chain["ws"],
+                            release_id=chain["release"], snapshot=snap, data_until=DATA_UNTIL)
+    assert load_view(rw, first).placement_days == load_view(rw, second).placement_days
+    assert {d.placement for d in load_view(rw, first).placement_days} == {"avito.ru"}
+
+    monkeypatch.setattr(store, "_store_placement_names", lambda conn, rows: None)  # снимок без справочника
+    (root.path / "acc" / f"{PLACEMENT_REPORT.key}.tsv").write_text(
+        placement_tsv((("never-named.example", "40", "1200.00", ("0", "0")),)), encoding="utf-8")
+    snap = sync_account(DirectFixture(root.path), "acc", GOALS, TO, placements=True)
+    third = write_snapshot(rw, sync_run_id=sync_run(rw, chain), workspace_id=chain["ws"],
+                           release_id=chain["release"], snapshot=snap, data_until=DATA_UNTIL)
+    [day] = load_view(rw, third).placement_days
+    assert (day.placement_id, day.placement) == (placement_id("never-named.example"), None)
+
+
+@pytest.mark.parametrize("name", ["***", "Avito.ru", "bad name", "x.ru/?u=1", "12345", "", "a" * 254, "evil@x.ru"])
+def test_placement_names_check_mirrors_sanitize_allowlist(rw, name):
+    with pytest.raises(psycopg.errors.CheckViolation):
+        rw.execute("INSERT INTO placement_names (id, name) VALUES (%s, %s)", (placement_id(name), name))
+
+
+@pytest.mark.parametrize("name", ["avito.ru", "com.avito.android", "сайт.рф", "ёлка-1.рф", "my_app.game"])
+def test_placement_names_accepts_sanitized_names(rw, name):
+    assert sanitize_placement(name) == name
+    rw.execute("INSERT INTO placement_names (id, name) VALUES (%s, %s) ON CONFLICT (id) DO NOTHING",
+               (placement_id(name), name))
+
+
+@pytest.mark.parametrize("sql", ["UPDATE placement_names SET name = 'other.ru'", "DELETE FROM placement_names"])
+def test_placement_names_are_append_only_for_app(db, rw, sql):
+    """app_rw: только SELECT и INSERT; UPDATE/DELETE запрещены правами (и триггером — даже владельцу)."""
+    rw.execute("INSERT INTO placement_names (id, name) VALUES (%s, 'append.ru') ON CONFLICT (id) DO NOTHING",
+               (placement_id("append.ru"),))
+    with db("app_rw") as app:
+        with pytest.raises(psycopg.errors.InsufficientPrivilege, match="permission denied"):
+            app.execute(sql + " WHERE id = %s", (placement_id("append.ru"),))
+        assert app.execute("SELECT name FROM placement_names WHERE id = %s",
+                           (placement_id("append.ru"),)).fetchone() == ("append.ru",)
+    with db("app_migrator") as owner:
+        with pytest.raises(psycopg.errors.InsufficientPrivilege, match="append-only"):
+            owner.execute(sql + " WHERE id = %s", (placement_id("append.ru"),))
