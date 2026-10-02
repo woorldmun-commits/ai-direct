@@ -78,5 +78,9 @@ def test_security_definer_functions_have_fixed_search_path(rw):
                                           "drop_connection_token", "connection_token", "purge_personal_data",
                                           # доступ и изоляция (D3, D13, D16)
                                           "workspace_role", "user_workspaces", "task_workspace",
-                                          "check_organization_has_owner", "check_mandate"}
+                                          "check_organization_has_owner", "check_mandate",
+                                          # управление организацией и командой (D3)
+                                          "require_org_manager", "create_organization", "create_workspace",
+                                          "set_organization_member", "remove_organization_member",
+                                          "set_workspace_member", "remove_workspace_member"}
     assert all(cfg and any(c.startswith("search_path=") for c in cfg) for _, cfg in rows)

@@ -8,12 +8,14 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs
 
 import httpx
+import psycopg
 import pytest
 
 from app.auth.tokens import (ConnectionRef, EnvKeys, TokenDecryptError, decrypt, encrypt, fresh_access_token, load,
                              store)
 from app.auth.yandex_oauth import OAuthApp, ReauthorizationRequired, Tokens
-from test_schema import chain, connected, one  # noqa: F401 — фикстура
+from app.tenancy import workspace_scope
+from test_schema import chain, connected, new_workspace, one  # noqa: F401 — фикстура
 from test_tokens import token_role  # noqa: F401 — фикстура
 
 NOW = datetime(2026, 9, 30, 12, tzinfo=timezone.utc)
@@ -209,3 +211,17 @@ def test_disconnect_during_refresh_is_not_undone(rw, ref, db):
     t.join()
     assert rw.execute("SELECT status, has_token FROM direct_connections WHERE id = %s",
                       (ref.connection_id,)).fetchone() == ("disconnected", False)
+
+
+# --- RLS: токен под ролью воркера — только своего workspace (D13) ----------------------------------
+
+def test_fresh_token_under_worker_role_sees_only_own_workspace(rw, ref, token_role):
+    other = new_workspace(rw, "other-token")
+    expire_soon(rw, ref)
+    assert fresh(token_role, RotatingYandex(), ref) == "access-1"  # обновление пары под RLS: срок, статус, запись
+    assert one(token_role, "SELECT count(*) FROM direct_connections") == 0  # после задачи — ничего
+    with pytest.raises(psycopg.errors.NoDataFound):  # подключение не из этого workspace — нет токена
+        load(token_role, keys(), ConnectionRef("direct", other, ref.connection_id))
+    with workspace_scope(token_role, other):  # из контекста чужого workspace токен не читается вовсе
+        with pytest.raises(psycopg.errors.InsufficientPrivilege, match="not the current workspace"):
+            load(token_role, keys(), ref)

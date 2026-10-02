@@ -7,6 +7,7 @@
 
 import hashlib
 import ipaddress
+import re
 from datetime import datetime
 from functools import cache
 from pathlib import Path
@@ -15,6 +16,7 @@ import psycopg
 
 TEXTS = Path(__file__).parent / "texts"
 DEFAULT_LOCALE = "ru-RU"
+_LOCALE = re.compile(r"[a-z]{2}(-[A-Z]{2})?")  # как CHECK в legal_acceptances
 USER_AGENT_MAX = 256  # как CHECK в legal_acceptances
 
 # Документ → опубликованные версии (дата редакции). Новая версия = новый файл текста + строка здесь.
@@ -31,7 +33,15 @@ class UnknownDocument(ValueError):
     """Документа, версии или языка нет в реестре — принять то, чего пользователь не мог видеть, нельзя."""
 
 
+def normalize_locale(locale: str | None) -> str:
+    """Язык из запроса (Accept-Language и т. п.) — вход системы: не по формату — язык по умолчанию. Заодно не даёт
+    собрать из locale путь к файлу за пределами texts/."""
+    return locale if isinstance(locale, str) and _LOCALE.fullmatch(locale) else DEFAULT_LOCALE
+
+
 def text_path(document: str, version: str, locale: str = DEFAULT_LOCALE) -> Path:
+    if not (isinstance(locale, str) and _LOCALE.fullmatch(locale)):
+        raise UnknownDocument(f"{document}@{version} (locale)")
     if version not in VERSIONS.get(document, ()):
         raise UnknownDocument(f"{document}@{version}")
     path = TEXTS / document / f"{version}.{locale}.md"
@@ -55,7 +65,14 @@ def is_published(document: str, version: str, locale: str = DEFAULT_LOCALE) -> b
 
 
 def _ip(ip: str | None) -> str | None:
-    return None if ip is None else str(ipaddress.ip_address(ip))  # ValueError на мусоре — до записи в БД
+    """IP клиента — обстоятельство принятия, а не условие: мусор (в т.ч. цепочка X-Forwarded-For "a, b") не
+    валит принятие документа, а не записывается."""
+    if not isinstance(ip, str):
+        return None
+    try:
+        return str(ipaddress.ip_address(ip.strip()))
+    except ValueError:
+        return None
 
 
 def _user_agent(user_agent: str | None) -> str | None:
@@ -67,6 +84,7 @@ def record_acceptance(conn: psycopg.Connection, *, user_id: int, document: str, 
                       workspace_id: int | None = None) -> None:
     """Одна строка legal_acceptances (append-only). Хэш — из реестра; мандат агентства — только с workspace_id
     (и в своём workspace: RLS прикладной роли, право owner/admin агентства — триггер БД)."""
+    locale = normalize_locale(locale)
     if (document in WORKSPACE_DOCUMENTS) != (workspace_id is not None):
         raise ValueError(f"{document}: workspace_id {'обязателен' if workspace_id is None else 'не нужен'}")
     conn.execute("""INSERT INTO legal_acceptances (user_id, document, version, accepted_at, document_sha256, locale,

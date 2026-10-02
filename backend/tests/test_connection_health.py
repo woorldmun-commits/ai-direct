@@ -6,6 +6,7 @@ from datetime import timedelta
 import pytest
 
 from app.sources.direct import RetryLater
+from app.tenancy import workspace_scope
 from app.worker.guard import load_state
 from app.worker.recheck import Available, run_recheck
 from app.worker.sync import MAX_REPORT_WAIT, Done, Failed, RetryAt, Skipped, run_sync
@@ -203,3 +204,19 @@ def test_metrika_access_denied_does_not_resurrect_disconnected(rw, ws):
     rw.execute("SELECT drop_connection_token('metrika', %s, %s, 'disconnected')", (ws["ws"], mconn))
     metrika_result(rw, ws["counter"], "access_denied", NOW)
     assert metrika_connection(rw, ws)[0] == "disconnected"
+
+
+# --- RLS: recheck под прикладной ролью воркера (D13) -----------------------------------------------
+
+def test_recheck_runs_under_worker_role_only_in_own_workspace(db, rw, ws):
+    other = new_workspace(rw, "other-recheck")
+    deny(ws)
+    assert work(rw, ws, new_run(rw, ws)) == Failed("access_denied")
+    grant(ws)
+    with db("app_token") as worker:
+        with workspace_scope(worker, other):  # изнутри чужого workspace аккаунт не раскрывается
+            assert recheck(worker, ws) == Skipped("account_not_found")
+        assert account(rw, ws) == ("unavailable", "access_denied")
+        assert recheck(worker, ws) == Available()
+        assert one(worker, "SELECT count(*) FROM direct_accounts") == 0  # после задачи — ничего
+    assert account(rw, ws) == ("active", None)
