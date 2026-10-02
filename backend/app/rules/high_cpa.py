@@ -9,8 +9,8 @@ high_cpa_baseline@1 — target_cpa не задан → сравнение с bas
 from datetime import date
 from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
 
-from app.rules.domain import (DIRECT_CONVERSIONS, AuditSettings, CampaignDay, Fact, Finding, NotEnoughData, Output,
-                              Reason, Rule, SnapshotView, Window, frozen, issue_key, windows)
+from app.rules.domain import (DIRECT_CONVERSIONS, FORMULA, AuditSettings, CampaignDay, Fact, Finding, NotEnoughData,
+                              Output, Reason, Rule, SnapshotView, Window, frozen, issue_key, windows)
 
 FAMILY = "high_cpa"
 CPA_FORMULA = "period_total_spend / period_total_conversions"
@@ -115,6 +115,7 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings,
         delta_pct=delta.quantize(Decimal("0.1"), ROUND_HALF_UP), lost=lost, recoverable=lost,
         current_data_quality=_current_data_quality(conv, p),
         evidence=frozen(evidence), evidence_meta=frozen(meta), action=frozen(action),
+        exposure_basis=FORMULA,  # (cpa − ориентир) × конверсии: на единицы расхода не раскладывается
     )
 
 

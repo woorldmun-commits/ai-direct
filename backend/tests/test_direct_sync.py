@@ -123,8 +123,10 @@ def test_without_metrika_conversions_are_none_and_rules_are_not_computed(root):
     snap = sync_account(DirectFixture(root.path), "acc", None, TO)
     assert snap.sources == {"yandex_direct"} and snap.conversion_definition is None
     assert all(r.conversions is None for r in snap.rows)
+    # каждое из трёх правил v1.0 требует конверсий — каждое честно говорит «недостаточно данных», ни одно не молчит
     assert audit(snap, AuditSettings()) == (NotEnoughData("high_cpa_baseline@1", Reason.SOURCE_MISSING),
-                                            NotEnoughData("zero_conv_campaign@1", Reason.SOURCE_MISSING))
+                                            NotEnoughData("zero_conv_campaign@1", Reason.SOURCE_MISSING),
+                                            NotEnoughData("zero_conv_placements@1", Reason.SOURCE_MISSING))
 
 
 # --- Несколько аккаунтов и частичная доступность -------------------------------------------------

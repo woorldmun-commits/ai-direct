@@ -1,0 +1,91 @@
+{
+  "description": "Пороги включительные: площадка 1 — ровно 1 × CPA кампании (1500,00 ₽) и ровно 20 кликов — в выводе; площадка 2 — на копейку меньше, площадка 3 — 19 кликов — нет. Ожидаемая 1 конверсия → low → inspect_only.",
+  "tags": [
+    "boundary",
+    "problem"
+  ],
+  "settings": {},
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "partial_from": "2026-09-28",
+    "sources": [
+      "yandex_direct",
+      "direct_conversions"
+    ],
+    "campaigns": [
+      {
+        "id": 707,
+        "strategy": "manual",
+        "days": [
+          {
+            "date": "2026-09-10",
+            "cost": "30000.00",
+            "clicks": 1200,
+            "conversions": "20"
+          },
+          {
+            "date": "2026-09-25",
+            "cost": "30000.00",
+            "clicks": 1000,
+            "conversions": "20"
+          }
+        ]
+      }
+    ],
+    "placements": [
+      {
+        "campaign_id": 707,
+        "id": 1,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "1500.00",
+            "clicks": 20,
+            "conversions": "0"
+          }
+        ]
+      },
+      {
+        "campaign_id": 707,
+        "id": 2,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "1499.99",
+            "clicks": 200,
+            "conversions": "0"
+          }
+        ]
+      },
+      {
+        "campaign_id": 707,
+        "id": 3,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "9000.00",
+            "clicks": 19,
+            "conversions": "0"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": [
+    {
+      "rule_version": "zero_conv_placements@1",
+      "object_type": "campaign",
+      "object_id": 707,
+      "candidate_level": "review",
+      "action_level": "inspect_only",
+      "action": {
+        "type": "exclude_placements",
+        "execution": "manual",
+        "placement_ids": [
+          1
+        ]
+      },
+      "exposure": "1500.00"
+    }
+  ]
+}

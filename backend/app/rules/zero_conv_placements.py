@@ -9,7 +9,10 @@
 - Действие и так одно на кампанию: список исключённых площадок в Директе — параметр кампании (ExcludedSites).
 - Проблема живёт, пока в кампании есть такие площадки; состав списка меняется — issue_key тот же (кампания).
 Для объединения расхода без двойного учёта (audit/exposure.py) в evidence есть каждая площадка отдельно:
-placement_<id>_cost / _clicks за окно (кампания — object_id вывода, период — period факта).
+placement_<id>_cost / _clicks за окно, а основа суммы декларирована явно: exposure_basis = spend по строкам уровня
+placement с object_id из placement_ids внутри кампании вывода за окно lost.period.
+recoverable — своя формула, но это ВЕРХНЯЯ оценка: после исключения площадок Директ обычно перераспределяет бюджет
+на другие площадки, и экономия будет меньше (formula это говорит).
 
 Ориентир CPA: target_cpa, если задан (user_input), иначе CPA самой кампании за весь снимок (37 дней, все сети и
 поиск) — при не меньше reference_min_conversions конверсиях; иначе «недостаточно данных», а не выдуманный порог.
@@ -23,8 +26,9 @@ placement_<id>_cost / _clicks за окно (кампания — object_id вы
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 
-from app.rules.domain import (DIRECT_CONVERSIONS, AuditSettings, CampaignDay, Fact, Finding, NotEnoughData, Output,
-                              PlacementDay, Reason, Rule, SnapshotView, Window, frozen, issue_key, windows)
+from app.rules.domain import (DIRECT_CONVERSIONS, AuditSettings, CampaignDay, ExposureBasis, Fact, Finding,
+                              NotEnoughData, Output, PlacementDay, Reason, Rule, SnapshotView, Window, frozen, issue_key,
+                              windows)
 
 FAMILY = "zero_conv_placements"
 CENT = Decimal("0.01")
@@ -32,7 +36,8 @@ MASK = "***"  # sync/sanitize.py: имя площадки не прошло allo
 CPA_FORMULA = "campaign_total_spend / campaign_total_conversions"
 LOST_FORMULA = "sum(placement_cost) for placements with 0 conversions, cost >= reference_cpa * min_cost_cpa_share, " \
                "clicks >= min_clicks"
-RECOVERABLE_FORMULA = "sum(placement_cost) of excluded placements over the window, if budget is not reallocated"
+RECOVERABLE_FORMULA = ("upper bound: sum(placement_cost) of excluded placements over the window, "
+                       "assuming the budget is not reallocated to other placements")
 QUALITY_ORDER = ("low", "medium", "high")
 
 
@@ -146,6 +151,7 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings, 
         evidence=frozen(evidence), evidence_meta=frozen(meta),
         action=frozen({"type": "exclude_placements", "execution": "manual",
                        "placement_ids": tuple(f[0] for f in flagged)}),
+        exposure_basis=ExposureBasis("spend", "placement", tuple(sorted(f[0] for f in flagged))),
     )
 
 

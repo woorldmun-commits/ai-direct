@@ -1,0 +1,63 @@
+{
+  "description": "Целевой CPA 1000 ₽ — ориентир, хотя собственных конверсий у кампании мало; автостратегия (исключение площадок — не ставка и не бюджет). Ожидаемых конверсий 1200 / 1000 = 1,2 → low → политика понижает review до inspect_only. CPA в окне 833 ₽ ниже цели — высокого CPA нет.",
+  "tags": [
+    "problem",
+    "autostrategy"
+  ],
+  "settings": {
+    "target_cpa": "1000"
+  },
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "partial_from": "2026-09-28",
+    "sources": [
+      "yandex_direct",
+      "direct_conversions"
+    ],
+    "campaigns": [
+      {
+        "id": 303,
+        "strategy": "auto_cpa",
+        "days": [
+          {
+            "date": "2026-09-24",
+            "cost": "5000.00",
+            "clicks": 300,
+            "conversions": "6"
+          }
+        ]
+      }
+    ],
+    "placements": [
+      {
+        "campaign_id": 303,
+        "id": 1,
+        "days": [
+          {
+            "date": "2026-09-24",
+            "cost": "1200.00",
+            "clicks": 30,
+            "conversions": "0"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": [
+    {
+      "rule_version": "zero_conv_placements@1",
+      "object_type": "campaign",
+      "object_id": 303,
+      "candidate_level": "review",
+      "action_level": "inspect_only",
+      "action": {
+        "type": "exclude_placements",
+        "execution": "manual",
+        "placement_ids": [
+          1
+        ]
+      },
+      "exposure": "1200.00"
+    }
+  ]
+}

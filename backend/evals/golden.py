@@ -18,8 +18,14 @@
       "strategy": "manual",                               // необязательно, только для гейта: manual · auto_cpa · …
       "history_days": 37,                                 // необязательно: дни с нулями до period_to
       "days": [{"date": "2026-09-30", "cost": "42000", "clicks": 70, "conversions": "0"}]  // null — неизвестно
+    }],
+    "placements": [{                                      // необязательно: площадки сетей (zero_conv_placements)
+      "campaign_id": 101, "id": 7,                        // id — синтетический object_id площадки, не имя
+      "masked": true,                                     // необязательно: имя не прошло allowlist (sync/sanitize.py)
+      "days": [{"date": "2026-09-25", "cost": "3000", "clicks": 90, "conversions": "0"}]  // только дни с данными
     }]
   },
+  "exposure_total": "42000.00",                           // необязательно: ожидаемый итог exposure_total@1
   "expected": [{                                          // ровно эти выводы, не больше и не меньше
     "rule_version": "zero_conv_campaign@1", "object_type": "campaign", "object_id": 101,
     "candidate_level": "inspect_only", "action_level": "inspect_only",
@@ -33,7 +39,9 @@
   level_raised     — уровень действия выше ожидаемого;
   false_positive   — вывод, которого нет в ожидаемых (на «чистом» кейсе — любой вывод);
   invariant        — данные partial → уровень не выше review; не ручная стратегия → ставка/бюджет не на change;
-  not_enough_data  — ожидаемое «недостаточно данных» не выдано.
+  not_enough_data  — ожидаемое «недостаточно данных» не выдано;
+  exposure         — итог exposure_total@1 по выводам кейса (строки уровней campaign и placement из снимка) вне
+                     границ max(карточка) ≤ total ≤ Σ карточек (ECONOMICS §3.5) или не равен ожидаемому exposure_total.
 Намеренное изменение ожидаемого вывода — правка кейса в том же PR с объяснением."""
 
 import json
@@ -43,21 +51,24 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Callable
 
+from app.audit.exposure import ExposureFinding, StatUnit, exposure_total
 from app.audit.policy import LEVELS, decide
 from app.audit.values import to_value
 from app.rules import RULES
-from app.rules.domain import (BID_OR_BUDGET_ACTIONS, AuditSettings, CampaignDay, Finding, NotEnoughData, SnapshotView,
-                              run)
+from app.rules.domain import (BID_OR_BUDGET_ACTIONS, AuditSettings, CampaignDay, Finding, NotEnoughData, PlacementDay,
+                              SnapshotView, run)
+from app.rules.zero_conv_placements import MASK
 
 CASES_DIR = Path(__file__).parent / "cases"
 SNAPSHOT_ID, WORKSPACE_ID, ACCOUNT_ID = 1, 1, 1  # синтетические: на выводы влияют только через issue_key
 PARTIAL_DAYS = 3  # по умолчанию досчитываются последние 3 дня — как окно досчёта синхронизации
 MAX_LEVEL_WHEN_PARTIAL = "review"
 
-_CASE_KEYS = {"description", "tags", "settings", "snapshot", "expected", "expected_not_enough_data"}
+_CASE_KEYS = {"description", "tags", "settings", "snapshot", "expected", "expected_not_enough_data", "exposure_total"}
 _SNAPSHOT_KEYS = {"period_to", "history_days", "partial_from", "sources"}
 _CAMPAIGN_KEYS = {"id", "strategy", "history_days", "days"}
 _DAY_KEYS = {"date", "cost", "clicks", "conversions"}
+_PLACEMENT_KEYS = {"campaign_id", "id", "masked", "days"}
 _EXPECTED_KEYS = {"rule_version", "object_type", "object_id", "candidate_level", "action_level", "action", "exposure"}
 _NED_KEYS = {"rule_version", "reason", "object_type", "object_id"}
 TAGS = {"problem", "clean", "boundary", "partial", "autostrategy", "not_enough_data"}
@@ -87,9 +98,25 @@ def _campaign_days(period_to: date, campaigns: list[dict]) -> tuple[CampaignDay,
     return tuple(out)
 
 
-# Раздел снимка → (поле SnapshotView, построитель). Новое правило с новыми данными (площадки РСЯ и т. п.)
-# добавляет сюда свой раздел и ключ в _SNAPSHOT_KEYS.
-SECTIONS: dict[str, tuple[str, Callable]] = {"campaigns": ("campaign_days", _campaign_days)}
+def _placement_days(period_to: date, placements: list[dict]) -> tuple[PlacementDay, ...]:
+    """Только дни с данными (Директ не отдаёт строк площадки без показов). Имени нет — как в снимке из БД без
+    справочника; masked — имя не прошло allowlist, правило такую площадку не предлагает."""
+    out = []
+    for p in placements:
+        _keys(p, _PLACEMENT_KEYS, f"placement {p.get('id')}", {"campaign_id", "id", "days"})
+        name = MASK if p.get("masked") else None
+        for d in p["days"]:
+            _keys(d, _DAY_KEYS, f"placement {p['id']} day", _DAY_KEYS)
+            conv = None if d["conversions"] is None else Decimal(d["conversions"])
+            out.append(PlacementDay(int(p["campaign_id"]), int(p["id"]), date.fromisoformat(d["date"]),
+                                    Decimal(d["cost"]), int(d["clicks"]), conv, name))
+    return tuple(sorted(out, key=lambda x: (x.campaign_id, x.date, x.placement_id)))
+
+
+# Раздел снимка → (поле SnapshotView, построитель). Новое правило с новыми данными добавляет сюда свой раздел
+# (ключ раздела — допустимый ключ snapshot; неизвестные ключи загрузчик по-прежнему отвергает).
+SECTIONS: dict[str, tuple[str, Callable]] = {"campaigns": ("campaign_days", _campaign_days),
+                                             "placements": ("placement_days", _placement_days)}
 
 
 @dataclass(frozen=True)
@@ -111,11 +138,20 @@ class Case:
         _keys(s, _SNAPSHOT_KEYS | set(SECTIONS), f"{self.name}: snapshot", {"period_to", "sources"})
         period_to = date.fromisoformat(s["period_to"])
         fields = {field: build(period_to, s.get(key, [])) for key, (field, build) in SECTIONS.items()}
+        raw = s.get("partial_from")
+        partial_from = date.fromisoformat(raw) if raw else period_to - timedelta(PARTIAL_DAYS - 1)
         view = SnapshotView(snapshot_id=SNAPSHOT_ID, workspace_id=WORKSPACE_ID, direct_account_id=ACCOUNT_ID,
                             period_from=period_to - timedelta(s.get("history_days", 37) - 1), period_to=period_to,
-                            sources=frozenset(s["sources"]), **fields)
-        partial_from = s.get("partial_from")
-        return view, (date.fromisoformat(partial_from) if partial_from else period_to - timedelta(PARTIAL_DAYS - 1))
+                            sources=frozenset(s["sources"]), partial_from=partial_from, **fields)
+        return view, partial_from
+
+    def units(self) -> list[StatUnit]:
+        """Строки stat_rows снимка кейса для exposure_total: расход кампаний и площадок по дням."""
+        view, _ = self.view()
+        return ([StatUnit(ACCOUNT_ID, d.campaign_id, "campaign", d.campaign_id, d.date, d.cost)
+                 for d in view.campaign_days]
+                + [StatUnit(ACCOUNT_ID, p.campaign_id, "placement", p.placement_id, p.date, p.cost)
+                   for p in view.placement_days])
 
     def strategies(self) -> dict[int, str]:
         return {int(c["id"]): c.get("strategy", "unknown") for c in self.data["snapshot"].get("campaigns", [])}
@@ -156,6 +192,7 @@ class Outcome:
     action: dict
     exposure: Decimal
     partial: bool  # хотя бы одно число вывода — за дни, которые ещё досчитываются
+    card: ExposureFinding  # вход exposure_total@1: lost как Value и декларированная основа
 
     @property
     def key(self) -> tuple:
@@ -174,10 +211,13 @@ def evaluate(case: Case) -> tuple[list[Outcome], list[NotEnoughData]]:
                 continue
             assert isinstance(out, Finding)
             d = decide(out)
-            values = [to_value(f, SNAPSHOT_ID, partial_from) for f in (out.lost, *out.evidence.values())]
+            values = [to_value(f, SNAPSHOT_ID, partial_from, out.rule_version)
+                      for f in (out.lost, *out.evidence.values())]
+            card = ExposureFinding(ACCOUNT_ID, out.issue_type, out.object_type, out.object_id, values[0],
+                                   out.exposure_basis)
             findings.append(Outcome(out.rule_version, out.object_type, out.object_id, d.candidate_level, d.level,
                                     _json(dict(out.action)), values[0].amount,
-                                    any(v.data_status == "partial" for v in values)))
+                                    any(v.data_status == "partial" for v in values), card))
     return findings, skipped
 
 
@@ -214,9 +254,27 @@ def gate(case: Case) -> list[tuple[str, str]]:
         if (strategies.get(o.object_id, "unknown") != "manual" and o.action["type"] in BID_OR_BUDGET_ACTIONS
                 and o.action_level == "change"):
             violations.append(("invariant", f"{o.key}: ставка/бюджет на change без ручной стратегии"))
+    violations += _exposure_violations(case, findings)
     got_skipped = {(s.rule_version, s.reason.value, s.object_type, s.object_id) for s in skipped}
     for e in case.data.get("expected_not_enough_data", []):
         want = (e["rule_version"], e["reason"], e.get("object_type"), e.get("object_id"))
         if want not in got_skipped:
             violations.append(("not_enough_data", f"нет ожидаемого «недостаточно данных» {want}"))
     return violations
+
+
+def _exposure_violations(case: Case, findings: list[Outcome]) -> list[tuple[str, str]]:
+    """exposure_total@1 на выводах кейса: max(карточка) ≤ total ≤ Σ карточек; и равен ожидаемому, если он задан."""
+    cards = [o.card for o in findings]
+    amounts = [c.lost.amount for c in cards if c.lost.amount is not None]
+    want = case.data.get("exposure_total")
+    if not amounts:
+        return [("exposure", f"ожидался итог {want}, а выводов с суммой нет")] if want is not None else []
+    view, _ = case.view()
+    total = exposure_total(cards, case.units(), as_of=view.period_to).total.amount
+    out = []
+    if not max(amounts) <= total <= sum(amounts):
+        out.append(("exposure", f"итог {total} вне [{max(amounts)}, {sum(amounts)}]"))
+    if want is not None and total != Decimal(want):
+        out.append(("exposure", f"итог {want!r} → {total!r}"))
+    return out

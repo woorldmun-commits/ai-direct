@@ -4,10 +4,12 @@
 import copy
 import json
 from collections import Counter
+from decimal import Decimal
 
 import pytest
 
 from app.rules import RULES
+from evals import golden
 from evals.golden import CASES_DIR, Case, gate, load_cases
 
 CASES = load_cases()
@@ -44,7 +46,7 @@ def test_every_rule_version_has_expected_findings():
 
 
 def test_required_scenarios_for_v1_rules():
-    for family in ("high_cpa", "zero_conv_campaign"):
+    for family in ("high_cpa", "zero_conv_campaign", "zero_conv_placements"):
         tags = set().union(*(c.tags for c in CASES if c.name.startswith(family + "/")))
         assert {"problem", "clean", "boundary", "partial", "autostrategy", "not_enough_data"} <= tags, family
 
@@ -86,6 +88,32 @@ def test_gate_detects_false_positive_on_clean_case():
     assert _categories(case) == {"false_positive"}
 
 
+def test_gate_detects_wrong_expected_exposure_total():
+    case = _mutated("zero_conv_placements/overlap_zero_conv_campaign", lambda d: d.update(exposure_total="50000.00"))
+    assert _categories(case) == {"exposure"}
+
+
+@pytest.mark.parametrize("total", ["41999.99", "50000.01"])  # ниже самой большой карточки / выше суммы карточек
+def test_gate_checks_exposure_total_bounds(monkeypatch, total):
+    """Гейт AI_GOVERNANCE §4.2: итог ≤ Σ карточек и ≥ max карточки — на каждом кейсе с выводами."""
+    real = golden.exposure_total
+
+    def broken(*args, **kw):
+        out = real(*args, **kw)
+        return out.__class__(**{**out.__dict__, "total": out.total.model_copy(update={"amount": Decimal(total)})})
+
+    monkeypatch.setattr(golden, "exposure_total", broken)
+    case = _mutated("zero_conv_placements/overlap_zero_conv_campaign", lambda d: d.pop("exposure_total"))
+    assert _categories(case) == {"exposure"}
+
+
+def test_overlapping_cards_are_not_summed():
+    """Кампания без конверсий и её площадки — один расход: итог — максимум карточек, а не их сумма."""
+    findings, _ = golden.evaluate(BY_NAME["zero_conv_placements/overlap_zero_conv_campaign"])
+    assert sorted(o.exposure for o in findings) == [Decimal("8000.00"), Decimal("42000.00")]
+    assert BY_NAME["zero_conv_placements/overlap_zero_conv_campaign"].data["exposure_total"] == "42000.00"
+
+
 def test_gate_detects_missing_not_enough_data():
     case = _mutated("zero_conv_campaign/just_below_threshold",
                     lambda d: d["expected_not_enough_data"][0].update(reason="source_missing"))
@@ -99,6 +127,10 @@ def test_gate_detects_missing_not_enough_data():
     ("case", lambda d: d.update(client_email="x@example.com")),
     ("day", lambda d: d["snapshot"]["campaigns"][0]["days"][0].update(query="купить окна")),
     ("tag", lambda d: d.update(tags=["mystery"])),
+    ("placement", lambda d: d["snapshot"].update(placements=[{"campaign_id": 101, "id": 1, "name": "site.ru",
+                                                              "days": []}])),
+    ("placement day", lambda d: d["snapshot"].update(placements=[{"campaign_id": 101, "id": 1, "days": [
+        {"date": "2026-09-25", "cost": "1", "clicks": 1, "conversions": "0", "url": "https://site.ru/?u=1"}]}])),
 ])
 def test_loader_rejects_unknown_keys(tmp_path, where, patch):
     data = copy.deepcopy(BY_NAME["zero_conv_campaign/target_spend_without_conversions"].data)
@@ -120,3 +152,11 @@ def test_clean_case_cannot_expect_findings(tmp_path):
 
 def test_cases_are_found_recursively():
     assert len(CASES) == len(list(CASES_DIR.rglob("*.json"))) >= 12
+
+
+def test_every_case_with_findings_is_checked_by_exposure_gate():
+    """Покрытие гейта exposure: на каждом кейсе с выводами итог посчитан (не пропущен из-за пустых единиц)."""
+    for case in CASES:
+        findings, _ = golden.evaluate(case)
+        if findings:
+            assert case.units(), case.name

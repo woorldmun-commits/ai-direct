@@ -1,0 +1,59 @@
+{
+  "description": "Цели не выбраны: конверсий в отчёте Директа нет — правило не вычисляется («недостаточно данных: подключите цели Метрики»), а не «все площадки без конверсий».",
+  "tags": [
+    "not_enough_data"
+  ],
+  "settings": {
+    "target_cpa": "1000"
+  },
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "partial_from": "2026-09-28",
+    "sources": [
+      "yandex_direct"
+    ],
+    "campaigns": [
+      {
+        "id": 505,
+        "strategy": "manual",
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "5000.00",
+            "clicks": 300,
+            "conversions": null
+          }
+        ]
+      }
+    ],
+    "placements": [
+      {
+        "campaign_id": 505,
+        "id": 1,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "5000.00",
+            "clicks": 300,
+            "conversions": null
+          }
+        ]
+      }
+    ]
+  },
+  "expected": [],
+  "expected_not_enough_data": [
+    {
+      "rule_version": "zero_conv_placements@1",
+      "reason": "source_missing"
+    },
+    {
+      "rule_version": "zero_conv_campaign@1",
+      "reason": "source_missing"
+    },
+    {
+      "rule_version": "high_cpa_target@1",
+      "reason": "source_missing"
+    }
+  ]
+}

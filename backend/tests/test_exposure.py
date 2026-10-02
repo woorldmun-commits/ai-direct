@@ -6,8 +6,9 @@ from decimal import Decimal
 
 import pytest
 
-from app.audit.exposure import VERSION, ExposureFinding, StatUnit, exposure_total
+from app.audit.exposure import VERSION, ExposureFinding, StatUnit, basis_from_meta, basis_meta, exposure_total
 from app.contract import Value
+from app.rules.domain import FORMULA, SPEND_CAMPAIGN, ExposureBasis
 
 D1 = date(2026, 9, 24)
 D7 = D1 + timedelta(6)
@@ -29,8 +30,27 @@ def lost(amount, *, frm=D1, to=D7, status="complete", snapshot=1, formula="sum(c
                  snapshot_id=snapshot, rule_version="x@1", formula=formula)
 
 
-def card(issue_type, object_type, object_id, amount, *, account=1, **kw) -> ExposureFinding:
-    return ExposureFinding(account, issue_type, object_type, object_id, lost(amount, **kw))
+_DEFAULT = object()
+
+
+def card(issue_type, object_type, object_id, amount, *, account=1, basis=_DEFAULT, **kw) -> ExposureFinding:
+    """Основа по умолчанию — как декларируют правила: formula, если задана формула; иначе spend своих единиц."""
+    if basis is _DEFAULT:
+        if "formula" in kw:
+            basis = FORMULA
+        elif object_type == "campaign":
+            basis = SPEND_CAMPAIGN
+        elif object_type == "account":
+            basis = None
+        else:
+            basis = ExposureBasis("spend", object_type, (object_id,))
+    return ExposureFinding(account, issue_type, object_type, object_id, lost(amount, **kw), basis)
+
+
+def placements_card(campaign, amount, ids, **kw) -> ExposureFinding:
+    """Как zero_conv_placements@1: вывод уровня кампании, сумма — расход перечисленных площадок за окно."""
+    return card("zero_conv_placements", "campaign", campaign, amount, basis=ExposureBasis("spend", "placement", ids),
+                **kw)
 
 
 def unit(campaign, level, object_id, d, cost, *, account=1) -> StatUnit:
@@ -261,3 +281,89 @@ def test_invariants_on_random_cards(seed):
     out = check_invariants(findings, units)
     shuffled = findings[::-1]
     assert exposure_total(shuffled, units[::-1], as_of=AS_OF) == out
+
+
+# --- Декларированная основа суммы (ExposureBasis) ---------------------------------------------------
+
+def test_economics_example_with_v1_placements_card():
+    """Пример §4 в форме правил v1.0: площадки — один вывод уровня кампании B с перечнем площадок (spend по
+    единицам placement), «без конверсий» — spend по кампании, высокий CPA — formula. Итог тот же: 60 380."""
+    findings, units = economics_example()
+    findings = [f for f in findings if f.issue_type != "zero_conv_placements"] + [
+        placements_card(B, "8300.00", (7, 8))]
+    out = check_invariants(findings, units)
+    assert (out.total.amount, out.overlap.amount) == (Decimal("60380.00"), Decimal("13600.00"))
+
+
+def test_placements_card_against_zero_conv_campaign_is_max_per_day():
+    """Кампания без конверсий за дни 5–7 (блок) и площадки той же кампании в дни 2 и 6: день 6 — внутри блока
+    (max), день 2 — вне его окна, добавляется. Не сумма карточек."""
+    fs = [card("zero_conv_campaign", "campaign", A, "3000.00", frm=day(5), to=day(7)),
+          placements_card(A, "700.00", (7, 8))]
+    units = [*spend(A, {n: "1000.00" for n in range(1, 8)}),
+             unit(A, "placement", 7, day(2), "400.00"), unit(A, "placement", 8, day(6), "300.00")]
+    assert check_invariants(fs, units).total.amount == Decimal("3400.00")
+
+
+@pytest.mark.parametrize("high_cpa, total", [("100.00", "900.00"), ("5000.00", "5000.00")])
+def test_placements_card_against_high_cpa_formula_block(high_cpa, total):
+    """ECONOMICS §3.3 п. 3: в днях окна формульного вывода — max(блок, площадки этих дней)."""
+    fs = [card("high_cpa", "campaign", A, high_cpa, formula="(cpa - target_cpa) * conversions"),
+          placements_card(A, "900.00", (7,))]
+    units = [*spend(A, {n: "1000.00" for n in range(1, 8)}), unit(A, "placement", 7, day(3), "900.00")]
+    assert check_invariants(fs, units).total.amount == Decimal(total)
+
+
+def test_placements_card_takes_only_its_campaign_rows():
+    """Та же площадка (тот же object_id) в другой кампании — не единица этого вывода."""
+    fs = [placements_card(A, "900.00", (7,)), placements_card(B, "200.00", (7,))]
+    units = [unit(A, "placement", 7, day(3), "900.00"), unit(B, "placement", 7, day(3), "200.00")]
+    assert check_invariants(fs, units).total.amount == Decimal("1100.00")
+
+
+def test_placements_and_queries_of_one_campaign_add_up():
+    fs = [placements_card(A, "300.00", (7,)), card("zero_conv_queries", "query", 1, "500.00")]
+    units = [unit(A, "placement", 7, day(2), "300.00"), unit(A, "query", 1, day(2), "500.00")]
+    assert check_invariants(fs, units).total.amount == Decimal("800.00")
+
+
+def test_declared_spend_not_matching_rows_falls_back_to_block():
+    """Строки расходятся с суммой вывода (неполный снимок) — не раскладывать: блок кампании, итог ≥ карточки."""
+    fs = [placements_card(A, "900.00", (7,))]
+    units = [*spend(A, {n: "1000.00" for n in range(1, 8)}), unit(A, "placement", 7, day(3), "800.00")]
+    assert check_invariants(fs, units).total.amount == Decimal("900.00")
+    fs.append(card("zero_conv_campaign", "campaign", A, "7000.00"))
+    assert check_invariants(fs, units).total.amount == Decimal("7000.00")
+
+
+def test_equal_sums_without_declaration_are_not_guessed_as_spend():
+    """Эвристики «сумма совпала с расходом — значит, по расходу» нет: старый вывод без декларации — блок, даже если
+    сумма до копейки равна расходу единиц. С декларацией те же карточки складываются как запросы + площадки."""
+    units = [unit(A, "query", 1, day(2), "500.00"), unit(A, "placement", 7, day(2), "300.00")]
+    legacy = [card("zero_conv_queries", "query", 1, "500.00", basis=None),
+              card("zero_conv_placements", "placement", 7, "300.00", basis=None)]
+    assert check_invariants(legacy, units).total.amount == Decimal("500.00")  # два блока одной кампании — max
+    declared = [card("zero_conv_queries", "query", 1, "500.00"), card("zero_conv_placements", "placement", 7, "300.00")]
+    assert check_invariants(declared, units).total.amount == Decimal("800.00")
+
+
+@pytest.mark.parametrize("basis", [SPEND_CAMPAIGN, FORMULA, ExposureBasis("spend", "placement", (7, 2 ** 62))])
+def test_basis_round_trips_through_evidence_meta(basis):
+    meta = basis_meta(basis)
+    assert all(isinstance(v, str) for v in meta.values())
+    assert basis_from_meta({"reference_mode": "campaign", **meta}) == basis
+
+
+@pytest.mark.parametrize("meta", [{}, {"exposure_basis": "guess"}, {"exposure_basis": "spend"},
+                                  {"exposure_basis": "spend", "exposure_level": "placement"},
+                                  {"exposure_basis": "spend", "exposure_level": "placement",
+                                   "exposure_object_ids": "7,x"}])
+def test_missing_or_broken_declaration_is_none(meta):
+    assert basis_from_meta(meta) is None
+
+
+@pytest.mark.parametrize("args", [("formula", "campaign"), ("formula", None, (1,)), ("spend",), ("spend", "placement"),
+                                  ("spend", "campaign", (1,))])
+def test_basis_invariants(args):
+    with pytest.raises(ValueError):
+        ExposureBasis(*args)

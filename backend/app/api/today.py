@@ -17,7 +17,8 @@ from fastapi import APIRouter
 
 from app.api.deps import Conn, CurrentWorkspace
 from app.api.serialize import moment, recommendation_item, value_of
-from app.audit.exposure import ACCOUNT_LEVEL, CAMPAIGN_LEVEL, ExposureFinding, StatUnit, exposure_total
+from app.audit.exposure import (ACCOUNT_LEVEL, CAMPAIGN_LEVEL, ExposureFinding, StatUnit, basis_from_meta,
+                                exposure_total)
 from app.contract import Value
 
 router = APIRouter()
@@ -47,7 +48,7 @@ WITH latest AS (  -- последний аудит, в который вошёл
 SELECT cur.id, cur.finding_id, cur.direct_account_id, coalesce(da.client_login, dc.yandex_login),
        cur.object_type, cur.object_id, f.action_level, f.lost, f.recoverable, cur.created_at,
        greatest(cur.created_at, f.created_at, cur.last_event_at),
-       cur.issue_type, f.data_quality, latest.snapshot_id
+       cur.issue_type, f.data_quality, latest.snapshot_id, f.evidence_meta
 FROM cur
 JOIN findings f ON f.id = cur.finding_id
 JOIN latest ON latest.direct_account_id = cur.direct_account_id AND latest.audit_run_id = f.audit_run_id
@@ -65,15 +66,16 @@ WHERE r.snapshot_id = %(snapshot)s AND r.source = 'yandex_direct' AND r.level = 
 
 
 def _units(conn: psycopg.Connection, rows: list[tuple], findings: list[ExposureFinding]) -> list[StatUnit]:
-    """Строки снимков, на которых посчитаны выводы: уровень кампании (расход) и уровни объектных выводов."""
+    """Строки снимков, на которых посчитаны выводы: уровень кампании (расход), уровни объектных выводов и уровни
+    единиц из декларированной основы exposure (площадки у вывода уровня кампании)."""
     snapshots = {row[2]: row[13] for row in rows}  # кабинет → снимок его последнего аудита
     units = []
     for account, snapshot in sorted(snapshots.items()):
-        mine = [f.lost for f in findings if f.account_id == account]
-        levels = sorted({CAMPAIGN_LEVEL} | {f.object_type for f in findings
-                                             if f.account_id == account and f.object_type != ACCOUNT_LEVEL})
-        params = {"snapshot": snapshot, "levels": levels, "from": min(v.period_from for v in mine),
-                  "to": max(v.period_to for v in mine)}
+        mine = [f for f in findings if f.account_id == account]
+        levels = sorted({CAMPAIGN_LEVEL} | {f.object_type for f in mine if f.object_type != ACCOUNT_LEVEL}
+                        | {f.basis.level for f in mine if f.basis is not None and f.basis.level is not None})
+        params = {"snapshot": snapshot, "levels": levels, "from": min(f.lost.period_from for f in mine),
+                  "to": max(f.lost.period_to for f in mine)}
         units += [StatUnit(account, *r) for r in conn.execute(_UNITS, params).fetchall()]
     return units
 
@@ -115,7 +117,8 @@ def _exposure_json(result) -> dict:
 @router.get("/workspaces/{workspace_id}/today")
 def today(conn: Conn, ws: CurrentWorkspace):
     rows = conn.execute(_ACTIVE, {"ws": ws.id}).fetchall()
-    findings = [ExposureFinding(row[2], row[11], row[4], row[5], Value.model_validate(row[7])) for row in rows]
+    findings = [ExposureFinding(row[2], row[11], row[4], row[5], Value.model_validate(row[7]), basis_from_meta(row[14]))
+                for row in rows]
     last_audit_at, cutoff = conn.execute("""SELECT max(created_at), max(data_cutoff) FROM audit_runs
                                             WHERE workspace_id = %s""", (ws.id,)).fetchone()
     as_of: date = cutoff or datetime.now(timezone.utc).date()

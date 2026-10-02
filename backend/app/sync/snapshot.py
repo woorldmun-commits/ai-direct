@@ -60,8 +60,9 @@ def _merge(rows: tuple[StatRow, ...]) -> tuple[StatRow, ...]:
 def sync_account(source: DirectSource, login: str, conversions: ConversionDefinition | None,
                  period_to: date, *, placements: bool = False) -> Snapshot | SyncFailure:
     """period_to передаёт вызывающий (вчера по МСК): функция не читает текущее время.
-    placements: третий отчёт — площадки РСЯ (PLACEMENT_REPORT). Пока выключен по умолчанию: включается в воркере
-    после проверки отчёта на песочнице; его ошибка, как и ошибка отчёта запросов, — отказ всей синхронизации."""
+    placements: третий отчёт — площадки РСЯ (PLACEMENT_REPORT). Выключен по умолчанию: воркер включает его
+    переменной DIRECT_PLACEMENTS_REPORT=1 (app/worker/sync.py) после проверки отчёта на песочнице; его ошибка, как и
+    ошибка отчёта запросов, — отказ всей синхронизации."""
     period_from = period_to - timedelta(HISTORY_DAYS - 1)
     specs = (CAMPAIGN_REPORT, QUERY_REPORT) + ((PLACEMENT_REPORT,) if placements else ())
     try:

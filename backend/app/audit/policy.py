@@ -25,6 +25,9 @@ LEVELS = ("inspect_only", "review", "change")  # по возрастанию в�
 CANDIDATE_LEVEL = {
     "decrease_bid": "change",
     "investigate_cpa_growth": "inspect_only",
+    "investigate_zero_conversions": "inspect_only",  # zero_conv_campaign: только «проверить», настройки не меняются
+    # zero_conv_placements: исключение площадок меняет охват кампании — только на проверку человеком, change не бывает
+    "exclude_placements": "review",
 }
 MAX_BY_DATA = {"low": "inspect_only", "medium": "review", "high": "change"}
 MAX_WITHOUT_STRATEGY = "review"

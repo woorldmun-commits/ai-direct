@@ -3,18 +3,23 @@
 изоляция (чужой workspace — 404); пустой workspace — unavailable, а не 0; любое число — сериализованный Value."""
 
 import re
+from datetime import timedelta
 from decimal import Decimal
 
 import pytest
 
-from app.rules.domain import Fact, Finding, Rule, frozen, issue_key, windows
+from app.rules.domain import SPEND_CAMPAIGN, Fact, Finding, Rule, frozen, issue_key, windows
+from app.sources.direct import PLACEMENT_REPORT
+from app.sync.parse import placement_id
+from app.worker.sync import PLACEMENTS_REPORT_ENV
 from app.worker import audit as audit_module
 from test_api_headers import assert_secure
 from test_api_support import api, cookie, session, user, world  # noqa: F401 — фикстуры
-from test_direct_sync import TO, root  # noqa: F401 — root: фикстура
+from test_direct_sync import CID, TO, root  # noqa: F401 — root: фикстура
 from test_metrika_sync import metrika  # noqa: F401 — фикстура
 from test_schema import chain, new_workspace, one  # noqa: F401 — chain: фикстура
 from test_worker_audit import audit, sync
+from test_placements_sync import placement_tsv
 from test_worker_sync import ws  # noqa: F401 — фикстура
 
 VALUE_KEYS = {"amount", "unit", "calculation_type", "source", "period", "data_status", "data_sufficiency", "formula",
@@ -35,7 +40,7 @@ def _spend_block(rule, snap, settings):
             reason_code="test_spend", metric="cost", actual=cost, reference=Decimal(0), reference_type="target",
             delta_pct=Decimal(0), lost=lost, recoverable=lost, current_data_quality="high",
             evidence=frozen({"cost": Fact(cost, "rub", "yandex_direct", evaluation)}), evidence_meta=frozen({}),
-            action=frozen({"type": "pause_for_test"})))
+            action=frozen({"type": "pause_for_test"}), exposure_basis=SPEND_CAMPAIGN))
     return tuple(out)
 
 
@@ -107,6 +112,16 @@ def test_today_on_real_snapshot_dedups_overlapping_cards(api, rw, audited, monke
     assert "snapshot_id" not in r.text and "snapshot_ids" not in r.text
     assert body["data_status"] == e["total"]["data_status"]
     assert body["last_audit_at"] is not None
+
+
+def test_persisted_findings_declare_exposure_basis(rw, audited, monkeypatch):
+    """Основа exposure пишется в evidence_meta при сохранении вывода — итог не угадывает её по суммам."""
+    monkeypatch.setattr(audit_module, "RULES", audit_module.RULES + (SPEND_RULE,))
+    audit(rw, audited)
+    metas = dict(rw.execute("""SELECT i.issue_type, f.evidence_meta FROM findings f JOIN issues i ON i.id = f.issue_id
+                               WHERE i.workspace_id = %s AND i.closed_at IS NULL""", (audited["ws"],)).fetchall())
+    assert metas["high_cpa"]["exposure_basis"] == "formula" and "exposure_level" not in metas["high_cpa"]
+    assert (metas["spend_block"]["exposure_basis"], metas["spend_block"]["exposure_level"]) == ("spend", "campaign")
 
 
 def test_today_freshness_from_snapshots_and_connections(api, rw, audited):
@@ -207,3 +222,36 @@ def test_foreign_workspace_cards_never_leak(api, rw, audited, monkeypatch):
     assert get_today(api, rw, stranger, audited["ws"]).status_code == 404
     body = get_today(api, rw, stranger, other).json()
     assert body["top"] == [] and body["exposure"]["total"]["amount"] is None
+
+
+def test_placements_pipeline_sync_audit_today(api, rw, ws, monkeypatch):
+    """Конвейер площадок целиком: отчёт включён переменной → снимок с площадками и справочником имён → аудит
+    (zero_conv_placements@1 рядом с high_cpa_target@1) → вывод с именами и основой exposure → «Сегодня»: итог —
+    max(формульный блок 18 000, площадка 30 000) = 30 000, а не сумма 48 000."""
+    monkeypatch.setenv(PLACEMENTS_REPORT_ENV, "1")
+    rw.execute("UPDATE issues SET closed_at = now(), close_reason = 'resolved' WHERE id = %s", (ws["issue"],))
+    rw.execute("INSERT INTO workspace_settings (workspace_id, target_cpa) VALUES (%s, 3000)", (ws["ws"],))
+    (ws["root"].path / ws["login"] / f"{PLACEMENT_REPORT.key}.tsv").write_text(placement_tsv((
+        ("bad-site.ru", "300", "30000.00", ("0", "0"), CID, TO - timedelta(4)),
+        ("good-site.ru", "300", "9000.00", ("2", "0"), CID, TO - timedelta(4)))), encoding="utf-8")
+    sync(rw, ws)
+    audit(rw, ws)
+
+    meta, action, level = rw.execute(
+        """SELECT f.evidence_meta, f.action, f.action_level FROM findings f JOIN issues i ON i.id = f.issue_id
+           WHERE i.workspace_id = %s AND i.issue_type = 'zero_conv_placements'""", (ws["ws"],)).fetchone()
+    bad = placement_id("bad-site.ru")
+    assert action == {"type": "exclude_placements", "execution": "manual", "placement_ids": [bad]}
+    assert meta[f"placement_{bad}_name"] == "bad-site.ru" and level == "review"
+    assert (meta["exposure_basis"], meta["exposure_level"], meta["exposure_object_ids"]) == ("spend", "placement",
+                                                                                           str(bad))
+    text = one(rw, """SELECT e.text FROM explanations e JOIN findings f ON f.id = e.finding_id
+                      JOIN issues i ON i.id = f.issue_id WHERE i.issue_type = 'zero_conv_placements'
+                        AND i.workspace_id = %s""", ws["ws"])
+    assert "bad-site.ru" in text and "30 000 ₽" in text and "good-site.ru" not in text
+
+    body = get_today(api, rw, ws["user"], ws["ws"]).json()
+    e = body["exposure"]
+    assert {c["issue_type"]: c["amount"]["amount"] for c in e["components"]} == {
+        "zero_conv_placements": "30000.00", "high_cpa": "18000.00"}
+    assert (e["total"]["amount"], e["overlap"]["amount"]) == ("30000.00", "18000.00")

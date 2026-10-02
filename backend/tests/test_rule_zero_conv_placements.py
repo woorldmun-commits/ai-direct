@@ -3,21 +3,22 @@
 
 import dataclasses
 import json
+import re
 from datetime import date, timedelta
 from decimal import Decimal
-from pathlib import Path
 
 import pytest
 from psycopg.types.json import Jsonb
 
+from app.audit.policy import decide
+from app.audit.templates import explain
 from app.audit.values import to_value
 from app.contract import Value
-from app.rules.domain import (DIRECT_CONVERSIONS, AuditSettings, CampaignDay, Finding, NotEnoughData, PlacementDay,
-                              Reason, SnapshotView, run)
+from app.rules.domain import (DIRECT_CONVERSIONS, AuditSettings, CampaignDay, ExposureBasis, NotEnoughData,
+                              PlacementDay, Reason, SnapshotView, run)
 from app.rules.zero_conv_placements import ZERO_CONV_PLACEMENTS as RULE
 from app.sync.parse import placement_id
 
-CASES = Path(__file__).parents[1] / "evals" / "cases" / "zero_conv_placements"
 TO = date(2026, 9, 30)
 PARTIAL = TO - timedelta(2)
 DONE = TO - timedelta(4)  # завершённый день внутри окна оценки (24–30.09)
@@ -189,40 +190,39 @@ def test_every_fact_is_a_valid_value_in_python_and_sql(rw):
                                                       "placement_ids": list(f.action["placement_ids"])}
 
 
-# --- Golden-кейсы ---------------------------------------------------------------------------------------
-
-def _case_view(snapshot: dict) -> SnapshotView:
-    period_to = date.fromisoformat(snapshot["period_to"])
-    campaign = [cday(c, date.fromisoformat(d), cost, clicks, conv) for c, d, cost, clicks, conv in
-                snapshot["campaign_days"]]
-    placements = [pday(c, n, date.fromisoformat(d), cost, clicks, conv) for c, n, d, cost, clicks, conv in
-                  snapshot["placement_days"]]
-    sources = snapshot.get("sources", sorted(SOURCES))
-    return SnapshotView(1, 7, 3, period_to - timedelta(36), period_to, frozenset(sources), tuple(campaign),
-                        placement_days=tuple(placements),
-                        partial_from=date.fromisoformat(snapshot["partial_from"]))
+def test_exposure_basis_is_declared_placement_spend():
+    """Основа exposure — расход перечисленных площадок кампании за окно (audit/exposure.py не угадывает её)."""
+    (f,) = evaluate([pday(CID, "b.ru", DONE, "3000.00", 50, "0"), pday(CID, "a.ru", DONE, "1600.00", 30, "0")])
+    ids = tuple(sorted((placement_id("a.ru"), placement_id("b.ru"))))
+    assert f.exposure_basis == ExposureBasis("spend", "placement", ids)
+    assert set(ids) == set(f.action["placement_ids"])
 
 
-def _actual(out) -> dict:
-    if isinstance(out, NotEnoughData):
-        return {"kind": "not_enough_data", "object_id": out.object_id, "reason": out.reason.value}
-    assert isinstance(out, Finding)
-    ids = [int(x) for x in out.evidence_meta["placement_ids"].split(",")]
-    return {"kind": "finding", "object_id": out.object_id, "lost": str(out.lost.amount),
-            "reference": str(out.reference), "reference_mode": out.evidence_meta["reference_mode"],
-            "placements": [out.evidence_meta[f"placement_{i}_name"] for i in ids],
-            "current_data_quality": out.current_data_quality,
-            "level_reason": out.evidence_meta.get("level_reason")}
+def test_recoverable_is_marked_as_upper_bound():
+    (f,) = evaluate([pday(CID, "a.ru", DONE, "1600.00", 30, "0")])
+    assert f.recoverable.amount == f.lost.amount and f.recoverable.calculation_type == "estimated"
+    assert f.recoverable.formula.startswith("upper bound") and "not reallocated" in f.recoverable.formula
 
 
-@pytest.mark.parametrize("path", sorted(CASES.glob("*.json")), ids=lambda p: p.stem)
-def test_golden_case(path):
-    case = json.loads(path.read_text(encoding="utf-8"))
-    assert case["rule"] == RULE.rule_version
-    target = case["settings"]["target_cpa"]
-    settings = AuditSettings(target_cpa=None if target is None else Decimal(target))
-    assert [_actual(o) for o in run(RULE, _case_view(case["snapshot"]), settings)] == case["expected"]
+# --- Объяснение (шаблон, без LLM) -----------------------------------------------------------------------
+
+def test_template_uses_only_finding_numbers_and_names():
+    (f,) = evaluate([pday(CID, "a.ru", DONE, "3000.00", 90, "0"), pday(CID, "f.ru", DONE, "1600.00", 60, "0")])
+    text = explain(f, decide(f))
+    assert "площадок РСЯ без конверсий: 2" in text and "4 600 ₽" in text and "150 кликов" in text
+    assert "1 500 ₽" in text and "CPA кампании" in text and "a.ru, f.ru" in text
+    assert "отклонение" not in text and "0%" not in text and "%" not in text
+    assert "исключите" in text and "верхняя оценка" in text  # review: исключить вручную
+    numbers = {n.strip() for n in re.findall(r"[0-9][0-9 ]*", text)}
+    assert numbers <= {str(CID), "2", "4 600", "150", "1 500"}  # объект, число площадок, расход, клики, ориентир
 
 
-def test_golden_set_is_not_empty():
-    assert len(list(CASES.glob("*.json"))) >= 5
+def test_template_low_data_and_partial_and_unknown_names():
+    (f,) = evaluate([dataclasses.replace(pday(CID, "a.ru", DONE, "1000.00", 30, "0"), placement=None),
+                     pday(CID, "b.ru", DONE, "500.00", 15, "0"), pday(CID, "b.ru", TO, "600.00", 10, "0")],
+                    AuditSettings(target_cpa=Decimal(1000)))
+    d = decide(f)
+    assert d.level == "inspect_only"
+    text = explain(f, d)
+    assert "целевой CPA 1 000 ₽" in text and "досчитываются" in text and "прежде чем исключать" in text
+    assert "исключите лишние" not in text

@@ -14,7 +14,7 @@ from app.tenancy import set_local_workspace
 from app.worker.guard import RULES as GUARD_RULES
 from app.worker.guard import Allow, Skip, State, Task, guard, load_state
 from app.worker.locks import workspace_exclusive, workspace_shared
-from app.worker.sync import Done, Failed, RetryAt, Skipped, run_sync
+from app.worker.sync import PLACEMENTS_REPORT_ENV, Done, Failed, RetryAt, Skipped, run_sync
 from test_direct_sync import TO, root  # noqa: F401 — root: фикстура
 from test_metrika_sync import metrika  # noqa: F401 — metrika: фикстура
 from test_schema import connected, chain, one  # noqa: F401 — chain: фикстура
@@ -346,3 +346,36 @@ def test_worker_requires_autocommit(ws, db):
 def test_naive_now_is_rejected(rw, ws):
     with pytest.raises(ValueError):
         load_state(rw, ws["ws"], ws["account"], NOW.replace(tzinfo=None))
+
+
+# --- Отчёт площадок РСЯ: включение переменной окружения ------------------------------------------------
+
+class ReportLog(Spy):
+    def __init__(self, path):
+        super().__init__(path)
+        self.reports = []
+
+    def fetch_report(self, login, spec, *args):
+        self.reports.append(spec.key)
+        return super().fetch_report(login, spec, *args)
+
+
+@pytest.mark.parametrize("value, enabled", [(None, False), ("0", False), ("", False), ("true", False), ("1", True),
+                                            (" 1 ", True)])
+def test_placements_report_only_with_explicit_env(rw, ws, monkeypatch, value, enabled):
+    """По умолчанию выключен (поля отчёта — «проверить» на песочнице); DIRECT_PLACEMENTS_REPORT=1 — третий отчёт,
+    строки уровня placement в снимке и имена площадок в справочнике."""
+    from test_placements_sync import placement_tsv
+    from app.sources.direct import PLACEMENT_REPORT
+    if value is None:
+        monkeypatch.delenv(PLACEMENTS_REPORT_ENV, raising=False)
+    else:
+        monkeypatch.setenv(PLACEMENTS_REPORT_ENV, value)
+    (ws["root"].path / ws["login"] / f"{PLACEMENT_REPORT.key}.tsv").write_text(
+        placement_tsv((("enabled-check.ru", "40", "1200.00", ("0", "0")),)), encoding="utf-8")
+    direct = ReportLog(ws["root"].path)
+    out = work(rw, ws, new_run(rw, ws), direct=direct)
+    assert isinstance(out, Done)
+    assert ("PLACEMENT_REPORT" in direct.reports) is enabled
+    view = load_view(rw, out.snapshot_id)
+    assert [d.placement for d in view.placement_days] == (["enabled-check.ru"] if enabled else [])
