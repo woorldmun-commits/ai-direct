@@ -112,8 +112,9 @@ def test_campaign_paused_mid_history_keeps_baseline(root):
 def test_zero_conversions_shown_as_dashes(root):
     snap = snapshot_of(root, campaign=campaign_tsv(eval_conv=("--", "--")))
     assert [r.conversions for r in snap.rows if r.level == "campaign" and r.date == TO] == [Decimal(0)]
-    assert audit(snap, AuditSettings(target_cpa=Decimal(3000))) == \
-        (NotEnoughData("high_cpa_target@1", Reason.NO_CONVERSIONS, "campaign", CID),)
+    high_cpa, zero_conv = audit(snap, AuditSettings(target_cpa=Decimal(3000)))
+    assert high_cpa == NotEnoughData("high_cpa_target@1", Reason.NO_CONVERSIONS, "campaign", CID)
+    assert isinstance(zero_conv, Finding) and zero_conv.rule_version == "zero_conv_campaign@1"  # «--» = ноль, не None
 
 
 def test_without_metrika_conversions_are_none_and_rules_are_not_computed(root):
@@ -122,7 +123,8 @@ def test_without_metrika_conversions_are_none_and_rules_are_not_computed(root):
     snap = sync_account(DirectFixture(root.path), "acc", None, TO)
     assert snap.sources == {"yandex_direct"} and snap.conversion_definition is None
     assert all(r.conversions is None for r in snap.rows)
-    assert audit(snap, AuditSettings()) == (NotEnoughData("high_cpa_baseline@1", Reason.SOURCE_MISSING),)
+    assert audit(snap, AuditSettings()) == (NotEnoughData("high_cpa_baseline@1", Reason.SOURCE_MISSING),
+                                            NotEnoughData("zero_conv_campaign@1", Reason.SOURCE_MISSING))
 
 
 # --- Несколько аккаунтов и частичная доступность -------------------------------------------------

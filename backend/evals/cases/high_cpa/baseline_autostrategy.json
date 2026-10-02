@@ -1,0 +1,49 @@
+{
+  "description": "Максимум конверсий (автостратегия): baseline-режим и так только «проверить», inspect_only.",
+  "tags": [
+    "problem",
+    "autostrategy"
+  ],
+  "settings": {},
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "sources": [
+      "yandex_direct",
+      "direct_conversions"
+    ],
+    "campaigns": [
+      {
+        "id": 101,
+        "strategy": "max_conversions",
+        "days": [
+          {
+            "date": "2026-09-23",
+            "cost": "115200",
+            "clicks": 300,
+            "conversions": "30"
+          },
+          {
+            "date": "2026-09-30",
+            "cost": "42000",
+            "clicks": 70,
+            "conversions": "8"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": [
+    {
+      "rule_version": "high_cpa_baseline@1",
+      "object_type": "campaign",
+      "object_id": 101,
+      "candidate_level": "inspect_only",
+      "action_level": "inspect_only",
+      "action": {
+        "type": "investigate_cpa_growth",
+        "suggest": "set_target_cpa"
+      },
+      "exposure": "11280.00"
+    }
+  ]
+}

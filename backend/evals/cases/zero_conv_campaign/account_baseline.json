@@ -1,0 +1,66 @@
+{
+  "description": "Кампания 101 никогда не конвертила — порог от CPA аккаунта (3 000 ₽ → 9 000 ₽); 102 с конверсиями — не проблема.",
+  "tags": [
+    "problem",
+    "boundary"
+  ],
+  "settings": {},
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "sources": [
+      "yandex_direct",
+      "direct_conversions"
+    ],
+    "campaigns": [
+      {
+        "id": 101,
+        "strategy": "manual",
+        "days": [
+          {
+            "date": "2026-09-30",
+            "cost": "9000",
+            "clicks": 60,
+            "conversions": "0"
+          }
+        ]
+      },
+      {
+        "id": 102,
+        "strategy": "manual",
+        "days": [
+          {
+            "date": "2026-09-23",
+            "cost": "30000",
+            "clicks": 300,
+            "conversions": "10"
+          },
+          {
+            "date": "2026-09-30",
+            "cost": "5000",
+            "clicks": 40,
+            "conversions": "2"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": [
+    {
+      "rule_version": "zero_conv_campaign@1",
+      "object_type": "campaign",
+      "object_id": 101,
+      "candidate_level": "inspect_only",
+      "action_level": "inspect_only",
+      "action": {
+        "type": "investigate_zero_conversions",
+        "check": [
+          "conversion_goals",
+          "strategy",
+          "search_queries_negative_keywords"
+        ],
+        "suggest": "set_target_cpa"
+      },
+      "exposure": "9000.00"
+    }
+  ]
+}

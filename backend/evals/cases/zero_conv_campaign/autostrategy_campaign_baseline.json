@@ -1,0 +1,54 @@
+{
+  "description": "Автостратегия; кампания раньше конвертила (CPA 2 000 ₽), за неделю 12 000 ₽ и 0 конверсий: рычаг — проверка целей, стратегии, минус-фраз, не ставка.",
+  "tags": [
+    "problem",
+    "autostrategy"
+  ],
+  "settings": {},
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "sources": [
+      "yandex_direct",
+      "direct_conversions"
+    ],
+    "campaigns": [
+      {
+        "id": 101,
+        "strategy": "auto_cpa",
+        "days": [
+          {
+            "date": "2026-09-23",
+            "cost": "40000",
+            "clicks": 400,
+            "conversions": "20"
+          },
+          {
+            "date": "2026-09-30",
+            "cost": "12000",
+            "clicks": 120,
+            "conversions": "0"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": [
+    {
+      "rule_version": "zero_conv_campaign@1",
+      "object_type": "campaign",
+      "object_id": 101,
+      "candidate_level": "inspect_only",
+      "action_level": "inspect_only",
+      "action": {
+        "type": "investigate_zero_conversions",
+        "check": [
+          "conversion_goals",
+          "strategy",
+          "search_queries_negative_keywords"
+        ],
+        "suggest": "set_target_cpa"
+      },
+      "exposure": "12000.00"
+    }
+  ]
+}

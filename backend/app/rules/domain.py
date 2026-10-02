@@ -87,6 +87,7 @@ class Reason(str, Enum):
     NO_CONVERSIONS = "no_conversions"
     BASELINE_HISTORY_INSUFFICIENT = "baseline_history_insufficient"
     BASELINE_DATA_INSUFFICIENT = "baseline_data_insufficient"
+    VOLUME_INSUFFICIENT = "volume_insufficient"  # расход/клики ниже порога «достаточного объёма» правила
 
 
 @dataclass(frozen=True)
@@ -118,7 +119,7 @@ class Finding:
     metric: str
     actual: Decimal
     reference: Decimal
-    reference_type: Literal["target", "baseline"]
+    reference_type: Literal["target", "baseline", "absolute"]  # absolute: порог-параметр версии, без CPA
     delta_pct: Decimal
     lost: Fact
     recoverable: Fact

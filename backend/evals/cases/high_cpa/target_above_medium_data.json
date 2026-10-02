@@ -1,0 +1,50 @@
+{
+  "description": "CPA 5 250 ₽ при целевом 3 000 ₽ (+75%), 8 конверсий: −15% ставки; политика: medium → review.",
+  "tags": [
+    "problem"
+  ],
+  "settings": {
+    "target_cpa": "3000"
+  },
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "sources": [
+      "yandex_direct",
+      "direct_conversions"
+    ],
+    "campaigns": [
+      {
+        "id": 101,
+        "strategy": "manual",
+        "days": [
+          {
+            "date": "2026-09-23",
+            "cost": "115200",
+            "clicks": 300,
+            "conversions": "30"
+          },
+          {
+            "date": "2026-09-30",
+            "cost": "42000",
+            "clicks": 70,
+            "conversions": "8"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": [
+    {
+      "rule_version": "high_cpa_target@1",
+      "object_type": "campaign",
+      "object_id": 101,
+      "candidate_level": "change",
+      "action_level": "review",
+      "action": {
+        "type": "decrease_bid",
+        "change_pct": -15
+      },
+      "exposure": "18000.00"
+    }
+  ]
+}

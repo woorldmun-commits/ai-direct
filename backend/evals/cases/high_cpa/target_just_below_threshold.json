@@ -1,0 +1,38 @@
+{
+  "description": "CPA 3 299,70 ₽ (+9,99%) — ниже порога, выводов нет.",
+  "tags": [
+    "clean",
+    "boundary"
+  ],
+  "settings": {
+    "target_cpa": "3000"
+  },
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "sources": [
+      "yandex_direct",
+      "direct_conversions"
+    ],
+    "campaigns": [
+      {
+        "id": 101,
+        "strategy": "manual",
+        "days": [
+          {
+            "date": "2026-09-23",
+            "cost": "115200",
+            "clicks": 300,
+            "conversions": "30"
+          },
+          {
+            "date": "2026-09-30",
+            "cost": "32997",
+            "clicks": 100,
+            "conversions": "10"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": []
+}
