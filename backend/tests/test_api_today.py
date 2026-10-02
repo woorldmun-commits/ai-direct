@@ -8,7 +8,9 @@ from decimal import Decimal
 
 import pytest
 
+from app.contract import UNAVAILABLE_REASONS
 from app.rules.domain import SPEND_CAMPAIGN, Fact, Finding, Rule, frozen, issue_key, windows
+from app.rules.zero_conv_campaign import CHECKS
 from app.sources.direct import PLACEMENT_REPORT
 from app.sync.parse import placement_id
 from app.worker.sync import PLACEMENTS_REPORT_ENV
@@ -23,7 +25,7 @@ from test_placements_sync import placement_tsv
 from test_worker_sync import ws  # noqa: F401 — фикстура
 
 VALUE_KEYS = {"amount", "unit", "calculation_type", "source", "period", "data_status", "data_sufficiency", "formula",
-              "rule_version"}
+              "rule_version", "unavailable_reason"}
 MONEY = re.compile(r"[0-9]+\.[0-9]{2}")
 
 
@@ -40,7 +42,7 @@ def _spend_block(rule, snap, settings):
             reason_code="test_spend", metric="cost", actual=cost, reference=Decimal(0), reference_type="target",
             delta_pct=Decimal(0), lost=lost, recoverable=lost, current_data_quality="high",
             evidence=frozen({"cost": Fact(cost, "rub", "yandex_direct", evaluation)}), evidence_meta=frozen({}),
-            action=frozen({"type": "pause_for_test"}), exposure_basis=SPEND_CAMPAIGN))
+            action=frozen({"type": "investigate_zero_conversions", "check": CHECKS}), exposure_basis=SPEND_CAMPAIGN))
     return tuple(out)
 
 
@@ -71,7 +73,9 @@ def assert_value(v: dict):
     assert set(v["period"]) == {"from", "to"}
     if v["calculation_type"] == "unavailable":
         assert v["amount"] is None and v["data_sufficiency"] == "insufficient"
+        assert v["unavailable_reason"] in UNAVAILABLE_REASONS
     else:
+        assert v["unavailable_reason"] is None
         assert isinstance(v["amount"], str) and MONEY.fullmatch(v["amount"]), v["amount"]
     if v["calculation_type"] == "estimated":
         assert v["formula"]
@@ -79,7 +83,7 @@ def assert_value(v: dict):
 
 def all_values(body: dict) -> list[dict]:
     e = body["exposure"]
-    return [e["total"], e["overlap"], *(c["amount"] for c in e["components"]),
+    return [body["spent"], e["total"], e["overlap"], *(c["amount"] for c in e["components"]),
             *(x for item in body["top"] for x in (item["exposure"], item["can_save"]))]
 
 
@@ -130,10 +134,57 @@ def test_today_freshness_from_snapshots_and_connections(api, rw, audited):
                (audited["ws"],))
     body = get_today(api, rw, audited["user"], audited["ws"]).json()
     f = body["data_freshness"]
-    assert f["yandex_direct"] == {"status": "connected", "data_to": TO.isoformat()}
-    assert f["yandex_metrika"] == {"status": "permission_missing", "data_to": TO.isoformat()}
+    successes = dict(rw.execute("""SELECT 'yandex_direct', max(last_success_at) FROM direct_connections
+                                   WHERE workspace_id = %(ws)s
+                                   UNION ALL SELECT 'yandex_metrika', max(last_success_at) FROM metrika_connections
+                                   WHERE workspace_id = %(ws)s""", {"ws": audited["ws"]}).fetchall())
+    assert successes["yandex_direct"] is not None  # синхронизация прошла — успешный запрос к API был
+    iso = {k: x.isoformat() if x else None for k, x in successes.items()}
+    assert f["yandex_direct"] == {"status": "connected", "data_to": TO.isoformat(),
+                                  "last_success_at": iso["yandex_direct"]}
+    assert f["yandex_metrika"] == {"status": "permission_missing", "data_to": TO.isoformat(),
+                                   "last_success_at": iso["yandex_metrika"]}
     sealed = one(rw, "SELECT sealed_at FROM snapshots WHERE id = %s", audited["snapshot_id"])
     assert f["last_snapshot_at"] == sealed.isoformat()
+
+
+def test_today_audit_scope_and_spent(api, rw, audited):
+    """«Проблем не найдено — вот что проверено»: правила@версии и окно последнего аудита, кабинеты, кампании;
+    spent — фактический расход этих кампаний за то же окно (stat_rows уровня кампании), не пересчёт карточек."""
+    audit(rw, audited)
+    body = get_today(api, rw, audited["user"], audited["ws"]).json()
+    rules_run = one(rw, """SELECT rules_run FROM audit_runs WHERE workspace_id = %s
+                           ORDER BY created_at DESC, id DESC LIMIT 1""", audited["ws"])
+    evaluation, _ = windows(TO)
+    period = {"from": evaluation.date_from.isoformat(), "to": evaluation.date_to.isoformat()}
+    campaigns, cost = rw.execute("""SELECT count(DISTINCT campaign_id), sum(cost) FROM stat_rows
+                                    WHERE snapshot_id = %s AND source = 'yandex_direct' AND level = 'campaign'
+                                      AND date BETWEEN %s AND %s""",
+                                 (audited["snapshot_id"], evaluation.date_from, evaluation.date_to)).fetchone()
+    assert campaigns > 0
+    assert body["audit_scope"] == {"rules": sorted(rules_run), "period": period,
+                                   "ad_accounts": {"checked": 1, "excluded": 0}, "campaigns": campaigns}
+    spent = body["spent"]
+    assert_value(spent)
+    assert (spent["amount"], spent["calculation_type"], spent["source"]) == (f"{cost:.2f}", "actual", "yandex_direct")
+    assert spent["period"] == period and spent["rule_version"] is None and spent["formula"]
+
+
+def test_top_items_carry_computed_at_and_action(api, rw, audited, monkeypatch):
+    """computed_at — время расчёта текущей версии (findings.created_at); action — форма §5, execution = manual."""
+    monkeypatch.setattr(audit_module, "RULES", audit_module.RULES + (SPEND_RULE,))
+    audit(rw, audited)
+    body = get_today(api, rw, audited["user"], audited["ws"]).json()
+    created = dict(rw.execute("SELECT id, created_at FROM findings").fetchall())
+    actions = {}
+    for item in body["top"]:
+        assert item["computed_at"] == created[int(item["version_id"].removeprefix("rv_"))].isoformat()
+        actions[item["action"]["type"]] = item["action"]
+    bid = actions["decrease_bid"]
+    assert set(bid) == {"type", "execution", "change_pct"} and bid["execution"] == "manual"
+    assert re.fullmatch(r"-[0-9]+\.[0-9]{2}", bid["change_pct"])
+    assert actions["investigate_zero_conversions"] == {"type": "investigate_zero_conversions", "execution": "manual",
+                                                       "checks": list(CHECKS), "suggest": None}
 
 
 def test_single_card_total_equals_card_and_overlap_is_zero(api, rw, audited):
@@ -176,9 +227,14 @@ def test_empty_workspace_is_unavailable_with_empty_top(api, rw):
     assert body["exposure"]["components"] == [] and body["exposure"]["coverage"] == {"included": 0, "unavailable": 0}
     assert body["top"] == [] and body["counts"] == {"active": 0} and body["last_audit_at"] is None
     assert body["data_freshness"] == {"last_snapshot_at": None,
-                                      "yandex_direct": {"status": None, "data_to": None},
-                                      "yandex_metrika": {"status": None, "data_to": None}}
+                                      "yandex_direct": {"status": None, "data_to": None, "last_success_at": None},
+                                      "yandex_metrika": {"status": None, "data_to": None, "last_success_at": None}}
     assert body["data_status"] == "complete"
+    # аудита не было: что проверено — null, расход — «недостаточно данных», а не 0
+    assert body["audit_scope"] is None
+    assert_value(body["spent"])
+    assert body["spent"]["amount"] is None and body["spent"]["unavailable_reason"] == "no_data"
+    assert body["exposure"]["total"]["unavailable_reason"] == "no_data"
 
 
 def test_cards_without_audited_snapshot_do_not_count(api, rw, world):
@@ -186,6 +242,8 @@ def test_cards_without_audited_snapshot_do_not_count(api, rw, world):
     body = get_today(api, rw, world["owner"], world["a1"]).json()
     assert body["counts"] == {"active": 0} and body["exposure"]["total"]["amount"] is None
     assert body["last_audit_at"] is not None  # аудит был — но без снимка этого кабинета
+    assert body["audit_scope"]["ad_accounts"]["checked"] == 0 and body["audit_scope"]["campaigns"] == 0
+    assert body["spent"]["amount"] is None  # снимков в аудите нет — расход неизвестен, а не 0
 
 
 @pytest.mark.parametrize("who, target", [("owner", "b1"), ("viewer", "a2"), ("member", "a1"), ("owner_b", "a1")])
@@ -255,3 +313,6 @@ def test_placements_pipeline_sync_audit_today(api, rw, ws, monkeypatch):
     assert {c["issue_type"]: c["amount"]["amount"] for c in e["components"]} == {
         "zero_conv_placements": "30000.00", "high_cpa": "18000.00"}
     assert (e["total"]["amount"], e["overlap"]["amount"]) == ("30000.00", "18000.00")
+    [placements] = [i["action"] for i in body["top"] if i["action"]["type"] == "exclude_placements"]
+    assert placements == {"type": "exclude_placements", "execution": "manual", "placements_count": 1,
+                          "placements": [{"id": str(bad), "name": "bad-site.ru"}]}

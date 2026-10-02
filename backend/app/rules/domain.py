@@ -105,28 +105,45 @@ class Reason(str, Enum):
     VOLUME_INSUFFICIENT = "volume_insufficient"  # расход/клики ниже порога «достаточного объёма» правила
 
 
+# Почему у числа нет значения — closed list, тот же, что contract.UNAVAILABLE_REASONS (сверяет tests/test_value_contract.py).
+# no_forecast — у действия нет обоснованной формулы прогноза («проверить»); no_data — нет ни одного значения для расчёта.
+UnavailableReason = Literal["source_missing", "no_conversions", "history_insufficient", "volume_insufficient",
+                            "no_forecast", "no_data"]
+UNAVAILABLE_REASON_OF: Mapping[Reason, UnavailableReason] = MappingProxyType({
+    Reason.SOURCE_MISSING: "source_missing",
+    Reason.NO_CONVERSIONS: "no_conversions",
+    Reason.BASELINE_HISTORY_INSUFFICIENT: "history_insufficient",
+    Reason.BASELINE_DATA_INSUFFICIENT: "volume_insufficient",
+    Reason.VOLUME_INSUFFICIENT: "volume_insufficient",
+})
+
+
 @dataclass(frozen=True)
 class Fact:
     """Одно число доказательства. Слой audit/ превращает его в Value (добавляя snapshot_id, data_status).
     unavailable — числа нет и не выдумывается (например, «Можно сэкономить» у рекомендации «проверить»: обоснованной
-    формулы прогноза нет). Инварианты — как у contract.Value: amount is None ⇔ unavailable; estimated ⇒ formula."""
+    формулы прогноза нет). Инварианты — как у contract.Value: amount is None ⇔ unavailable ⇔ reason задан;
+    estimated ⇒ formula."""
     amount: Decimal | None
     unit: Literal["rub", "count", "pct"]
     source: str
     period: Window
     calculation_type: Literal["actual", "estimated", "unavailable"] = "actual"
     formula: str | None = None
+    reason: UnavailableReason | None = None  # только у unavailable: почему числа нет
 
     def __post_init__(self):
         if (self.amount is None) != (self.calculation_type == "unavailable"):
             raise ValueError("Fact: amount is None ⇔ unavailable")
+        if (self.reason is None) == (self.calculation_type == "unavailable"):
+            raise ValueError("Fact: reason задаётся только и обязательно у unavailable")
         if self.calculation_type == "estimated" and not self.formula:
             raise ValueError("Fact: estimated ⇒ formula обязательна")
 
     @classmethod
     def unavailable(cls, unit: Literal["rub", "count", "pct"], source: str, period: Window,
-                    formula: str | None = None) -> "Fact":
-        return cls(None, unit, source, period, "unavailable", formula)
+                    formula: str | None = None, *, reason: UnavailableReason) -> "Fact":
+        return cls(None, unit, source, period, "unavailable", formula, reason)
 
 
 @dataclass(frozen=True)

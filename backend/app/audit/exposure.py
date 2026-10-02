@@ -214,13 +214,16 @@ def _estimated(amount: Decimal, values: list[Value], formula: str) -> Value:
 
 
 def _unavailable(values: list[Value], as_of: date, formula: str) -> Value:
+    """Ни у одной карточки нет суммы: общая причина карточек, если она одна; иначе (и без карточек) — no_data."""
+    reasons = {v.unavailable_reason for v in values}
     return Value(amount=None, unit="rub", source=_source(values) if values else "yandex_direct",
                  period_from=min((v.period_from for v in values), default=as_of),
                  period_to=max((v.period_to for v in values), default=as_of),
                  calculation_type="unavailable",
                  data_status="partial" if any(v.data_status == "partial" for v in values) else "complete",
                  data_sufficiency="insufficient", snapshot_id=max((v.snapshot_id for v in values), default=0),
-                 rule_version=VERSION, formula=formula)
+                 rule_version=VERSION, formula=formula,
+                 unavailable_reason=reasons.pop() if len(reasons) == 1 else "no_data")
 
 
 def _key(f: ExposureFinding) -> tuple:

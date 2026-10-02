@@ -143,7 +143,11 @@ def test_recommendation_item_shape(api, rw, world):
     assert item["exposure"]["period"] == {"from": "2026-09-22", "to": "2026-09-28"}
     assert "snapshot_id" not in item["exposure"] and "period_from" not in item["exposure"]
     assert item["can_save"]["amount"] is None and item["can_save"]["calculation_type"] == "unavailable"
+    # can_save записан до 0004 без причины — API отдаёт её как no_data, а не выдумывает конкретную
+    assert item["can_save"]["unavailable_reason"] == "no_data" and item["exposure"]["unavailable_reason"] is None
     assert item["action_level"] == "review" and item["object"]["type"] == "campaign"
+    assert item["action"] == {"type": "decrease_bid", "execution": "manual", "change_pct": "-15.00"}
+    assert item["computed_at"] is not None
 
 
 def test_foreign_ad_account_filter_returns_nothing(api, rw, world):

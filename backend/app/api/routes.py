@@ -85,7 +85,7 @@ WITH cur AS (
 )
 SELECT cur.id, cur.finding_id, cur.direct_account_id, coalesce(da.client_login, dc.yandex_login),
        cur.object_type, cur.object_id, f.action_level, f.lost, f.recoverable, cur.created_at,
-       greatest(cur.created_at, f.created_at, cur.last_event_at)
+       greatest(cur.created_at, f.created_at, cur.last_event_at), f.created_at, f.action, f.evidence_meta
 FROM cur
 JOIN findings f ON f.id = cur.finding_id
 JOIN direct_accounts da ON da.id = cur.direct_account_id
@@ -104,7 +104,8 @@ def recommendations(conn: Conn, ws: CurrentWorkspace, q: Annotated[Recommendatio
     rows = conn.execute(_RECOMMENDATIONS, {"ws": ws.id, "account": account, "limit": q.limit + 1,
                                            "offset": offset}).fetchall()
     more = len(rows) > q.limit
-    items = [recommendation_item(*row) for row in rows[:q.limit]]
+    items = [recommendation_item(*row[:11], computed_at=row[11], action_raw=row[12], meta=row[13])
+             for row in rows[:q.limit]]
     return {"items": items, "next_cursor": f"o{offset + q.limit}" if more else None}
 
 
