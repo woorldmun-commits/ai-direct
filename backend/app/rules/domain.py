@@ -43,6 +43,19 @@ class CampaignDay:
 
 
 @dataclass(frozen=True)
+class PlacementDay:
+    """Площадка сетей (РСЯ) внутри кампании за день. placement_id — stat_rows.object_id (хэш нормализованного имени,
+    sync/parse.py: placement_id); placement — имя для человека, None, если снимок прочитан из БД без справочника имён."""
+    campaign_id: int
+    placement_id: int
+    date: date
+    cost: Decimal
+    clicks: int
+    conversions: Decimal | None
+    placement: str | None = None
+
+
+@dataclass(frozen=True)
 class SnapshotView:
     snapshot_id: int
     workspace_id: int
@@ -51,6 +64,8 @@ class SnapshotView:
     period_to: date
     sources: frozenset[str]  # API-источники и возможности (DIRECT_CONVERSIONS)
     campaign_days: tuple[CampaignDay, ...]
+    placement_days: tuple[PlacementDay, ...] = ()  # пусто: отчёта площадок нет или у аккаунта нет расхода в сетях
+    partial_from: date | None = None  # даты >= partial_from досчитываются; None — неизвестно, считать всё partial
 
 
 @dataclass(frozen=True)
