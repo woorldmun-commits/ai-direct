@@ -3,7 +3,7 @@
  *
  * The type is a discriminated union on `calculation_type`, so the contract invariants are checked by the
  * compiler: `amount` is a Decimal string only in `actual | estimated`, and is `null` only in `unavailable`
- * (`unavailable` ⇔ `insufficient` ⇔ `amount = null`; `estimated` ⇒ `formula` is set).
+ * (`unavailable` ⇔ `insufficient` ⇔ `amount = null` ⇔ `unavailable_reason` is set; `estimated` ⇒ `formula` is set).
  *
  * The frontend never computes or re-labels a number: it formats the Decimal string as text (no float
  * parsing), and the only component that renders it is `<ValueView>` (components/value-view.tsx).
@@ -16,6 +16,14 @@ export type CalculationType = "actual" | "estimated" | "unavailable";
 export type DataStatus = "complete" | "partial";
 export type DataSufficiency = "sufficient" | "insufficient";
 export type SourceId = "yandex_direct" | "yandex_metrika" | "user_input";
+/** Why there is no number (API_CONTRACT §2) — a closed list; the texts are `UNAVAILABLE_REASON_LABEL`. */
+export type UnavailableReason =
+  | "source_missing"
+  | "no_conversions"
+  | "history_insufficient"
+  | "volume_insufficient"
+  | "no_forecast"
+  | "no_data";
 
 /** `YYYY-MM-DD` dates, inclusive. */
 export interface Period {
@@ -38,6 +46,7 @@ export interface ActualValue extends ValueCommon {
   amount: DecimalString;
   data_sufficiency: "sufficient";
   formula: string | null;
+  unavailable_reason: null;
 }
 
 export interface EstimatedValue extends ValueCommon {
@@ -45,6 +54,7 @@ export interface EstimatedValue extends ValueCommon {
   amount: DecimalString;
   data_sufficiency: "sufficient";
   formula: string;
+  unavailable_reason: null;
 }
 
 export interface UnavailableValue extends ValueCommon {
@@ -52,6 +62,7 @@ export interface UnavailableValue extends ValueCommon {
   amount: null;
   data_sufficiency: "insufficient";
   formula: string | null;
+  unavailable_reason: UnavailableReason;
 }
 
 export type Value = ActualValue | EstimatedValue | UnavailableValue;
@@ -123,6 +134,16 @@ export const CALCULATION_LABEL: Record<CalculationType, string> = {
   actual: "Факт",
   estimated: "Оценка",
   unavailable: "Недостаточно данных",
+};
+
+/** Why a value is unavailable and what to do — shown next to «Недостаточно данных» (never a number or a dash). */
+export const UNAVAILABLE_REASON_LABEL: Record<UnavailableReason, string> = {
+  source_missing: "Источник данных не подключён или не отдал данные — подключите его в «Интеграциях»",
+  no_conversions: "За период нет конверсий — считать не из чего",
+  history_insufficient: "Мало истории для сравнения — нужно больше дней данных",
+  volume_insufficient: "Мало расхода, кликов или конверсий для надёжного вывода",
+  no_forecast: "Для этого действия нет обоснованной формулы эффекта — оценим по факту после замера",
+  no_data: "Нет данных для расчёта за период",
 };
 
 export const PARTIAL_NOTE = "Данные за последние дни могут уточниться";

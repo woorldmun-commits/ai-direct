@@ -2,8 +2,8 @@
 // contract objects (`Value`, `Recommendation`, lib/contract.ts), never typed into markup by hand, so totals on
 // different screens always agree. Screens only format what they get (`<ValueView>`).
 
-import type { Recommendation } from "./contract";
-import type { ActualValue, DataStatus, EstimatedValue, Period, UnavailableValue, Unit } from "./value";
+import type { ExcludePlacementsAction, HistoryEvent, Recommendation } from "./contract";
+import type { ActualValue, DataStatus, EstimatedValue, Period, UnavailableReason, UnavailableValue, Unit } from "./value";
 
 export type Platform = "search" | "network";
 
@@ -43,6 +43,7 @@ export function actual(
     data_sufficiency: "sufficient",
     formula: opts.formula ?? null,
     rule_version: opts.rule_version ?? null,
+    unavailable_reason: null,
   };
 }
 
@@ -55,11 +56,22 @@ export function estimated(
   period: Period = P7,
   data_status: DataStatus = "complete",
 ): EstimatedValue {
-  return { amount: amountOf(n, unit), unit, calculation_type: "estimated", source, period, data_status, data_sufficiency: "sufficient", formula, rule_version };
+  return { amount: amountOf(n, unit), unit, calculation_type: "estimated", source, period, data_status, data_sufficiency: "sufficient", formula, rule_version, unavailable_reason: null };
 }
 
-export function unavailable(unit: Unit, source: string, period: Period = P7, rule_version: string | null = null): UnavailableValue {
-  return { amount: null, unit, calculation_type: "unavailable", source, period, data_status: "complete", data_sufficiency: "insufficient", formula: null, rule_version };
+export function unavailable(unit: Unit, source: string, reason: UnavailableReason, period: Period = P7, rule_version: string | null = null): UnavailableValue {
+  return { amount: null, unit, calculation_type: "unavailable", source, period, data_status: "complete", data_sufficiency: "insufficient", formula: null, rule_version, unavailable_reason: reason };
+}
+
+/** `computed_at` of the current version: the audit that created it or saw it again last. */
+export function computedAt(history: HistoryEvent[], created_at: string): string {
+  return [...history].reverse().find((h) => h.event === "seen_again" || h.event === "created")?.at ?? created_at;
+}
+
+/** Demo placements for `exclude_placements` (opaque ids, site names as the sanitized directory keeps them). */
+export function demoPlacements(count: number, prefix: string): ExcludePlacementsAction {
+  const placements = Array.from({ length: count }, (_, i) => ({ id: `${prefix}${String(i + 1).padStart(3, "0")}`, name: `site-${prefix}${i + 1}.example` }));
+  return { type: "exclude_placements", execution: "manual", placements_count: count, placements };
 }
 
 // --- Raw demo week (charts use these series; screens show Values) -----------------------------------
@@ -126,8 +138,17 @@ const RULE_PLACEMENTS = "zero_conv_placements@1";
 const PLACEMENTS_FORMULA = "Σ расход площадок, где клики ≥ 50 и конверсии = 0";
 const sys = "system" as const;
 
-function rec(r: Omit<Recommendation, "ad_account" | "postponed_until" | "blocked_actions" | "exposure_overlap" | "decision" | "measurement">): Recommendation {
-  return { ...r, ad_account: AD_ACCOUNT, postponed_until: null, blocked_actions: [], exposure_overlap: false, decision: null, measurement: null };
+function rec(r: Omit<Recommendation, "ad_account" | "postponed_until" | "blocked_actions" | "exposure_overlap" | "decision" | "measurement" | "computed_at">): Recommendation {
+  return {
+    ...r,
+    ad_account: AD_ACCOUNT,
+    postponed_until: null,
+    blocked_actions: [],
+    exposure_overlap: false,
+    decision: null,
+    measurement: null,
+    computed_at: computedAt(r.history, r.created_at),
+  };
 }
 const noExecution = { execution_mode: null, verification_status: null, accepted_at: null, done_at: null, before_state: null, verification_checked_at: null };
 
@@ -149,7 +170,7 @@ export const RECOMMENDATIONS: Recommendation[] = [
       text: `За неделю конверсия в кампании стоила ${CPA_SEARCH} ₽ при цели ${TARGET_CPA} ₽ — на ${DEV}% дороже. Расход вырос, а конверсий стало меньше, основной вклад — эта кампания. Снижение ставки уменьшит цену клика; через 7 дней после выполнения AdPilot сравнит CPA до и после.`,
       source: "template",
     },
-    action: { type: "decrease_bid", change_pct: dec(-CUT) },
+    action: { type: "decrease_bid", execution: "manual", change_pct: dec(-CUT) },
     evidence: {
       facts: {
         cost: actual(CAMPAIGNS[0].spend, "rub", DIRECT),
@@ -184,7 +205,7 @@ export const RECOMMENDATIONS: Recommendation[] = [
       text: `${NET_MSK.count} площадок РСЯ получили ${NET_MSK.clicks} кликов и ни одной конверсии за 7 дней. Исключение остановит расход на них; остальная часть РСЯ продолжит работать.`,
       source: "template",
     },
-    action: { type: "exclude_placements", placements_count: NET_MSK.count },
+    action: demoPlacements(NET_MSK.count, "msk"),
     evidence: {
       facts: {
         cost: actual(NET_MSK.spend, "rub", DIRECT),
@@ -214,12 +235,12 @@ export const RECOMMENDATIONS: Recommendation[] = [
     action_level: "review",
     allowed_actions: [],
     exposure: estimated(NET_REG.spend, "rub", BOTH, PLACEMENTS_FORMULA, RULE_PLACEMENTS),
-    can_save: unavailable("rub", BOTH, P7, RULE_PLACEMENTS),
+    can_save: unavailable("rub", BOTH, "no_forecast", P7, RULE_PLACEMENTS),
     explanation: {
       text: `На ${NET_REG.count} площадках были клики, но не было конверсий. Объём по каждой площадке невелик, поэтому проверьте список перед исключением: исключение делается вручную в Директе.`,
       source: "template",
     },
-    action: { type: "exclude_placements", placements_count: NET_REG.count },
+    action: demoPlacements(NET_REG.count, "reg"),
     evidence: {
       facts: {
         cost: actual(NET_REG.spend, "rub", DIRECT),
@@ -258,7 +279,7 @@ export const MONTH = Array.from({ length: 30 }, (_, i) => {
 export const MONTH_VALUES = {
   spend: actual(sum(MONTH.map((d) => d.spend)), "rub", DIRECT, SEPTEMBER),
   exposure: estimated(sum(MONTH.map((d) => d.exposure)), "rub", BOTH, "Σ по дневным аудитам без двойного учёта", "exposure_total@1", SEPTEMBER),
-  revenue: unavailable("rub", "yandex_metrika", SEPTEMBER),
+  revenue: unavailable("rub", "yandex_metrika", "source_missing", SEPTEMBER),
 };
 export const CAMPAIGN_SHARES = CAMPAIGNS.map((c) => ({
   ...c,

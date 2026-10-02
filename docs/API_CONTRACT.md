@@ -231,7 +231,7 @@ CPA (`high_cpa`: `high_cpa_target@N` / `high_cpa_baseline@N`), площадки 
                 "before_state": null, "verification_checked_at": null},
   "decision": null,
   "measurement": null, "history": [{"event": "created", "at": "2026-09-29T07:02:11+03:00", "actor": "system"}],
-  "created_at": "2026-09-29T07:02:11+03:00"
+  "computed_at": "2026-10-01T07:01:54+03:00", "created_at": "2026-09-29T07:02:11+03:00"
 }
 ```
 

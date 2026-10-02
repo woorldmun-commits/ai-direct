@@ -11,13 +11,13 @@ import { formatPeriod, type Value } from "@/lib/value";
 
 const COLORS = ["var(--brand)", "var(--info)", "var(--warning)"];
 
-function Tile({ label, v, tone = "", bar, note, reason }: { label: string; v: Value; tone?: string; bar: string; note?: ReactNode; reason?: string }) {
+function Tile({ label, v, tone = "", bar, note }: { label: string; v: Value; tone?: string; bar: string; note?: ReactNode }) {
   return (
     <div className="card relative overflow-hidden p-5">
       <span aria-hidden className={`absolute inset-x-0 top-0 h-1 ${bar}`} />
       <p className="text-sm text-muted">{label}</p>
       <div className="mt-2">
-        <ValueView v={v} caption reason={reason} className={`text-[28px] ${tone}`} />
+        <ValueView v={v} caption className={`text-[28px] ${tone}`} />
       </div>
       {note && <p className="mt-1 text-xs text-muted">{note}</p>}
     </div>
@@ -35,10 +35,10 @@ export default function Finance() {
         <Tile label="Потрачено" v={MONTH_VALUES.spend} bar="bg-text/20" />
         <Tile label={EXPOSURE} v={MONTH_VALUES.exposure} tone="text-danger" bar="bg-danger" note="без двойного учёта" />
         <Tile label="Можно сэкономить" v={today.can_save.total} tone="text-warning" bar="bg-warning" note="по открытым рекомендациям" />
-        <Tile label="Сэкономлено" v={today.saved} tone="text-success" bar="bg-success" note={SAVED_NOTE} reason="Пока нет замеров с подтверждённым выполнением" />
+        <Tile label="Сэкономлено" v={today.saved} tone="text-success" bar="bg-success" note={SAVED_NOTE} />
       </div>
       <div className="mt-4">
-        <Tile label="Выручка и ROAS" v={MONTH_VALUES.revenue} bar="bg-line" reason="Источник выручки не подключён — ROAS и ДРР не считаем, чтобы не выдумывать цифры" />
+        <Tile label="Выручка и ROAS" v={MONTH_VALUES.revenue} bar="bg-line" note="ROAS и ДРР не считаем, чтобы не выдумывать цифры" />
       </div>
 
       <section className="card mt-4 p-5" aria-labelledby="trend">

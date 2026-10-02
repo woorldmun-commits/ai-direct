@@ -2,7 +2,7 @@
 // with history, execution and measurement). They feed «История решений» and «Сэкономлено ≈».
 
 import type { HistoryEvent, Measurement, Recommendation } from "./contract";
-import { AD_ACCOUNT, actual, estimated, USER } from "./demo";
+import { AD_ACCOUNT, actual, computedAt, demoPlacements, estimated, USER } from "./demo";
 import type { Period } from "./value";
 
 const sys = "system" as const;
@@ -54,7 +54,7 @@ function placements(id: string, campaign: { id: string; name: string }, count: n
     exposure: estimated(spend, "rub", BOTH, "Σ расход площадок, где клики ≥ 50 и конверсии = 0", "zero_conv_placements@1", period),
     can_save: estimated(spend, "rub", BOTH, "Σ расход исключаемых площадок за период", "zero_conv_placements@1", period),
     explanation: { text: `${count} площадок РСЯ с кликами и без конверсий за 7 дней.`, source: "template" as const },
-    action: { type: "exclude_placements", placements_count: count },
+    action: demoPlacements(count, id.replace(/^rec_/, "")),
     evidence: {
       facts: { cost: actual(spend, "rub", DIRECT, period), conversions: actual(0, "count", "yandex_metrika", period), placements: actual(count, "count", DIRECT, period) },
       meta: {},
@@ -70,7 +70,7 @@ const REG = { id: "51234569", name: "РСЯ · Регионы" };
 const SPB = { id: "51230001", name: "Поиск · Санкт-Петербург" };
 const BRAND = { id: "51230002", name: "Поиск · Москва · Бренд" };
 
-export const PAST_RECOMMENDATIONS: Recommendation[] = [
+const PAST: Omit<Recommendation, "computed_at">[] = [
   {
     ...placements("rec_h01", MSK, 9, 21_200, { from: "2026-09-08", to: "2026-09-14" }, "2026-09-15T07:02:00+03:00"),
     status: "applied",
@@ -139,7 +139,7 @@ export const PAST_RECOMMENDATIONS: Recommendation[] = [
     exposure: estimated(14_600, "rub", BOTH, "cost при conversions = 0 и достаточном объёме кликов", "zero_conv_campaign@1", { from: "2026-09-11", to: "2026-09-17" }),
     can_save: estimated(14_600, "rub", BOTH, "cost за период", "zero_conv_campaign@1", { from: "2026-09-11", to: "2026-09-17" }),
     explanation: { text: "Кампания тратила бюджет без конверсий при достаточном числе кликов. Проверьте цель конверсии и корректность разметки.", source: "template" },
-    action: { type: "review_conversion_goal" },
+    action: { type: "investigate_zero_conversions", execution: "manual", checks: ["conversion_goals", "strategy", "search_queries_negative_keywords"], suggest: null },
     evidence: {
       facts: { cost: actual(14_600, "rub", DIRECT, { from: "2026-09-11", to: "2026-09-17" }), conversions: actual(0, "count", "yandex_metrika", { from: "2026-09-11", to: "2026-09-17" }) },
       meta: {},
@@ -183,7 +183,7 @@ export const PAST_RECOMMENDATIONS: Recommendation[] = [
     exposure: estimated(8_400, "rub", BOTH, "(cpa − target_cpa) × conversions", "high_cpa_target@1", { from: "2026-09-19", to: "2026-09-25" }),
     can_save: estimated(3_150, "rub", BOTH, "cost × |change_pct| / 100", "high_cpa_target@1", { from: "2026-09-19", to: "2026-09-25" }),
     explanation: { text: "CPA бренд-кампании на 40% выше цели при достаточном числе конверсий.", source: "template" },
-    action: { type: "decrease_bid", change_pct: "-10.00" },
+    action: { type: "decrease_bid", execution: "manual", change_pct: "-10.00" },
     evidence: {
       facts: {
         cpa: actual(4_200, "rub", BOTH, { from: "2026-09-19", to: "2026-09-25" }, { formula: "cost / conversions" }),
@@ -228,3 +228,5 @@ export const PAST_RECOMMENDATIONS: Recommendation[] = [
     history: [ev("created", "2026-09-20T07:02:00+03:00", sys), ev("viewed", "2026-09-20T11:10:00+03:00"), ev("rejected", "2026-09-20T11:15:00+03:00")],
   },
 ];
+
+export const PAST_RECOMMENDATIONS: Recommendation[] = PAST.map((r) => ({ ...r, computed_at: computedAt(r.history, r.created_at) }));

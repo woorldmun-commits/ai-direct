@@ -20,14 +20,12 @@ export function MetricCard({
   tone = "",
   extra,
   note,
-  reason,
 }: {
   label: string;
   v: Value;
   tone?: string;
   extra?: ReactNode;
   note?: string;
-  reason?: string;
 }) {
   return (
     <div className="card p-5">
@@ -36,7 +34,7 @@ export function MetricCard({
         {extra}
       </div>
       <div className="mt-2">
-        <ValueView v={v} caption reason={reason} className={`text-[28px] leading-tight md:text-[32px] ${tone}`} />
+        <ValueView v={v} caption className={`text-[28px] leading-tight md:text-[32px] ${tone}`} />
       </div>
       {note && <p className="mt-1 text-xs text-muted">{note}</p>}
     </div>
@@ -73,7 +71,7 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
         <div>
           <dt className="label">Можно сэкономить</dt>
           <dd>
-            <ValueView v={r.can_save} className="text-warning" reason="нет обоснованной формулы эффекта" />
+            <ValueView v={r.can_save} className="text-warning" />
           </dd>
         </div>
       </dl>
