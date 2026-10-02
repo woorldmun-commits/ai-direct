@@ -1,7 +1,6 @@
-import { AlertTriangle, CircleSlash, Database, LayoutGrid, Search, TrendingDown, TrendingUp } from "lucide-react";
+import { AlertTriangle, CircleSlash, Database, LayoutGrid, Search } from "lucide-react";
 import type { ReactNode } from "react";
-import { PRIORITY_LABEL, type Platform, type Priority } from "@/lib/demo";
-import { signed } from "@/lib/site";
+import type { Platform } from "@/lib/demo";
 
 export function Logo({ light = false, size = 28 }: { light?: boolean; size?: number }) {
   return (
@@ -15,54 +14,11 @@ export function Logo({ light = false, size = 28 }: { light?: boolean; size?: num
   );
 }
 
-const PRIORITY_STYLE: Record<Priority, string> = {
-  critical: "bg-danger-bg text-danger",
-  medium: "bg-warning-bg text-warning",
-  low: "bg-info-bg text-info",
-};
-const PRIORITY_DOT: Record<Priority, string> = {
-  critical: "bg-danger",
-  medium: "bg-warning",
-  low: "bg-info",
-};
-
-export function PriorityBadge({ priority }: { priority: Priority }) {
-  return (
-    <span className={`badge ${PRIORITY_STYLE[priority]}`}>
-      <span className={`size-1.5 rounded-full ${PRIORITY_DOT[priority]}`} />
-      {PRIORITY_LABEL[priority]}
-    </span>
-  );
-}
-
-export function PriorityIcon({ priority, size = 36 }: { priority: Priority; size?: number }) {
-  return (
-    <span
-      className={`grid shrink-0 place-items-center rounded-full ${PRIORITY_STYLE[priority]}`}
-      style={{ width: size, height: size }}
-    >
-      <AlertTriangle size={size * 0.45} strokeWidth={2.2} />
-    </span>
-  );
-}
-
 export function PlatformIcon({ platform }: { platform: Platform }) {
   const Icon = platform === "search" ? Search : LayoutGrid;
   return (
     <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-surface-2 text-muted" title={platform === "search" ? "Поиск" : "РСЯ"}>
       <Icon size={15} />
-    </span>
-  );
-}
-
-/** Change badge. `goodWhenDown` flips colors for costs and inefficient spend. */
-export function Delta({ value, goodWhenDown = false }: { value: number; goodWhenDown?: boolean }) {
-  const good = goodWhenDown ? value < 0 : value > 0;
-  const Icon = value >= 0 ? TrendingUp : TrendingDown;
-  return (
-    <span className={`badge ${good ? "bg-success-bg text-success" : "bg-danger-bg text-danger"}`}>
-      <Icon size={12} />
-      {signed(value)}%
     </span>
   );
 }
@@ -111,14 +67,5 @@ export function StateBox({
         {action && <div className="mt-3">{action}</div>}
       </div>
     </div>
-  );
-}
-
-export function Approx({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return (
-    <span className={`money ${className}`}>
-      <span className="mr-1 font-semibold opacity-70">≈</span>
-      {children}
-    </span>
   );
 }

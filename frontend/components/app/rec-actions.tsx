@@ -1,40 +1,73 @@
 "use client";
 
-import { Check, Clock, Hand, RotateCcw, X } from "lucide-react";
+import { Check, CheckCheck, Clock, Hand, RotateCcw, X } from "lucide-react";
 import { useState } from "react";
-import { REJECT_REASONS, STATUS_LABEL, type RecStatus, type RejectReason } from "@/lib/demo";
+import {
+  BLOCKED_LABEL,
+  REJECT_LABEL,
+  REJECT_REASONS,
+  resultLabel,
+  STATUS_LABEL,
+  type Recommendation,
+  type RecStatus,
+  type RejectReason,
+  type UserAction,
+} from "@/lib/contract";
+import { formatDate } from "@/lib/value";
 import { useDemo } from "./store";
 
 const STATUS_STYLE: Record<RecStatus, string> = {
   new: "bg-info-bg text-info",
-  viewed: "bg-surface-2 text-text",
-  accepted: "bg-warning-bg text-warning",
-  applied: "bg-brand-soft text-brand",
-  measured: "bg-success-bg text-success",
+  requires_decision: "bg-warning-bg text-warning",
+  accepted: "bg-brand-soft text-brand",
+  applied: "bg-success-bg text-success",
   postponed: "bg-surface-2 text-muted",
   rejected: "bg-surface-2 text-muted",
 };
 
-export function StatusBadge({ status }: { status: RecStatus }) {
-  return <span className={`badge ${STATUS_STYLE[status]}`}>{STATUS_LABEL[status]}</span>;
+/** Short badge text; «Применена» is never shown (API_CONTRACT §3.3). */
+function badgeText(r: Pick<Recommendation, "status" | "execution">): string {
+  if (r.status !== "applied") return STATUS_LABEL[r.status];
+  const { execution_mode: mode, verification_status: vs } = r.execution;
+  if (mode === "none") return "Проверено";
+  if (vs === "confirmed") return "Выполнено · подтверждено";
+  if (vs === "not_confirmed") return "Выполнено · не подтверждено";
+  return "Выполнено вручную · сверка";
 }
 
-/** "Не буду" always asks why: the reason is a pilot metric (false positives, missing context). */
-function RejectForm({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: (r: RejectReason) => void }) {
+export function StatusBadge({ r }: { r: Pick<Recommendation, "status" | "execution"> }) {
+  const tone = r.status === "applied" && r.execution.verification_status === "not_confirmed" ? "bg-warning-bg text-warning" : STATUS_STYLE[r.status];
+  return <span className={`badge ${tone}`}>{badgeText(r)}</span>;
+}
+
+/** «Не буду» always asks why (closed list, §4.1): it is the pilot metric of rule quality. */
+function RejectForm({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: (r: RejectReason, comment: string) => void }) {
   const [reason, setReason] = useState<RejectReason | null>(null);
+  const [comment, setComment] = useState("");
+  const needsComment = reason === "other" && !comment.trim();
   return (
     <fieldset className="w-full rounded-2xl border border-line bg-surface p-4">
       <legend className="px-1 text-sm font-semibold">Почему не будете выполнять?</legend>
       <div className="mt-1 flex flex-wrap gap-2">
         {REJECT_REASONS.map((r) => (
-          <label key={r} className="chip cursor-pointer has-[:checked]:border-brand has-[:checked]:text-brand">
-            <input type="radio" name="reject-reason" className="sr-only" checked={reason === r} onChange={() => setReason(r)} />
-            {r}
+          <label key={r.code} className="chip cursor-pointer has-[:checked]:border-brand has-[:checked]:text-brand">
+            <input type="radio" name="reject-reason" className="sr-only" checked={reason === r.code} onChange={() => setReason(r.code)} />
+            {r.label}
           </label>
         ))}
       </div>
+      <label className="mt-3 block text-sm">
+        <span className="label">Комментарий {reason === "other" ? "(обязательно)" : "(по желанию)"}</span>
+        <textarea
+          value={comment}
+          maxLength={500}
+          onChange={(e) => setComment(e.target.value)}
+          rows={2}
+          className="mt-1 w-full rounded-xl border border-line bg-surface p-2 text-sm outline-none focus:border-brand"
+        />
+      </label>
       <div className="mt-3 flex gap-2">
-        <button className="btn btn-primary btn-sm" disabled={!reason} onClick={() => reason && onConfirm(reason)}>
+        <button className="btn btn-primary btn-sm" disabled={!reason || needsComment} onClick={() => reason && onConfirm(reason, comment.trim())}>
           Сохранить решение
         </button>
         <button className="btn btn-ghost btn-sm" onClick={onCancel}>
@@ -45,79 +78,85 @@ function RejectForm({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: 
   );
 }
 
+const BUTTON: Record<Exclude<UserAction, "view" | "reject">, { label: string; icon: typeof Check; style: string }> = {
+  accept: { label: "Принять к выполнению", icon: Check, style: "btn-primary" },
+  mark_done_manually: { label: "Выполнено вручную", icon: Hand, style: "btn-secondary" },
+  check: { label: "Проверил", icon: CheckCheck, style: "btn-primary" },
+  postpone: { label: "Позже", icon: Clock, style: "btn-secondary" },
+};
+
 /**
- * Human decision buttons. In v1.0 AdPilot never changes the ad account: the user makes the change
- * by hand in Yandex Direct, AdPilot verifies it against Direct data and later measures the effect.
+ * Decision buttons, drawn only from `allowed_actions` (blocked ones show their reason). In v1.0 AdPilot never
+ * changes the ad account: the user changes it by hand in Direct; AdPilot verifies it by reading Direct data
+ * and measures the effect 7 days later.
  */
-export function RecActions({ id, status, onDone, compact = false }: { id: string; status: RecStatus; onDone?: () => void; compact?: boolean }) {
-  const { setStatus, problems } = useDemo();
+export function RecActions({ r, onDone, compact = false }: { r: Recommendation; onDone?: () => void; compact?: boolean }) {
+  const { act, reset } = useDemo();
   const [rejecting, setRejecting] = useState(false);
-  const set = (s: RecStatus, reason?: RejectReason) => {
-    setStatus(id, s, reason);
+  const sm = compact ? "btn-sm" : "";
+  const run = (a: UserAction, payload?: Parameters<typeof act>[2]) => {
+    act(r.id, a, payload);
     setRejecting(false);
     onDone?.();
   };
-  const sm = compact ? "btn-sm" : "";
-  const reset = (
-    <button className="inline-flex items-center gap-1 text-xs font-semibold text-muted underline-offset-2 hover:underline" onClick={() => setStatus(id, "new")}>
-      <RotateCcw size={12} /> Вернуть в новые
+
+  if (rejecting) return <RejectForm onCancel={() => setRejecting(false)} onConfirm={(reason, comment) => run("reject", { reason, comment })} />;
+
+  const resetLink = (
+    <button className="inline-flex items-center gap-1 text-xs font-semibold text-muted underline-offset-2 hover:underline" onClick={() => reset(r.id)}>
+      <RotateCcw size={12} /> Сбросить решение (демо)
     </button>
   );
+  const allowed = r.allowed_actions.filter((a) => a !== "view");
 
-  if (rejecting) return <RejectForm onCancel={() => setRejecting(false)} onConfirm={(r) => set("rejected", r)} />;
-
-  if (status === "rejected" || status === "measured") {
-    const reason = problems.find((p) => p.id === id)?.rejectReason;
-    return (
-      <div className="flex flex-wrap items-center gap-3">
-        <StatusBadge status={status} />
-        {reason && <span className="text-xs text-muted">Причина: {reason}</span>}
-        {reset}
-      </div>
-    );
-  }
-
-  if (status === "applied") {
+  if (!allowed.length) {
     return (
       <div className="space-y-1.5">
         <div className="flex flex-wrap items-center gap-3">
-          <StatusBadge status={status} />
-          {reset}
+          <StatusBadge r={r} />
+          {r.decision?.reason && <span className="text-xs text-muted">Причина: {REJECT_LABEL[r.decision.reason]}</span>}
+          {resetLink}
         </div>
-        <p className="text-xs text-muted">Сверяем по данным Директа в следующем снимке. Эффект измерим через 7 дней после сверки.</p>
-      </div>
-    );
-  }
-
-  const reject = (
-    <button className={`btn btn-ghost ${sm}`} onClick={() => setRejecting(true)}>
-      <X size={16} /> Не буду
-    </button>
-  );
-
-  if (status === "accepted") {
-    return (
-      <div className="space-y-2">
-        <p className="text-xs text-muted">Внесите изменение в Яндекс Директе вручную, затем отметьте здесь.</p>
-        <div className="flex flex-wrap gap-2">
-          <button className={`btn btn-primary ${sm}`} onClick={() => set("applied")}>
-            <Hand size={16} /> Выполнено вручную
-          </button>
-          {reject}
-        </div>
+        {r.status === "applied" && <p className="text-xs text-muted">{resultLabel(r)}.</p>}
+        {r.decision?.comment && <p className="text-xs text-muted">«{r.decision.comment}»</p>}
+        {r.blocked_actions.map((b) => (
+          <p key={b.action} className="text-xs text-muted">
+            {BLOCKED_LABEL[b.reason]}
+          </p>
+        ))}
       </div>
     );
   }
 
   return (
-    <div className="flex flex-wrap gap-2">
-      <button className={`btn btn-primary ${sm}`} onClick={() => set("accepted")}>
-        <Check size={16} /> Принять к выполнению
-      </button>
-      <button className={`btn btn-secondary ${sm}`} onClick={() => set("postponed")} disabled={status === "postponed"}>
-        <Clock size={16} /> Отложить
-      </button>
-      {reject}
+    <div className="space-y-2">
+      {r.status === "accepted" && <p className="text-xs text-muted">{resultLabel(r)}.</p>}
+      {r.status === "postponed" && r.postponed_until && <p className="text-xs text-muted">Отложена до {formatDate(r.postponed_until)}. Решить можно и раньше.</p>}
+      <div className="flex flex-wrap gap-2">
+        {allowed.map((a) =>
+          a === "reject" ? (
+            <button key={a} className={`btn btn-ghost ${sm}`} onClick={() => setRejecting(true)}>
+              <X size={16} /> Не буду
+            </button>
+          ) : (
+            <button
+              key={a}
+              className={`btn ${BUTTON[a].style} ${sm}`}
+              disabled={a === "postpone" && r.status === "postponed"}
+              onClick={() => run(a, a === "postpone" ? { until: "2026-10-09" } : undefined)}
+            >
+              {(() => {
+                const Icon = BUTTON[a].icon;
+                return <Icon size={16} />;
+              })()}
+              {BUTTON[a].label}
+            </button>
+          ),
+        )}
+      </div>
+      {r.status !== "accepted" && allowed.includes("mark_done_manually") && (
+        <p className="text-xs text-muted">Уже внесли изменение в Директе сами? Отметьте «Выполнено вручную» — сверка будет менее надёжной.</p>
+      )}
     </div>
   );
 }

@@ -3,18 +3,9 @@ export const SITE_URL = "https://adpilot.ru";
 
 const rubFmt = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 
-/** 42750 → "42 750 ₽" */
+/** 42750 → "42 750 ₽". Landing only (budget slider input); business numbers go through <ValueView>. */
 export function rub(n: number): string {
   return `${rubFmt.format(Math.round(n))} ₽`;
-}
-
-/** Percent change from prev to cur, rounded: 3120 → 3919 gives 26. */
-export function pctChange(prev: number, cur: number): number {
-  return Math.round(((cur - prev) / prev) * 100);
-}
-
-export function signed(n: number): string {
-  return n > 0 ? `+${n}` : `${n}`.replace("-", "−");
 }
 
 // Wording (P0 D9/D10): an estimate of spend with signs of inefficiency, never "lost money".
