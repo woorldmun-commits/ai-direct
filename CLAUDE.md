@@ -2,7 +2,7 @@
 
 ## Проект: ai-direct
 
-Платформа контроля рекламных расходов в Яндекс.Директ с AI-аналитиком: показывает потерянные деньги в ₽, причины и действия. Контекст — `_docs/project.md`, стек — `_docs/stack.md`, детали — `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`.
+Платформа контроля рекламных расходов в Яндекс.Директ с AI-аналитиком: показывает расход с признаками неэффективности в ₽ (оценка, без двойного учёта), причины и действия. Контекст — `_docs/project.md`, стек — `_docs/stack.md`, детали — `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`.
 
 - **Тесты:** `cd backend && .venv/Scripts/python.exe -m pytest` (не npm). Venv на Python 3.11 (`uv venv --python 3.11 .venv`, затем `uv pip install -r requirements-dev.txt`): системный 3.14 не годится, `pgserver` требует ≤ 3.12. Без `pgserver` тесты схемы берут `TEST_DATABASE_URL`.
 - **Числа считает детерминированный код** (`rules/`, `audit/`). LLM только объясняет и не вводит чисел, которых нет во входных данных.
