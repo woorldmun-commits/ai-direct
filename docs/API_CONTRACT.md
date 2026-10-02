@@ -3,19 +3,15 @@
 Слой между бэкендом и фронтендом. Описывает **бизнес-сущности**, а не таблицы: фронтенд не знает про `issues`,
 `findings`, `snapshots` и `recommendation_events`. Схема БД может меняться — контракт нет (только новой версией).
 
-**Контракт v1.0 — только то, что продукт обещает сейчас.** AdPilot v1.0 — доказательный контроль рекламного кабинета
-с обязательным решением человека ([STRATEGY.md](STRATEGY.md), [VERSION_SCOPE.md](VERSION_SCOPE.md)): чтение данных,
-аудит по трём правилам, рекомендации с доказательствами, решение человека, ручное выполнение, сверка по данным Директа
-и замер эффекта. **В v1.0 AdPilot не изменяет рекламные кабинеты:** в контракте нет ни одного запроса, который пишет
-в Директ или Метрику. Изменения в кабинете вносит человек вручную.
+**Контракт v1.0 — только то, что продукт обещает сейчас** ([STRATEGY.md](STRATEGY.md),
+[VERSION_SCOPE.md](VERSION_SCOPE.md)): чтение данных, аудит по трём правилам, рекомендации с доказательствами, решение
+человека, ручное выполнение, сверка по данным Директа и замер эффекта. **AdPilot v1.0 не изменяет рекламные
+кабинеты:** запросов, пишущих в Директ или Метрику, в контракте нет — изменения вносит человек вручную. Исполнение через
+Direct API и «Спросить AI» — v1.1 ([API_CONTRACT_EXECUTION.md](API_CONTRACT_EXECUTION.md),
+[EXECUTION_SAFETY.md](EXECUTION_SAFETY.md)).
 
-Исполнение через Direct API (предпросмотр «было → станет», одобрение, кворум по риску, применение, откат) и
-«Спросить AI» — **Deferred to v1.1**: [API_CONTRACT_EXECUTION.md](API_CONTRACT_EXECUTION.md), безопасность —
-[EXECUTION_SAFETY.md](EXECUTION_SAFETY.md). Ничего оттуда в v1.0 не реализуется и не обещается.
-
-Источники правды, которые контракт отражает и не переопределяет: `Value` — `backend/app/contract.py` и DATA_MODEL.md
-§5; уровни действия — `app/audit/policy.py`; exposure — ECONOMICS.md; объяснения — AI_GOVERNANCE.md; жизненный цикл
-рекомендации — DATA_MODEL.md §8.3.
+Источники правды (контракт их не переопределяет): `Value` — `app/contract.py`, DATA_MODEL.md §5; уровни действия —
+`app/audit/policy.py`; exposure — ECONOMICS.md; объяснения — AI_GOVERNANCE.md; жизненный цикл — DATA_MODEL.md §8.3.
 
 ## 1. Общие правила
 
@@ -54,7 +50,7 @@
 {"amount": "12500.00", "unit": "rub", "calculation_type": "estimated",
  "source": "yandex_direct+yandex_metrika", "period": {"from": "2026-09-22", "to": "2026-09-28"},
  "data_status": "complete", "data_sufficiency": "sufficient",
- "formula": "(cpa - target_cpa) * conversions", "rule_version": "high_cpa_target@1"}
+ "formula": "(cpa - target_cpa) * conversions", "rule_version": "high_cpa_target@1", "unavailable_reason": null}
 ```
 
 | Поле | Значения | |
@@ -67,18 +63,25 @@
 | `data_status` | `complete` · `partial` | `partial` — в периоде есть дни, которые источник ещё может пересчитать |
 | `data_sufficiency` | `sufficient` · `insufficient` | |
 | `formula` · `rule_version` | строка или `null` · `имя@N` или `null` | как посчитано и каким правилом |
+| `unavailable_reason` | код или `null` | почему числа нет — только и обязательно при `unavailable` |
 
 Названия — как в `app/contract.py`: `Value` бэкенда без `snapshot_id` и с `period` вместо `period_from`/`period_to`.
-**Инварианты (проверяет бэкенд):** `unavailable` ⇔ `insufficient` ⇔ `amount = null`; `estimated` ⇒ `formula` не пустая.
+**Инварианты (проверяет бэкенд):** `unavailable` ⇔ `insufficient` ⇔ `amount = null` ⇔ `unavailable_reason` не `null`;
+`estimated` ⇒ `formula` не пустая.
+
+`unavailable_reason` — закрытый список, сверен с `Reason` правил (`rules/domain.py`); тексты — словарь фронтенда:
+`source_missing` (источник не подключён или не отдал данные) · `no_conversions` (нет конверсий) · `history_insufficient`
+(мало истории для сравнения) · `volume_insufficient` (мало расхода, кликов, конверсий) · `no_forecast` (нет обоснованной
+формулы прогноза — «проверить») · `no_data` (нет значений; так же отдаются записи до миграции 0004 без причины).
 
 | `calculation_type` | Показ (обязательно для фронтенда) |
 |---|---|
 | `actual` | `18 400 ₽` — без «≈» |
 | `estimated` | `≈ 12 500 ₽`, формула — в подсказке «Как посчитано» |
-| `unavailable` | «Недостаточно данных» — **никакого числа, нуля или прочерка вместо числа** |
+| `unavailable` | «Недостаточно данных» + текст причины по `unavailable_reason` — **без числа, нуля или прочерка** |
 
-`data_status = partial` → пометка «данные за последние дни могут уточниться». Тип в TypeScript строится так, чтобы
-ошибку нельзя было скомпилировать: `amount: string` только в ветках `actual | estimated`, `amount: null` — в `unavailable`.
+`data_status = partial` → «данные за последние дни могут уточниться». Тип TypeScript не даёт скомпилировать ошибку:
+`amount: string` только в `actual | estimated`; `amount: null` и `unavailable_reason` — только в `unavailable`.
 
 ## 3. Жизненный цикл рекомендации
 
@@ -196,16 +199,18 @@ CPA (`high_cpa`: `high_cpa_target@N` / `high_cpa_baseline@N`), площадки 
 ```json
 {"id": "rec_8f2c1", "version_id": "rv_77a01", "title": "CPA выше целевого", "ad_account": {"id": "acc_2", "login": "client-login"},
  "object": {"type": "campaign", "id": "51234567", "name": "Поиск — Москва"},
- "action_level": "change", "status": "requires_decision", "execution_mode": null, "verification_status": null,
+ "action_level": "change", "action": {"type": "decrease_bid", "execution": "manual", "change_pct": "-15.00"},
+ "status": "requires_decision", "execution_mode": null, "verification_status": null,
  "exposure": "Value", "exposure_overlap": false, "can_save": "Value", "data_status": "complete",
- "period": {"from": "2026-09-22", "to": "2026-09-28"},
+ "period": {"from": "2026-09-22", "to": "2026-09-28"}, "computed_at": "2026-10-01T07:01:54+03:00",
  "created_at": "2026-09-29T07:02:11+03:00", "updated_at": "2026-10-01T07:01:54+03:00"}
 ```
 
 `filter`: `all` · `new` · `requires_decision` · `accepted` · `done` (`applied`) · `postponed` · `rejected`; по
 умолчанию `requires_decision` + `new` + `accepted`. Плюс `ad_account` (id кабинета), `limit` (1–100, по умолчанию 50),
 `cursor`. Ответ: `{"items": [...], "next_cursor": "…" | null}`. Порядок задаёт бэкенд: активные сначала, внутри — по
-`exposure.amount` по убыванию, `unavailable` — в конце. Поля `severity` нет.
+`exposure.amount` по убыванию, `unavailable` — в конце. Поля `severity` нет. `computed_at` — когда посчитана
+текущая версия (`version_id`): «данные на …» карточки.
 
 ### `Recommendation` (паспорт) — `GET /workspaces/{ws}/recommendations/{id}`
 
@@ -217,7 +222,7 @@ CPA (`high_cpa`: `high_cpa_target@N` / `high_cpa_baseline@N`), площадки 
   "allowed_actions": ["accept", "mark_done_manually", "postpone", "reject"], "blocked_actions": [],
   "exposure": "Value", "exposure_overlap": false, "can_save": "Value",
   "explanation": {"text": "CPA кампании — 2 500 ₽, это на 25% выше целевого…", "source": "template"},
-  "action": {"type": "decrease_bid", "change_pct": "-15.00"},
+  "action": {"type": "decrease_bid", "execution": "manual", "change_pct": "-15.00"},
   "evidence": {"facts": {"cost": "Value", "conversions": "Value", "cpa": "Value", "cpc": "Value", "cvr": "Value"},
                "meta": {"baseline_data_quality": "high"}, "rule_version": "high_cpa_target@1"},
   "safety": {"safety_policy": "safety_policy@2", "candidate_level": "change", "policy_reasons": [], "data_status": "complete"},
@@ -240,8 +245,18 @@ CPA (`high_cpa`: `high_cpa_target@N` / `high_cpa_baseline@N`), площадки 
   (например, «проверить») — `unavailable`, а не копия `exposure`.
 - `explanation.text` — готовый текст (`llm` или `template`); все числа в нём — из `evidence`, каждое утверждение
   опирается на факт (AI_GOVERNANCE.md §2). Это единственная AI-функция v1.0; общего чата нет.
-- `action` — что выдало правило (`type`, параметры) — **что человек меняет в кабинете сам**. Как именно — текстом в
-  `explanation` и подсказке UI; кнопки «Применить» в v1.0 нет.
+- `action` — **что человек меняет в кабинете сам** (как именно — в `explanation` и подсказке UI; кнопки «Применить»
+  нет); `execution` в v1.0 всегда `manual`. Ровно четыре формы, дискриминатор `type`:
+
+  | `type` | Правило | Параметры |
+  |---|---|---|
+  | `decrease_bid` | `high_cpa_target` | `change_pct` — строка-число < 0 (`"-15.00"`) |
+  | `investigate_cpa_growth` | `high_cpa_baseline` | `suggest`: `set_target_cpa` · `null` |
+  | `investigate_zero_conversions` | `zero_conv_campaign` | `checks[]`: `conversion_goals` · `strategy` · `search_queries_negative_keywords`; `suggest`: `set_target_cpa` · `null` |
+  | `exclude_placements` | `zero_conv_placements` | `placements_count`; `placements[]`: `{id, name}` |
+
+  `placements[].id` — непрозрачный id площадки; `name` — домен сайта или id приложения после санитизации (не ПД,
+  ARCHITECTURE.md §2.4; человек исключает площадку по нему в Директе; в LLM не уходит), `null` — имя недоступно.
 - `execution.before_state` — исходное состояние объекта для сверки (§6.1): `{"captured_at": "accept",
   "reliability": "normal", "read_at": "…", "parameters": {"bid": "Value"}}`. `captured_at`: `accept` · 
   `mark_done_manually`; `reliability`: `normal` · `reduced` (снято при отметке без `accept`). Не прочитано — `null`.
@@ -280,14 +295,12 @@ CPA (`high_cpa`: `high_cpa_target@N` / `high_cpa_baseline@N`), площадки 
 
 ### 6.1 Сверка ручного выполнения (только чтение)
 
-**Исходное состояние фиксируется при `accept`:** сервер в момент действия читает текущие параметры затронутого
-объекта из Директа (`Campaigns.get` и аналогичные `*.get` по типу действия: цель CPA, ставка, список исключённых
-площадок, статус показов — только чтение) и сохраняет их как `before_state` в событии `accepted`. Если `accept` не
-было (сразу `mark_done_manually`), `before_state` читается в момент отметки и помечается `reliability = reduced`:
-изменение могло быть сделано раньше, и «до» уже содержит его — такая сверка менее надёжна, это видно в UI (§3.3).
-
-После `mark_done_manually` синхронизация снова **читает** те же параметры и сравнивает с `before_state` и ожидаемым
-направлением изменения:
+**Исходное состояние фиксируется при `accept`:** сервер читает параметры объекта из Директа (`Campaigns.get` и
+аналогичные `*.get` по типу действия: цель CPA, ставка, исключённые площадки, статус показов) и сохраняет их как
+`before_state` в событии `accepted`. Без `accept` (сразу `mark_done_manually`) `before_state` читается при отметке с
+`reliability = reduced`: «до» уже может содержать изменение — сверка менее надёжна, это видно в UI (§3.3).
+После `mark_done_manually` синхронизация снова **читает** параметры и сравнивает с `before_state` и ожидаемым
+направлением:
 
 | Результат чтения | `verification_status` | Событие |
 |---|---|---|
@@ -295,8 +308,8 @@ CPA (`high_cpa`: `high_cpa_target@N` / `high_cpa_baseline@N`), площадки 
 | параметр не изменён | `not_confirmed` | `verification_not_confirmed` |
 | чтение недоступно, нет `before_state`, тип действия не сверяется | остаётся `pending` | — |
 
-AdPilot не утверждает, что изменение сделано, пока сверка его не подтвердила; автоматически «подтверждённым» ручное
-выполнение не становится. Сколько синхронизаций ждать до `not_confirmed` — открытый вопрос (DATA_MODEL.md §11).
+Пока сверка не подтвердила изменение, AdPilot не утверждает, что оно сделано. Сколько синхронизаций ждать до
+`not_confirmed` — открытый вопрос (DATA_MODEL.md §11).
 
 ## 7. `measurement` — результат замера
 
@@ -324,17 +337,18 @@ AdPilot не утверждает, что изменение сделано, п�
 
 ```json
 {
-  "access": "paid", "today": "2026-10-02", "last_audit_at": "2026-10-02T07:01:54+03:00", "spent": "Value",
+  "last_audit_at": "2026-10-02T07:01:54+03:00", "data_status": "complete",
+  "audit_scope": {"rules": ["high_cpa_target@1", "zero_conv_campaign@1", "zero_conv_placements@1"],
+                  "period": {"from": "2026-09-25", "to": "2026-10-01"}, "ad_accounts": {"checked": 2, "excluded": 0},
+                  "campaigns": 14},
+  "spent": "Value",
   "exposure": {"total": "Value", "overlap": "Value", "version": "exposure_total@1", "formula": "Σ по кабинетам max(...)",
                "components": [{"issue_type": "high_cpa", "amount": "Value"}],
                "coverage": {"included": 3, "unavailable": 1}},
-  "can_save": {"total": "Value", "overlap": "Value", "components": [], "coverage": {"included": 2, "unavailable": 2}},
-  "saved": "Value", "conversions": "Value", "counts": {"new": 2, "requires_decision": 3, "accepted": 1, "postponed": 1},
-  "top": ["RecommendationListItem — до 5"],
-  "recent_actions": [{"recommendation_id": "rec_8f2c1", "title": "CPA выше целевого", "event": "verification_confirmed", "at": "…"}],
-  "changes": {"period": {"from": "2026-09-30", "to": "2026-10-01"}, "spent_delta_pct": "Value", "conversions_delta_pct": "Value", "cpa_delta_pct": "Value"},
-  "data_freshness": {"yandex_direct": {"status": "connected", "data_to": "2026-10-01"},
-                     "yandex_metrika": {"status": "permission_missing", "data_to": null}}
+  "counts": {"active": 4}, "top": ["RecommendationListItem — до 3"],
+  "data_freshness": {"last_snapshot_at": "…",
+                     "yandex_direct": {"status": "connected", "data_to": "2026-10-01", "last_success_at": "…"},
+                     "yandex_metrika": {"status": "permission_missing", "data_to": null, "last_success_at": null}}
 }
 ```
 
@@ -342,21 +356,27 @@ AdPilot не утверждает, что изменение сделано, п�
   workspace, включённых в анализ. **Не сумма карточек:** `total` считает `audit/exposure.py` по объединению
   затронутого расхода (ECONOMICS.md); `components` — по типам проблем, `overlap` — сколько вычтено как пересечение,
   `version` и `formula` — как посчитано. Пояснение в UI: «Оценка расходов, по которым система обнаружила признаки
-  неэффективности. Одна и та же сумма учитывается в итоге только один раз». `coverage` — сколько рекомендаций без
-  числа в итог не попали. `can_save` — тем же способом.
-- `saved` — только замеры с `counts_in_saved_total = true`. Пока таких нет — `unavailable`, а не `0`.
+  неэффективности. Одна и та же сумма учитывается в итоге только один раз». `coverage` — карточки без числа вне итога.
+- `audit_scope` — что проверил последний аудит («Проблем не найдено — вот что проверено»): `rules` — правила@версии,
+  `period` — окно оценки (7 дней до последнего полного дня данных), `ad_accounts` — кабинеты в аудите и исключённые
+  (нет доступа или снимка), `campaigns` — кампании со статистикой в окне. Аудита не было — `null`.
+- `spent` — `actual`: расход этих кампаний за `audit_scope.period` по данным Директа; снимков нет — `unavailable`.
+- `counts.active` — активные рекомендации; `top` — до 3: по уровню действия, затем exposure и уверенности.
+- `data_freshness.*`: `status` — DATA_MODEL.md §8.1 (`null` — источник не подключён), `data_to` — последний день в
+  снимках, `last_success_at` — последний успешный запрос к API источника.
 - `last_audit_at = null` → аудита ещё не было: экран «Подключите Директ», без нулей и демо-цифр.
 
-`access`: `free_audit` — результат одного бесплатного аудита, решения по рекомендациям доступны, плашка «Мониторинг
-продолжится после подключения тарифа» · `paid` — всё по тарифу · `inactive` — подписка закончилась: прошлые данные
-только для чтения, новых аудитов, сверок и замеров нет.
+**Появится на неделе 4 вместе с событиями v1.0** (решения §6, сверка, замер), сейчас не отдаётся: `counts` по статусам
+(`new`, `requires_decision`, `accepted`, `postponed`), `recent_actions` (`[{recommendation_id, title, event, at}]`),
+`saved` (только замеры с `counts_in_saved_total = true`; нет — `unavailable`, не `0`). Позже, отдельным изменением
+контракта: `access` — с биллингом (§13): `free_audit` (один бесплатный аудит, решения доступны) · `paid` · `inactive`
+(прошлые данные только для чтения); `can_save` итогом (тем же способом, что `exposure`), `conversions`, `changes`.
 
 ### `GET /workspaces/{ws}/analytics` — «Аналитика»
 
-Параметры: `from`, `to` (не больше 90 дней), `group` (`day` · `campaign`), `ad_account` (по умолчанию — все включённые
-в анализ). Ответ: итоги и ряды — расход, клики, конверсии, CPA, CTR (каждое — `Value`), изменения к предыдущему
-периоду, exposure и возможности экономии, строки по кампаниям. Выручка и ROI — только при подключённом источнике и
-достаточности данных, иначе `unavailable`. Аналитика не BI: произвольных измерений и конструктора отчётов нет.
+Параметры: `from`, `to` (≤ 90 дней), `group` (`day` · `campaign`), `ad_account` (по умолчанию — все в анализе).
+Ответ: итоги и ряды — расход, клики, конверсии, CPA, CTR (каждое — `Value`), изменения к прошлому периоду, exposure и
+экономия, строки по кампаниям. Выручка и ROI — только при подключённом источнике, иначе `unavailable`. Не BI.
 
 ### Подключения и импорт данных — «Настройки → Интеграции»
 
@@ -383,14 +403,12 @@ AdPilot не утверждает, что изменение сделано, п�
   action_unavailable` с `entitlement_exceeded`. Workspace организации-агентства подключает Директ только после
   подтверждения мандата клиента (`POST /workspaces/{ws}/legal/agency-client-mandate` `{version}`, LEGAL.md); без него
   → `422 acceptance_required`.
-- Импорт офлайн-конверсий и квалификации лидов (CSV) — после базового среза (v1.0.x / v1.1, VERSION_SCOPE.md); в
-  контракте v1.0 его нет.
+- Импорт офлайн-конверсий и квалификации лидов (CSV) — v1.0.x / v1.1 (VERSION_SCOPE.md), в контракте v1.0 его нет.
 
 ## 9. Объяснение — без общего чата
 
-AI в v1.0 — только `explanation` конкретной рекомендации (§5): утверждения → доказательства, непрозрачные ссылки
-вместо ID Яндекса (AI_GOVERNANCE.md §2). Отдельного эндпоинта для вопросов к AI нет. «Спросить AI» (только чтение) —
-v1.1, API_CONTRACT_EXECUTION.md §8.
+AI в v1.0 — только `explanation` рекомендации (§5): утверждения → доказательства, непрозрачные ссылки вместо ID
+Яндекса (AI_GOVERNANCE.md §2). Эндпоинта вопросов к AI нет; «Спросить AI» — v1.1 (API_CONTRACT_EXECUTION.md §8).
 
 ## 10. Организация, команда, роли
 
@@ -474,11 +492,9 @@ v1.1, API_CONTRACT_EXECUTION.md §8.
 
 ## 14. Чего нет в v1.0
 
-- **Любой записи в рекламные кабинеты через API:** предпросмотра «было → станет» из Директа для применения, `approve`,
-  `apply`, `approve_and_apply`, `cancel`, `rollback`, кворума одобрений по риску (`risk_level`, `required_approvals`,
-  `approvals`, `approval_policy`), `execution_mode = api`, `execution_status`, `rollback_status`, `write_access`,
-  статусов `approved` / `failed` / `cancelled`. UX «Применить одним кликом» нет. → v1.1,
-  [API_CONTRACT_EXECUTION.md](API_CONTRACT_EXECUTION.md).
-- **Общего AI-чата** «Спросить AI» и создания действия из него → v1.1 (только чтение); автономных агентов нет.
-- Автоматизации по заранее одобренным правилам, Outcome Graph, CRM, VK Реклама → v2.0. Полный список —
-  [VERSION_SCOPE.md](VERSION_SCOPE.md), стратегия — [STRATEGY.md](STRATEGY.md).
+- **Записи в кабинеты через API** → v1.1 ([API_CONTRACT_EXECUTION.md](API_CONTRACT_EXECUTION.md)): предпросмотр
+  «было → станет», `approve`, `apply`, `approve_and_apply`, `cancel`, `rollback`, кворум по риску (`risk_level`,
+  `required_approvals`, `approvals`, `approval_policy`), `execution_mode = api`, `execution_status`, `rollback_status`,
+  `write_access`, статусы `approved` / `failed` / `cancelled`, «Применить одним кликом».
+- **AI-чата** «Спросить AI» → v1.1 (только чтение); автономных агентов нет. Автоматизации по одобренным правилам,
+  Outcome Graph, CRM, VK Реклама → v2.0 ([VERSION_SCOPE.md](VERSION_SCOPE.md)).
