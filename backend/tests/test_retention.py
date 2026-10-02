@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 import psycopg
 import pytest
 
+from app.legal.documents import record_acceptance
 from app.tenancy import workspace_scope
 from app.worker.retention import purge_personal_data, purge_search_queries, retention_cutoff
 from test_schema import chain, key, one  # noqa: F401 — chain: фикстура
@@ -153,6 +154,21 @@ def test_deactivated_user_is_depersonalised_after_30_days(rw, deleter):
     assert personal(rw, active)[0] == "active@x.ru"
     assert one(rw, "SELECT count(*) FROM deletion_requests WHERE scope = 'personal_data_expired'") >= 1
     assert purge_personal_data(deleter, now=NOW) == 0  # повтор безопасен
+
+
+def test_acceptance_circumstances_of_deactivated_user_are_cleared_after_30_days(db, rw, deleter):
+    """ip и User-Agent принятий — ПД, как email: через 30 дней после деактивации — NULL; само принятие остаётся."""
+    gone, recent = user(rw, "la-gone@x.ru", 31), user(rw, "la-recent@x.ru", 29)
+    for uid in (gone, recent):
+        record_acceptance(rw, user_id=uid, document="offer", version="2026-10-01", accepted_at=NOW,
+                          ip="198.51.100.7", user_agent="UA")
+    assert purge_personal_data(deleter, now=NOW) >= 1
+    with db("app_migrator") as owner:
+        rows = dict((u, (ip, ua, doc)) for u, ip, ua, doc in owner.execute(
+            "SELECT user_id, host(ip), user_agent, document FROM legal_acceptances WHERE user_id = ANY(%s)",
+            ([gone, recent],)))
+    assert rows == {gone: (None, None, "offer"), recent: ("198.51.100.7", "UA", "offer")}
+    assert purge_personal_data(deleter, now=NOW) == 0
 
 
 def test_app_role_cannot_purge_personal_data(rw):

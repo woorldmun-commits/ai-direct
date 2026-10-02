@@ -58,9 +58,10 @@ def http(fake):
 
 
 OFFER = {"offer": "2026-10-01"}
+SIGN_UP = {**OFFER, "pd_consent": "2026-10-01"}  # обязательны оба: согласие на ПД — отдельный документ
 
 
-def login(rw, fake, code="c1", state="s", expected="s", accepted=OFFER):
+def login(rw, fake, code="c1", state="s", expected="s", accepted=SIGN_UP):
     return sign_in(rw, http(fake), APP, code=code, state=state, expected_state=expected, now=NOW, accepted=accepted)
 
 
@@ -168,33 +169,64 @@ def acceptances(rw, user_id):
                       (user_id,)).fetchall()
 
 
-def test_new_user_without_accepted_offer_is_not_created(rw):
+@pytest.mark.parametrize("accepted", [{}, OFFER, {"pd_consent": "2026-10-01"}, {**OFFER, "marketing": "2026-10-01"}])
+def test_new_user_without_offer_and_pd_consent_is_not_created(rw, accepted):
     p = profile()
     with pytest.raises(LoginError, match="terms_not_accepted"):
-        login(rw, FakeYandex({"c1": p}), accepted={})
+        login(rw, FakeYandex({"c1": p}), accepted=accepted)
     assert one(rw, "SELECT count(*) FROM yandex_identities WHERE yandex_uid = %s", p["id"]) == 0
 
 
 def test_acceptance_is_recorded_with_version_and_time_each_document_separately(rw):
-    out = login(rw, FakeYandex({"c1": profile()}), accepted={**OFFER, "marketing": "2026-10-01"})
-    assert acceptances(rw, out.user_id) == [("marketing", "2026-10-01", NOW), ("offer", "2026-10-01", NOW)]
+    out = login(rw, FakeYandex({"c1": profile()}), accepted={**SIGN_UP, "marketing": "2026-10-01"})
+    assert acceptances(rw, out.user_id) == [("marketing", "2026-10-01", NOW), ("offer", "2026-10-01", NOW),
+                                            ("pd_consent", "2026-10-01", NOW)]
 
 
 def test_existing_user_signs_in_without_new_acceptance(rw):
     p = profile()
     first = login(rw, FakeYandex({"c1": p}))
     again = login(rw, FakeYandex({"c2": p}), code="c2", accepted={})
-    assert again.user_id == first.user_id and len(acceptances(rw, first.user_id)) == 1
+    assert again.user_id == first.user_id and len(acceptances(rw, first.user_id)) == 2
 
 
-def test_acceptance_stores_hash_of_exact_text_locale_ip_and_user_agent(rw):
+def stored(db, user_id, document="offer"):
+    """ip и user_agent прикладным ролям не читаются (ПД) — проверяем владельцем таблиц."""
+    with db("app_migrator") as owner:
+        return owner.execute("""SELECT document_sha256, locale, host(ip), user_agent FROM legal_acceptances
+                                 WHERE user_id = %s AND document = %s""", (user_id, document)).fetchone()
+
+
+def test_acceptance_stores_hash_of_exact_text_locale_ip_and_user_agent(db, rw):
     """D16: хэш — из файла текста этой версии (реестр), а не из запроса; User-Agent обрезается до 256 символов."""
     out = sign_in(rw, http(FakeYandex({"c1": profile()})), APP, code="c1", state="s", expected_state="s", now=NOW,
-                  accepted=OFFER, ip="203.0.113.7", user_agent="Mozilla/5.0 " + "x" * 400)
-    sha, locale, ip, ua = rw.execute("""SELECT document_sha256, locale, host(ip), user_agent FROM legal_acceptances
-                                        WHERE user_id = %s""", (out.user_id,)).fetchone()
+                  accepted=SIGN_UP, ip="203.0.113.7", user_agent="Mozilla/5.0 " + "x" * 400)
+    sha, locale, ip, ua = stored(db, out.user_id)
     assert sha == hashlib.sha256(text_path("offer", "2026-10-01").read_bytes()).hexdigest()
     assert (locale, ip, len(ua)) == ("ru-RU", "203.0.113.7", 256)
+
+
+@pytest.mark.parametrize("ip, locale", [("1.2.3.4, 5.6.7.8", "ru-RU"), ("garbage", "../../etc/passwd"),
+                                        (None, "русский")])
+def test_garbage_ip_and_locale_do_not_break_sign_up(db, rw, ip, locale):
+    """IP и язык — из заголовков запроса: мусор не валит вход; IP не пишется, язык — по умолчанию."""
+    out = sign_in(rw, http(FakeYandex({"c1": profile()})), APP, code="c1", state="s", expected_state="s", now=NOW,
+                  accepted=SIGN_UP, locale=locale, ip=ip)
+    sha, stored_locale, stored_ip, _ = stored(db, out.user_id, "pd_consent")
+    assert (stored_locale, stored_ip) == ("ru-RU", None)
+    assert sha == hashlib.sha256(text_path("pd_consent", "2026-10-01").read_bytes()).hexdigest()
+
+
+def test_sign_in_works_under_app_role(db):
+    """Вход — до выбора workspace, под прикладной ролью app_rw (RLS): пользователь, принятия, сессия."""
+    with db("app_rw") as app:
+        p = profile()
+        out = login(app, FakeYandex({"c1": p}))
+        again = login(app, FakeYandex({"c2": p}), code="c2", accepted={})
+        assert out.created and not again.created and again.user_id == out.user_id
+        assert [d for d, _, _ in acceptances(app, out.user_id)] == ["offer", "pd_consent"]
+        assert one(app, "SELECT count(*) FROM sessions WHERE user_id = %s", out.user_id) == 2
+        assert one(app, "SELECT count(*) FROM workspaces") == 0  # вне workspace — ни одного клиента
 
 
 @pytest.mark.parametrize("accepted", [{"offer": "2026-09-01"},              # версии нет в реестре текстов
@@ -204,7 +236,7 @@ def test_unpublished_version_or_workspace_document_is_rejected_at_login(rw, acce
         login(rw, FakeYandex({"c1": profile()}), accepted=accepted)
 
 
-@pytest.mark.parametrize("accepted", [{"offer": ""}, {"offer": "v1; DROP"}, {"unknown_doc": "2026-10-01", **OFFER}])
+@pytest.mark.parametrize("accepted", [{"offer": ""}, {"offer": "v1; DROP"}, {"unknown_doc": "2026-10-01", **SIGN_UP}])
 def test_unknown_document_or_bad_version_is_rejected(rw, accepted):
     with pytest.raises(LoginError, match="terms_not_accepted"):
         login(rw, FakeYandex({"c1": profile()}), accepted=accepted)

@@ -11,11 +11,12 @@ from app.sources.conversion import ConversionDefinition
 from app.sync.parse import StatRow
 from app.sync.snapshot import Snapshot
 from app.sync.store import write_snapshot
+from app.tenancy import workspace_scope
 from app.worker.measure import Measured, Pending, due_measurements, execution_date, run_measurement
 from app.worker.sync import Skipped
 from test_direct_sync import root  # noqa: F401 — фикстура
 from test_metrika_sync import metrika  # noqa: F401 — фикстура
-from test_schema import EVENT_AT, EXECUTED, chain, one  # noqa: F401 — фикстура
+from test_schema import EVENT_AT, EXECUTED, chain, new_workspace, one  # noqa: F401 — фикстура
 from test_snapshot_store import DATA_UNTIL
 from test_worker_audit import audit, fresh, snapshot_like, sync  # noqa: F401 — fresh: autouse-фикстура
 from test_worker_sync import ws  # noqa: F401 — фикстура
@@ -249,3 +250,21 @@ def test_worker_that_lost_the_race_returns_the_winner_without_duplicates(rw, ws)
     assert measure_module._skip(rw, loaded, Skip("subscription_inactive", "expired")) == first
     assert one(rw, "SELECT count(*) FROM recommendation_events WHERE recommendation_id = %s "
                    "AND type IN ('measured', 'measurement_skipped')", rec) == 1
+
+
+# --- RLS: замер под прикладной ролью воркера (D13) -------------------------------------------------
+
+def test_measurement_runs_under_worker_role_only_in_own_workspace(db, rw, ws):
+    """Воркер app_token (RLS): замер в своём workspace проходит; изнутри чужого workspace задача не видна,
+    после задачи соединение не видит ничего."""
+    other = new_workspace(rw, "other-measure")
+    rec, finding = audited(rw, ws)
+    m = done(rw, ws, rec, finding)
+    measurement_snapshot(rw, ws, m)
+    with db("app_token") as worker:
+        with workspace_scope(worker, other):
+            assert measure(worker, ws, m) == Skipped("measurement_not_found")
+        out = measure(worker, ws, m)
+        assert isinstance(out, Measured)
+        assert one(worker, "SELECT count(*) FROM recommendation_results") == 0
+    assert one(rw, "SELECT count(*) FROM recommendation_results WHERE id = %s", out.result_id) == 1

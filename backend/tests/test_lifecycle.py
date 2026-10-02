@@ -12,6 +12,7 @@ import psycopg
 import pytest
 from psycopg.types.json import Jsonb
 
+from app.legal.documents import record_acceptance, text_sha256
 from test_schema import EVENT_AT, EXECUTED, connected, value
 
 D0 = dt.date(2026, 8, 24)  # первый день 37-дневного окна
@@ -84,12 +85,12 @@ def test_workspace_lifecycle(db):
     # --- signup: пользователь → организация (он owner) → workspace в ней ---
     user = one(rw, "INSERT INTO users (email) VALUES ('owner@example.test') RETURNING id")
     rw.execute("INSERT INTO yandex_identities (user_id, yandex_uid, login) VALUES (%s, 'uid-lc', 'owner')", (user,))
-    with rw.transaction():  # организация без owner не фиксируется (отложенная проверка на COMMIT)
-        org = one(rw, "INSERT INTO organizations (name, kind) VALUES ('ООО Ромашка', 'business') RETURNING id")
-        rw.execute("INSERT INTO organization_memberships (user_id, organization_id, org_role) VALUES (%s, %s, 'owner')",
-                   (user, org))
-        rw.execute("SELECT set_config('app.organization_id', %s, false)", (str(org),))
-        ws = one(rw, "INSERT INTO workspaces (organization_id, name) VALUES (%s, 'ООО Ромашка') RETURNING id", org)
+    for document in ("offer", "pd_consent"):  # принятые документы — доказательство, переживут удаление (обезличенно)
+        record_acceptance(rw, user_id=user, document=document, version="2026-10-01", accepted_at=EVENT_AT,
+                          ip="203.0.113.9", user_agent="Mozilla/5.0")
+    # организация (он owner) и workspace — функциями с проверкой actor: прямых INSERT у app_rw нет
+    org = one(rw, "SELECT create_organization(%s, 'ООО Ромашка', 'business')", user)
+    ws = one(rw, "SELECT create_workspace(%s, %s, 'ООО Ромашка')", user, org)
     assert one(rw, "SELECT workspace_role(%s, %s)", user, ws) == "owner"
     rw.execute("SELECT set_config('app.workspace_id', %s, false)", (str(ws),))  # как app.tenancy.workspace_scope
     rw.execute("INSERT INTO workspace_settings (workspace_id, target_cpa) VALUES (%s, 3000)", (ws,))
@@ -224,6 +225,16 @@ def test_workspace_lifecycle(db):
     assert one(rw, "SELECT count(*) FROM users WHERE id = %s", user) == 0
     assert one(rw, "SELECT subscription_id FROM payments WHERE provider_payment_id = 'pay-lc-1'") is None
     assert one(rw, "SELECT count(*) FROM free_audit_claims WHERE direct_account_hash = %s", claim) == 1
+    # принятия документов удалённого пользователя остались, но обезличены: без user_id, ip и User-Agent
+    assert counts["legal_acceptances_anonymized"] == 2
+    with db("app_migrator") as owner:
+        kept = owner.execute("""SELECT document, version, document_sha256, locale, user_id, ip, user_agent
+                                FROM legal_acceptances WHERE accepted_at = %s AND document_sha256 = ANY(%s)
+                                ORDER BY document""",
+                             (EVENT_AT, [text_sha256(d, "2026-10-01") for d in ("offer", "pd_consent")])).fetchall()
+    assert [(d, v, s == text_sha256(d, v), loc, u, ip, ua) for d, v, s, loc, u, ip, ua in kept] == [
+        ("offer", "2026-10-01", True, "ru-RU", None, None, None),
+        ("pd_consent", "2026-10-01", True, "ru-RU", None, None, None)]
 
     rw.execute("""UPDATE deletion_requests SET status = 'completed', completed_at = now(),
                   verification = %s, deleted_by = 'deleter@test' WHERE id = %s""", (Jsonb(counts), req))

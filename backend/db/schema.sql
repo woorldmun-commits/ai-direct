@@ -121,9 +121,14 @@ CREATE TABLE sessions (
 -- agency_client_mandate — подтверждение агентства по клиенту (право передавать данные клиента, поручение клиента,
 -- право давать доступ к Директу клиента): строка привязана к workspace клиента. workspace_id без FK, как у
 -- deletion_requests: доказательство переживает удалённый workspace; существование и право — триггер при вставке.
+-- Удаление пользователя (delete_workspace_data) строки не удаляет, а обезличивает: user_id, ip, user_agent → NULL;
+-- документ, версия, document_sha256, locale и время остаются. ip и user_agent деактивированного пользователя
+-- обнуляются через 30 дней (purge_personal_data), как email. Никакая другая правка не допускается (триггер
+-- legal_acceptances_append_only). Срок хранения доказательств принятия — открытый вопрос юристу (LEGAL.md).
+-- ip и user_agent — ПД: прикладная роль их пишет, но не читает (колоночные права, раздел «Права»).
 CREATE TABLE legal_acceptances (
   id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  user_id         bigint NOT NULL REFERENCES users,
+  user_id         bigint REFERENCES users,  -- NULL — только у обезличенной строки (новая вставка: check_mandate)
   document        text NOT NULL CHECK (document IN ('offer', 'pd_consent', 'marketing', 'agency_client_mandate')),
   version         text NOT NULL CHECK (version ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}(\.[0-9]+)?$'),
   accepted_at     timestamptz NOT NULL,
@@ -133,7 +138,9 @@ CREATE TABLE legal_acceptances (
   user_agent      text CHECK (length(user_agent) <= 256),
   workspace_id    bigint,
   -- мандат — всегда по конкретному клиенту (workspace); остальные документы — пользовательские, без workspace
-  CHECK ((document = 'agency_client_mandate') = (workspace_id IS NOT NULL))
+  CHECK ((document = 'agency_client_mandate') = (workspace_id IS NOT NULL)),
+  -- обезличенная строка не хранит обстоятельств принятия
+  CHECK (user_id IS NOT NULL OR (ip IS NULL AND user_agent IS NULL))
 );
 -- Хэш текста и язык обязательны для новых записей. NOT VALID: строки, принятые до появления реестра текстов
 -- (при миграции существующей БД), задним числом не проверяются; любая новая вставка — проверяется.
@@ -177,6 +184,19 @@ CREATE TABLE workspaces (
 );
 CREATE INDEX workspaces_organization ON workspaces (organization_id);
 
+-- Workspace не переезжает в другую организацию: иначе вместе с данными клиента уехал бы и доступ к ним
+-- (owner/admin другой организации). Прикладной роли UPDATE organization_id и не выдан (раздел «Права»).
+CREATE FUNCTION workspace_organization_immutable() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.organization_id IS DISTINCT FROM OLD.organization_id THEN
+    RAISE EXCEPTION 'workspaces.organization_id is immutable' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER workspaces_organization_immutable BEFORE UPDATE OF organization_id ON workspaces
+  FOR EACH ROW EXECUTE FUNCTION workspace_organization_immutable();
+
 -- Участник workspace — обязательно участник организации этого workspace: составные FK, а не проверка кодом
 -- (без гонки «удалили из организации, пока добавляли в workspace»). organization_id заполняет триггер из
 -- workspaces — приложение передаёт только user, workspace и роль. Удаление участника из организации каскадно
@@ -207,9 +227,14 @@ CREATE TRIGGER workspace_memberships_organization BEFORE INSERT OR UPDATE ON wor
 
 -- Хотя бы один owner у организации. Проверка отложена до COMMIT: передача владения (добавить нового owner,
 -- понизить старого) — в любом порядке внутри транзакции; организация и её owner создаются одной транзакцией.
--- Строка организации блокируется: два параллельных понижения двух владельцев не оставят организацию без owner.
+-- Проверки сериализуются по строке организации: перед проверкой — пустой UPDATE этой строки (не SELECT FOR UPDATE).
+-- Два параллельных понижения двух владельцев: в READ COMMITTED вторая проверка ждёт первую и видит её результат;
+-- в REPEATABLE READ / SERIALIZABLE снимок второй транзакции старый, и только новая версия строки (а не блокировка)
+-- даёт ей serialization_failure вместо COMMIT организации без owner.
 -- SECURITY DEFINER: проверка видит всех участников независимо от RLS вызывающего. Удалённую организацию
 -- (delete_workspace_data) не проверяем.
+-- Открытый вопрос: деактивация единственного owner (users.status = 'deactivated') этим триггером не ловится —
+-- организация остаётся с owner без доступа; решение (запрет, передача владения) — за продуктом.
 CREATE FUNCTION check_organization_has_owner() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
 DECLARE org bigint;
@@ -219,7 +244,7 @@ BEGIN
   ELSE
     org := OLD.organization_id;
   END IF;
-  PERFORM 1 FROM organizations WHERE id = org FOR UPDATE;
+  UPDATE organizations SET name = name WHERE id = org;
   IF FOUND AND NOT EXISTS (SELECT 1 FROM organization_memberships
                            WHERE organization_id = org AND org_role = 'owner') THEN
     RAISE EXCEPTION 'organization % must have at least one owner', org
@@ -260,10 +285,91 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
   ORDER BY a.workspace_id
 $$;
 
+-- Управление организацией и командой — только этими функциями. У app_rw нет INSERT/UPDATE/DELETE на
+-- organizations, organization_memberships, workspace_memberships и INSERT на workspaces (раздел «Права»).
+-- actor — пользователь сессии, его передаёт API после аутентификации (так же, как usr в workspace_role).
+-- Функция проверяет, что actor — активный owner/admin организации; назначить owner, изменить или исключить
+-- owner может только owner. Нет права — insufficient_privilege. Хотя бы один owner — триггер выше.
+CREATE FUNCTION require_org_manager(actor bigint, org bigint) RETURNS text
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+DECLARE r text;
+BEGIN
+  SELECT m.org_role INTO r FROM organization_memberships m JOIN users u ON u.id = m.user_id AND u.status = 'active'
+   WHERE m.user_id = actor AND m.organization_id = org AND m.org_role IN ('owner', 'admin');
+  IF r IS NULL THEN
+    RAISE EXCEPTION 'user % cannot manage organization %', actor, org USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN r;
+END $$;
+
+-- Новая организация: actor становится её owner (одна транзакция — триггер owner доволен).
+CREATE FUNCTION create_organization(actor bigint, org_name text, org_kind text) RETURNS bigint
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+DECLARE org bigint;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM users WHERE id = actor AND status = 'active') THEN
+    RAISE EXCEPTION 'user % is not active', actor USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  INSERT INTO organizations (name, kind) VALUES (org_name, org_kind) RETURNING id INTO org;
+  INSERT INTO organization_memberships (user_id, organization_id, org_role) VALUES (actor, org, 'owner');
+  RETURN org;
+END $$;
+
+CREATE FUNCTION create_workspace(actor bigint, org bigint, ws_name text) RETURNS bigint
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+DECLARE ws bigint;
+BEGIN
+  PERFORM require_org_manager(actor, org);
+  INSERT INTO workspaces (organization_id, name) VALUES (org, ws_name) RETURNING id INTO ws;
+  RETURN ws;
+END $$;
+
+-- Добавить участника организации или сменить его роль.
+CREATE FUNCTION set_organization_member(actor bigint, org bigint, usr bigint, new_role text) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+BEGIN
+  IF require_org_manager(actor, org) <> 'owner' AND (new_role = 'owner' OR EXISTS (
+       SELECT 1 FROM organization_memberships WHERE user_id = usr AND organization_id = org AND org_role = 'owner')) THEN
+    RAISE EXCEPTION 'only an owner can grant or change the owner role' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  INSERT INTO organization_memberships (user_id, organization_id, org_role) VALUES (usr, org, new_role)
+  ON CONFLICT (user_id, organization_id) DO UPDATE SET org_role = EXCLUDED.org_role;
+END $$;
+
+-- Исключить из организации; его workspace_memberships удаляются каскадом.
+CREATE FUNCTION remove_organization_member(actor bigint, org bigint, usr bigint) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+BEGIN
+  IF require_org_manager(actor, org) <> 'owner' AND EXISTS (
+       SELECT 1 FROM organization_memberships WHERE user_id = usr AND organization_id = org AND org_role = 'owner') THEN
+    RAISE EXCEPTION 'only an owner can remove an owner' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  DELETE FROM organization_memberships WHERE user_id = usr AND organization_id = org;
+END $$;
+
+-- Роль участника организации в workspace (добавить или сменить). Не участник организации — FK.
+CREATE FUNCTION set_workspace_member(actor bigint, ws bigint, usr bigint, new_role text) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+BEGIN
+  PERFORM require_org_manager(actor, (SELECT organization_id FROM workspaces WHERE id = ws));
+  INSERT INTO workspace_memberships (user_id, workspace_id, ws_role) VALUES (usr, ws, new_role)
+  ON CONFLICT (user_id, workspace_id) DO UPDATE SET ws_role = EXCLUDED.ws_role;
+END $$;
+
+CREATE FUNCTION remove_workspace_member(actor bigint, ws bigint, usr bigint) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+BEGIN
+  PERFORM require_org_manager(actor, (SELECT organization_id FROM workspaces WHERE id = ws));
+  DELETE FROM workspace_memberships WHERE user_id = usr AND workspace_id = ws;
+END $$;
+
 -- Мандат агентства: workspace существует, принадлежит агентству, и подтверждает его owner/admin организации.
 CREATE FUNCTION check_mandate() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
 BEGIN
+  IF NEW.user_id IS NULL THEN  -- NULL допустим только после обезличивания, не при вставке
+    RAISE EXCEPTION 'legal_acceptances: user_id is required' USING ERRCODE = 'not_null_violation';
+  END IF;
   -- без workspace строку отклонит CHECK таблицы
   IF NEW.document = 'agency_client_mandate' AND NEW.workspace_id IS NOT NULL AND NOT EXISTS (
        SELECT 1 FROM effective_workspace_access a JOIN organizations o ON o.id = a.organization_id
@@ -985,8 +1091,8 @@ CREATE TABLE deletion_requests (
 -- Возвращает число удалённых строк по таблицам —
 -- это и есть содержимое deletion_requests.verification. Платежи обезличиваются, а не удаляются (бухучёт).
 -- Последний workspace организации уносит с собой организацию, её участников и пользователей, у которых других
--- организаций нет (как раньше — пользователей без других workspace). Мандаты агентства (legal_acceptances)
--- остаются: это доказательство, без FK на workspace.
+-- организаций нет (как раньше — пользователей без других workspace). Принятия документов (legal_acceptances,
+-- в т.ч. мандаты агентства) остаются как доказательство: строки удаляемых пользователей обезличиваются.
 CREATE FUNCTION delete_workspace_data(ws bigint) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
 DECLARE
@@ -1082,6 +1188,11 @@ BEGIN
   DELETE FROM sessions WHERE user_id = ANY (sole_users);
   DELETE FROM telegram_links WHERE user_id = ANY (sole_users);
   DELETE FROM yandex_identities WHERE user_id = ANY (sole_users);
+  -- принятия документов — доказательство: не удаляются, а обезличиваются (срок хранения — вопрос юристу, LEGAL.md)
+  PERFORM set_config('app.anonymizing', 'on', true);
+  UPDATE legal_acceptances SET user_id = NULL, ip = NULL, user_agent = NULL WHERE user_id = ANY (sole_users);
+  GET DIAGNOSTICS n = ROW_COUNT; counts := counts || jsonb_build_object('legal_acceptances_anonymized', n);
+  PERFORM set_config('app.anonymizing', 'off', true);
   DELETE FROM users WHERE id = ANY (sole_users);
   GET DIAGNOSTICS n = ROW_COUNT; counts := counts || jsonb_build_object('users', n);
 
@@ -1094,7 +1205,8 @@ END $$;
 -- результат не зависит от часового пояса сервера). Агрегаты stat_rows остаются: у них нет FK на текст.
 -- ПД вне workspace (152-ФЗ, ARCHITECTURE.md §2.5), срок — 30 дней: сессии — после окончания (истекла или отозвана);
 -- email и логин Яндекса деактивированного пользователя — после деактивации обезличиваются. yandex_uid остаётся:
--- по нему деактивированный пользователь не войдёт снова под тем же аккаунтом. cutoff = now - 30 дней — из воркера.
+-- по нему деактивированный пользователь не войдёт снова под тем же аккаунтом. ip и user_agent его принятий
+-- документов (legal_acceptances) обнуляются; сами принятия остаются. cutoff = now - 30 дней — из воркера.
 -- Непустой проход — запись deletion_requests (system:retention). Повторный вызов безопасен.
 CREATE FUNCTION purge_personal_data(cutoff timestamptz) RETURNS integer
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
@@ -1102,6 +1214,7 @@ DECLARE
   s integer;
   u integer;
   i integer;
+  a integer;
 BEGIN
   DELETE FROM sessions WHERE least(expires_at, revoked_at) < cutoff;
   GET DIAGNOSTICS s = ROW_COUNT;
@@ -1110,13 +1223,20 @@ BEGIN
   UPDATE yandex_identities y SET login = '' FROM users
    WHERE users.id = y.user_id AND users.status = 'deactivated' AND users.deactivated_at < cutoff AND y.login <> '';
   GET DIAGNOSTICS i = ROW_COUNT;
-  IF s + u + i > 0 THEN
+  PERFORM set_config('app.anonymizing', 'on', true);
+  UPDATE legal_acceptances l SET ip = NULL, user_agent = NULL FROM users
+   WHERE users.id = l.user_id AND users.status = 'deactivated' AND users.deactivated_at < cutoff
+     AND (l.ip IS NOT NULL OR l.user_agent IS NOT NULL);
+  GET DIAGNOSTICS a = ROW_COUNT;
+  PERFORM set_config('app.anonymizing', 'off', true);
+  IF s + u + i + a > 0 THEN
     INSERT INTO deletion_requests (requested_by, scope, status, started_at, completed_at, verification, deleted_by)
     VALUES ('system:retention', 'personal_data_expired', 'completed', now(), now(),
-            jsonb_build_object('sessions', s, 'users', u, 'yandex_identities', i, 'cutoff', cutoff),
+            jsonb_build_object('sessions', s, 'users', u, 'yandex_identities', i, 'legal_acceptances', a,
+                               'cutoff', cutoff),
             'purge_personal_data');
   END IF;
-  RETURN s + u + i;
+  RETURN s + u + i + a;
 END $$;
 
 -- Каждая непустая пачка — запись deletion_requests (system:retention). Повторный вызов безопасен.
@@ -1164,12 +1284,33 @@ BEGIN
                            'audit_runs', 'audit_run_snapshots', 'findings', 'explanations', 'recommendations',
                            'measurements',
                            'recommendation_events', 'recommendation_results', 'digests',
-                           'subscription_events', 'free_audit_claims', 'legal_acceptances']
+                           'subscription_events', 'free_audit_claims']
   LOOP
     EXECUTE format('CREATE TRIGGER %I BEFORE UPDATE OR DELETE ON %I
                     FOR EACH ROW EXECUTE FUNCTION forbid_mutation()', t || '_append_only', t);
   END LOOP;
 END $$;
+
+-- legal_acceptances: DELETE запрещён всем; UPDATE — только обезличивание внутри функций удаления и ретеншна
+-- (delete_workspace_data, purge_personal_data: SECURITY DEFINER, метка транзакции app.anonymizing): ip и
+-- user_agent → NULL, user_id → NULL или прежний; всё остальное — без изменений. Права UPDATE на таблицу нет
+-- ни у одной рабочей роли — метку сама по себе выставить можно, но воспользоваться ею нечем.
+CREATE FUNCTION legal_acceptance_anonymize_only() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'UPDATE' AND current_setting('app.anonymizing', true) = 'on'
+     AND NEW.ip IS NULL AND NEW.user_agent IS NULL
+     AND (NEW.user_id IS NULL OR NEW.user_id = OLD.user_id)
+     AND (NEW.id, NEW.document, NEW.version, NEW.accepted_at, NEW.document_sha256, NEW.locale, NEW.workspace_id)
+         IS NOT DISTINCT FROM
+         (OLD.id, OLD.document, OLD.version, OLD.accepted_at, OLD.document_sha256, OLD.locale, OLD.workspace_id) THEN
+    RETURN NEW;
+  END IF;
+  RAISE EXCEPTION 'table legal_acceptances is append-only: % is not allowed (only anonymization)', TG_OP
+    USING ERRCODE = 'insufficient_privilege';
+END $$;
+CREATE TRIGGER legal_acceptances_append_only BEFORE UPDATE OR DELETE ON legal_acceptances
+  FOR EACH ROW EXECUTE FUNCTION legal_acceptance_anonymize_only();
 
 CREATE TRIGGER recommendation_results_complete_snapshot BEFORE INSERT ON recommendation_results
   FOR EACH ROW EXECUTE FUNCTION require_complete_snapshot();
@@ -1260,11 +1401,27 @@ CREATE TRIGGER issues_close_only BEFORE UPDATE ON issues
 -- ============================================================================
 -- Писать и сбрасывать токен может приложение (OAuth-колбэк, отключение); читать — только роль воркера app_token.
 -- Функции SECURITY DEFINER с фиксированным search_path, подключение ищется строго в пределах переданного workspace.
+-- Аргумент ws сверяется с контекстом: если app.workspace_id выставлен (API в запросе, воркер в задаче) и не равен
+-- ws — ошибка insufficient_privilege. Контекст не выставлен (системная роль, OAuth-колбэк до входа) — проверки
+-- нет: workspace — явный параметр, право на него вызывающий проверяет сам (workspace_role).
+
+-- Текущий workspace прикладной роли (app/tenancy.py); NULL — не выставлен. Основа политик RLS (конец файла).
+CREATE FUNCTION app_workspace_id() RETURNS bigint
+LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('app.workspace_id', true), '')::bigint $$;
+
+CREATE FUNCTION require_workspace_context(ws bigint) RETURNS void
+LANGUAGE plpgsql STABLE AS $$
+BEGIN
+  IF app_workspace_id() IS NOT NULL AND app_workspace_id() IS DISTINCT FROM ws THEN
+    RAISE EXCEPTION 'workspace % is not the current workspace', ws USING ERRCODE = 'insufficient_privilege';
+  END IF;
+END $$;
 
 CREATE FUNCTION set_connection_token(kind text, ws bigint, connection bigint, token bytea, expires timestamptz)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
 DECLARE n integer;
 BEGIN
+  PERFORM require_workspace_context(ws);
   IF token IS NULL OR length(token) = 0 THEN
     RAISE EXCEPTION 'token is empty';
   END IF;
@@ -1290,6 +1447,7 @@ END $$;
 CREATE FUNCTION drop_connection_token(kind text, ws bigint, connection bigint, new_status text)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
 BEGIN
+  PERFORM require_workspace_context(ws);
   IF new_status NOT IN ('disconnected', 'token_revoked') THEN
     RAISE EXCEPTION 'new_status must be disconnected or token_revoked';
   END IF;
@@ -1315,6 +1473,7 @@ CREATE FUNCTION connection_token(kind text, ws bigint, connection bigint)
 RETURNS bytea LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
 DECLARE t bytea;
 BEGIN
+  PERFORM require_workspace_context(ws);
   IF kind = 'direct' THEN
     SELECT token_enc INTO t FROM direct_connections WHERE id = connection AND workspace_id = ws;
   ELSIF kind = 'metrika' THEN
@@ -1329,16 +1488,18 @@ BEGIN
 END $$;
 
 -- Workspace задачи воркера по её объекту — чтобы войти в workspace (app.workspace_id) до чтения самой задачи.
--- Раскрывает только номер workspace; NULL — объекта нет (удалён вместе с workspace).
+-- Раскрывает только номер workspace; NULL — объекта нет (удалён вместе с workspace) или вызывающий уже в контексте
+-- другого workspace (чужой объект изнутри workspace не раскрывается).
 CREATE FUNCTION task_workspace(kind text, obj bigint) RETURNS bigint
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
-  SELECT CASE kind
+  SELECT w FROM (SELECT CASE kind
     WHEN 'sync_run' THEN (SELECT workspace_id FROM sync_runs WHERE id = task_workspace.obj)
     WHEN 'direct_account' THEN (SELECT c.workspace_id FROM direct_accounts a
                                 JOIN direct_connections c ON c.id = a.direct_connection_id WHERE a.id = task_workspace.obj)
     WHEN 'measurement' THEN (SELECT i.workspace_id FROM measurements m JOIN issues i ON i.id = m.issue_id
                              WHERE m.id = task_workspace.obj)
-  END
+  END AS w) t
+  WHERE app_workspace_id() IS NULL OR app_workspace_id() = w
 $$;
 
 -- ============================================================================
@@ -1351,16 +1512,35 @@ REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 
 -- Приложение: читать всё, добавлять везде, изменять — только операционные таблицы. Без DELETE, без DDL.
 GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA public TO app_rw;
-GRANT UPDATE ON users, organizations, organization_memberships, workspaces, workspace_memberships,
-                workspace_settings, telegram_links,
+GRANT UPDATE ON users, workspace_settings, telegram_links,
                 direct_accounts, metrika_counters,
                 sync_runs, snapshots, issues, notifications, outbox_events, subscriptions, payments,
                 deletion_requests
              TO app_rw;
 -- Сессии и привязки Telegram — служебные, не доказательные: выход из аккаунта удаляет строку.
--- Участие в организации и workspace — управление командой: удаление участника удаляет строку.
-GRANT DELETE ON sessions, telegram_links, organization_memberships, workspace_memberships TO app_rw;
+GRANT DELETE ON sessions, telegram_links TO app_rw;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO app_rw;
+
+-- Организации и команда (D3): только чтение; создание и изменение — функциями с проверкой actor (owner/admin).
+-- Workspace: создаёт create_workspace; менять можно название и статус, но не организацию.
+REVOKE INSERT ON organizations, organization_memberships, workspace_memberships, workspaces FROM app_rw;
+GRANT UPDATE (name, status, deactivated_at) ON workspaces TO app_rw;
+REVOKE EXECUTE ON FUNCTION require_org_manager(bigint, bigint), create_organization(bigint, text, text),
+                           create_workspace(bigint, bigint, text),
+                           set_organization_member(bigint, bigint, bigint, text),
+                           remove_organization_member(bigint, bigint, bigint),
+                           set_workspace_member(bigint, bigint, bigint, text),
+                           remove_workspace_member(bigint, bigint, bigint) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION create_organization(bigint, text, text), create_workspace(bigint, bigint, text),
+                          set_organization_member(bigint, bigint, bigint, text),
+                          remove_organization_member(bigint, bigint, bigint),
+                          set_workspace_member(bigint, bigint, bigint, text),
+                          remove_workspace_member(bigint, bigint, bigint) TO app_rw;
+
+-- Принятия документов: ip и user_agent — ПД; приложение их пишет (INSERT), но не читает.
+REVOKE SELECT ON legal_acceptances FROM app_rw;
+GRANT SELECT (id, user_id, document, version, accepted_at, document_sha256, locale, workspace_id)
+  ON legal_acceptances TO app_rw;
 
 -- Подключения: всё, кроме шифротекста токена. SELECT * по этим таблицам приложению недоступен — только перечисленные
 -- столбцы; токен пишется и сбрасывается функциями, читается — только ролью воркера app_token.
@@ -1389,6 +1569,7 @@ GRANT EXECUTE ON FUNCTION purge_search_query_texts(date, integer) TO app_deleter
 GRANT EXECUTE ON FUNCTION purge_personal_data(timestamptz) TO app_deleter;
 
 -- Доступ к workspace и привязка задачи к workspace — до входа в него (app.workspace_id ещё не выставлен).
+-- task_workspace изнутри чужого workspace отвечает NULL (см. функцию).
 REVOKE EXECUTE ON FUNCTION workspace_role(bigint, bigint), user_workspaces(bigint),
                            task_workspace(text, bigint) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION workspace_role(bigint, bigint), user_workspaces(bigint),
@@ -1407,22 +1588,29 @@ ALTER DEFAULT PRIVILEGES FOR ROLE app_migrator IN SCHEMA public GRANT USAGE ON S
 --   app_rw     — прикладная роль: API и воркеры задач одного workspace. Видит строки только того workspace,
 --                что выставлен в app.workspace_id (API — SET LOCAL после workspace_role; воркер — на задачу,
 --                app/tenancy.py). Не выставлен — 0 строк: запрос без фильтра не вернёт чужого клиента.
---                Организационный контекст app.organization_id открывает workspaces и workspace_memberships
---                своей организации (owner/admin: список клиентов, команда, создание workspace).
---   app_token  — член app_rw (+ чтение токена): те же политики, что у app_rw.
+--                Организационного контекста нет: список workspace пользователя — user_workspaces(user), роль —
+--                workspace_role(user, ws) (SECURITY DEFINER, представление effective_workspace_access).
+--                Организации и команда — только чтение; создание организации и workspace, роли и исключение
+--                участников — функции create_organization, create_workspace, set_/remove_organization_member,
+--                set_/remove_workspace_member (проверяют, что actor — owner/admin организации).
+--                workspaces: UPDATE только name, status, deactivated_at (organization_id неизменяем — триггер).
+--                legal_acceptances: пишет всё, читает всё, кроме ip и user_agent (ПД).
+--                Токены — set_connection_token / drop_connection_token (ws = app.workspace_id, если выставлен).
+--   app_token  — член app_rw (+ connection_token): те же политики и права, что у app_rw.
 --   app_system — член app_rw с отдельной разрешающей политикой «все строки»: системные задачи по многим
 --                workspace (планировщик, захват и доставка outbox, уведомления, выбор замеров к запуску).
---                Те же права на таблицы, что у app_rw — только без фильтра по workspace.
---   app_deleter и функции SECURITY DEFINER (удаление, ретеншн, токены, проверка доступа) работают от владельца
---                таблиц и RLS не подчиняются; workspace у них — явный параметр.
+--                Те же права на таблицы, что у app_rw (в т.ч. без прямого изменения команды и без чтения
+--                ip/user_agent) — только без фильтра по workspace.
+--   app_deleter — никаких прав на таблицы: только delete_workspace_data, purge_personal_data,
+--                purge_search_query_texts. Удаление пользователя обезличивает его legal_acceptances.
+--   Функции SECURITY DEFINER (удаление, ретеншн, токены, проверка доступа, управление командой) работают от
+--                владельца таблиц (app_migrator) и RLS не подчиняются; workspace / организация у них — явный
+--                параметр, actor — пользователь сессии, которого передаёт API.
 -- Без RLS: users, yandex_identities, sessions, telegram_links (данные пользователя, не workspace; приложение
--- фильтрует по пользователю сессии), organizations и organization_memberships (нужны до выбора workspace),
--- releases и free_audit_claims (глобальные, без данных клиента).
+-- фильтрует по пользователю сессии), organizations и organization_memberships (нужны до выбора workspace;
+-- изменять — только функциями), releases и free_audit_claims (глобальные, без данных клиента).
 
-CREATE FUNCTION app_workspace_id() RETURNS bigint
-LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('app.workspace_id', true), '')::bigint $$;
-CREATE FUNCTION app_organization_id() RETURNS bigint
-LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('app.organization_id', true), '')::bigint $$;
+-- app_workspace_id() — определена в разделе «OAuth-токены» (её используют и функции токенов).
 
 DO $$
 DECLARE
@@ -1444,8 +1632,9 @@ DECLARE
     'deletion_requests',    'workspace_id = app_workspace_id()',
     -- пользовательские документы (оферта, согласия) — без workspace; мандат агентства — только в своём
     'legal_acceptances',    'workspace_id IS NULL OR workspace_id = app_workspace_id()',
-    'workspaces',           'id = app_workspace_id() OR organization_id = app_organization_id()',
-    'workspace_memberships', 'workspace_id = app_workspace_id() OR organization_id = app_organization_id()',
+    -- список workspace пользователя — user_workspaces(), не прямой SELECT: вне контекста не видно ничего
+    'workspaces',           'id = app_workspace_id()',
+    'workspace_memberships', 'workspace_id = app_workspace_id()',
     -- без собственного workspace_id — через родителя (подзапрос по первичному ключу родителя)
     'direct_accounts',      'EXISTS (SELECT 1 FROM direct_connections p WHERE p.id = direct_accounts.direct_connection_id
                                      AND p.workspace_id = app_workspace_id())',

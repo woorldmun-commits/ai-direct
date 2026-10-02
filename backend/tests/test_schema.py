@@ -44,14 +44,28 @@ def one(conn, sql, *params):
 
 
 def new_workspace(conn, name="w", *, user=None, kind="business") -> int:
-    """Workspace в своей организации; её owner — user (или новый пользователь): без owner организации не бывает."""
+    """Workspace в своей организации; её owner — user (или новый пользователь): без owner организации не бывает.
+    Организация и workspace — только функциями (как в API): прямых INSERT у прикладных ролей нет."""
     with conn.transaction():
         if user is None:
             user = one(conn, "INSERT INTO users (email) VALUES (%s) RETURNING id", f"owner{next(_seq)}@example.test")
-        org = one(conn, "INSERT INTO organizations (name, kind) VALUES (%s, %s) RETURNING id", name, kind)
-        conn.execute("INSERT INTO organization_memberships (user_id, organization_id, org_role) VALUES (%s, %s, 'owner')",
-                     (user, org))
-        return one(conn, "INSERT INTO workspaces (organization_id, name) VALUES (%s, %s) RETURNING id", org, name)
+        org = one(conn, "SELECT create_organization(%s, %s, %s)", user, name, kind)
+        return one(conn, "SELECT create_workspace(%s, %s, %s)", user, org, name)
+
+
+def org_owner(conn, ws) -> int:
+    return one(conn, """SELECT m.user_id FROM organization_memberships m
+                        JOIN workspaces w ON w.organization_id = m.organization_id
+                        WHERE w.id = %s AND m.org_role = 'owner' ORDER BY m.user_id LIMIT 1""", ws)
+
+
+def add_member(conn, ws, usr, org_role="member", ws_role=None) -> None:
+    """Участник организации workspace (и, если ws_role, самого workspace) — от имени её owner, как в API."""
+    owner = org_owner(conn, ws)
+    org = one(conn, "SELECT organization_id FROM workspaces WHERE id = %s", ws)
+    conn.execute("SELECT set_organization_member(%s, %s, %s, %s)", (owner, org, usr, org_role))
+    if ws_role:
+        conn.execute("SELECT set_workspace_member(%s, %s, %s, %s)", (owner, ws, usr, ws_role))
 
 
 @pytest.fixture

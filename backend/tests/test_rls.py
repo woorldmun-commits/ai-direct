@@ -99,12 +99,40 @@ def test_system_role_sees_all_workspaces(rw, chain, other):
                chain["ws"], other["ws"]) == 2
 
 
-def test_organization_context_shows_only_its_workspaces(app, rw, chain, other):
+def test_organization_context_opens_nothing(app, rw, chain):
+    """Организационного контекста нет: app.organization_id не открывает ни workspace, ни команду."""
     org = one(rw, "SELECT organization_id FROM workspaces WHERE id = %s", chain["ws"])
     with app.transaction():
         app.execute("SELECT set_config('app.organization_id', %s, true)", (str(org),))
-        assert {r[0] for r in app.execute("SELECT id FROM workspaces")} == {chain["ws"]}
-        assert one(app, "SELECT count(*) FROM direct_connections") == 0  # данные клиента — только в его workspace
+        assert one(app, "SELECT count(*) FROM workspaces") == 0
+        assert one(app, "SELECT count(*) FROM workspace_memberships") == 0
+        assert {r[0] for r in app.execute("SELECT workspace_id FROM user_workspaces(%s)", (chain["user"],))} == \
+            {chain["ws"]}  # список своих workspace — функцией
+
+
+# --- функции SECURITY DEFINER сверяют workspace с контекстом ----------------------------------------
+
+@pytest.mark.parametrize("sql", [
+    "SELECT set_connection_token('direct', %(ws)s, %(conn)s, '\\x02', NULL)",
+    "SELECT drop_connection_token('direct', %(ws)s, %(conn)s, 'disconnected')",
+    "SELECT connection_token('direct', %(ws)s, %(conn)s)",
+])
+def test_token_functions_reject_workspace_other_than_context(db, rw, chain, other, sql):
+    conn_id = one(rw, "SELECT id FROM direct_connections WHERE workspace_id = %s", chain["ws"])
+    with db("app_token") as worker:
+        with workspace_scope(worker, other["ws"]), \
+                pytest.raises(psycopg.errors.InsufficientPrivilege, match="not the current workspace"):
+            worker.execute(sql, {"ws": chain["ws"], "conn": conn_id})
+        assert one(rw, "SELECT has_token FROM direct_connections WHERE id = %s", conn_id)  # токен не тронут
+        # без контекста (системная задача, OAuth-колбэк до входа) — workspace только явным параметром
+        assert worker.execute("SELECT connection_token('direct', %s, %s)", (chain["ws"], conn_id)).fetchone()[0]
+
+
+def test_task_workspace_is_hidden_from_another_workspace(app, chain, other):
+    assert one(app, "SELECT task_workspace('direct_account', %s)", chain["account"]) == chain["ws"]
+    with workspace_scope(app, other["ws"]):
+        assert one(app, "SELECT task_workspace('direct_account', %s)", chain["account"]) is None
+        assert one(app, "SELECT task_workspace('direct_account', %s)", other["account"]) == other["ws"]
 
 
 # --- помощники входа в workspace -------------------------------------------------------------------

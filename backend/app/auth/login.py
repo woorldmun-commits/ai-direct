@@ -15,7 +15,7 @@ import httpx
 import psycopg
 
 from app.auth.yandex_oauth import TIMEOUT, OAuthApp, OAuthError, ReauthorizationRequired, exchange_code
-from app.legal.documents import DEFAULT_LOCALE, is_published, record_acceptance
+from app.legal.documents import DEFAULT_LOCALE, is_published, normalize_locale, record_acceptance
 
 INFO_URL = "https://login.yandex.ru/info"
 SCOPES = ("login:info", "login:email")
@@ -23,7 +23,9 @@ SESSION_TTL = timedelta(days=30)
 # Документы, которые пользователь принимает на сайте до перехода в Яндекс ID (версия = дата редакции). Версия должна
 # быть в реестре текстов (app/legal/documents.py): хэш принятого текста пишется вместе с принятием.
 DOCUMENTS = frozenset({"offer", "pd_consent", "marketing"})
-REQUIRED_FOR_SIGN_UP = frozenset({"offer"})  # pd_consent — если юрист решит, что основания «договор» мало
+# Согласие на обработку ПД — отдельный документ (ч. 1 ст. 9 152-ФЗ в ред. 156-ФЗ) и обязательно вместе с офертой.
+# Решение принято с запасом: если юрист сочтёт основание «договор» достаточным, требование можно ослабить.
+REQUIRED_FOR_SIGN_UP = frozenset({"offer", "pd_consent"})
 
 
 class LoginError(Exception):
@@ -72,10 +74,12 @@ def sign_in(conn: psycopg.Connection, http: httpx.Client, app: OAuthApp, *, code
             ip: str | None = None, user_agent: str | None = None) -> SignedIn:
     """Callback OAuth: state → обмен кода → профиль → локальный пользователь → сессия.
     accepted — документ → версия, которые пользователь принял на сайте перед входом; для нового пользователя
-    оферта обязательна. Принятое записывается в legal_acceptances в той же транзакции, что и пользователь:
-    с sha256 текста этой версии на языке locale, IP и User-Agent запроса (если известны)."""
+    обязательны оферта и согласие на обработку ПД. Принятое записывается в legal_acceptances в той же
+    транзакции, что и пользователь: с sha256 текста этой версии на языке locale, IP и User-Agent запроса
+    (если известны)."""
     if not expected_state or not hmac.compare_digest(state.encode(), expected_state.encode()):
         raise LoginError("state_mismatch")  # до обращения к Яндексу: чужой callback код не обменивает
+    locale = normalize_locale(locale)
     if not (accepted.keys() <= DOCUMENTS and all(isinstance(v, str) and is_published(d, v, locale)
                                                  for d, v in accepted.items())):
         raise LoginError("terms_not_accepted")  # неизвестный документ, версия или язык — такого текста не показывали
@@ -96,7 +100,7 @@ def _local_user(conn: psycopg.Connection, user: YandexUser, accepted: Mapping[st
     if existing := _existing(conn, user.uid):
         return existing, False
     if not REQUIRED_FOR_SIGN_UP <= accepted.keys():
-        raise LoginError("terms_not_accepted")  # без принятой оферты договора нет — и основания хранить email тоже
+        raise LoginError("terms_not_accepted")  # без оферты и согласия на ПД — ни договора, ни основания хранить email
     if not user.email:
         raise LoginError("email_missing")  # email нужен для уведомлений о биллинге (users.email NOT NULL)
     try:

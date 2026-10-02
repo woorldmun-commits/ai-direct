@@ -7,7 +7,7 @@ import pytest
 
 from app.worker.notify import Notifier, run_notifications
 from app.worker.outbox import OutboxEvent, emit
-from test_schema import chain, one  # noqa: F401 — фикстура
+from test_schema import add_member, chain, one  # noqa: F401 — фикстура
 
 NOW = datetime.now(timezone.utc) + timedelta(seconds=1)
 
@@ -102,12 +102,7 @@ def test_outbox_event_is_delivered_whatever_the_decision(rw, ws):
 def member(rw, ws, ws_role=None) -> int:
     """Участник организации workspace (member) с Telegram; ws_role — ещё и участник самого workspace."""
     usr = one(rw, "INSERT INTO users (email) VALUES (%s) RETURNING id", f"m{ws['ws']}-{ws_role}@example.test")
-    org = one(rw, "SELECT organization_id FROM workspaces WHERE id = %s", ws["ws"])
-    rw.execute("INSERT INTO organization_memberships (user_id, organization_id, org_role) VALUES (%s, %s, 'member')",
-               (usr, org))
-    if ws_role:
-        rw.execute("INSERT INTO workspace_memberships (user_id, workspace_id, ws_role) VALUES (%s, %s, %s)",
-                   (usr, ws["ws"], ws_role))
+    add_member(rw, ws["ws"], usr, "member", ws_role)
     rw.execute("INSERT INTO telegram_links (user_id, chat_id) VALUES (%s, %s)", (usr, 20_000 + usr))
     return usr
 
