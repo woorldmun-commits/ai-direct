@@ -11,6 +11,7 @@ from app.api import errors
 from app.api.db import create_pool
 from app.api.middleware import BoundaryMiddleware
 from app.api.routes import router
+from app.api.today import router as today_router
 from app.api.settings import Settings
 
 PREFIX = "/api/v1"
@@ -33,5 +34,6 @@ def create_app(settings: Settings | None = None, pool: ConnectionPool | None = N
     app.state.pool = pool
     errors.install(app)
     app.include_router(router, prefix=PREFIX)
+    app.include_router(today_router, prefix=PREFIX)
     app.add_middleware(BoundaryMiddleware, settings=settings)
     return app

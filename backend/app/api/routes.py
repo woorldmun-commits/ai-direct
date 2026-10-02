@@ -1,6 +1,6 @@
 """Эндпоинты фундамента v1.0 — только чтение. Изменений в рекламных кабинетах здесь нет и не будет (v1.1).
 
-GET /health · GET /me · GET /workspaces/{ws}/recommendations · GET /workspaces/{ws}/members.
+GET /health · GET /me · GET /workspaces/{ws}/recommendations · GET /workspaces/{ws}/members (GET …/today — today.py).
 Всё, что относится к workspace, читается только через CurrentWorkspace (вход в RLS-контекст)."""
 
 from typing import Annotated
@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.deps import Conn, CurrentActor, CurrentWorkspace, require_manager
 from app.api.errors import not_found
-from app.api.serialize import ext, moment, value
+from app.api.serialize import ext, recommendation_item
 from app.tenancy import set_local_workspace
 
 router = APIRouter()
@@ -104,15 +104,7 @@ def recommendations(conn: Conn, ws: CurrentWorkspace, q: Annotated[Recommendatio
     rows = conn.execute(_RECOMMENDATIONS, {"ws": ws.id, "account": account, "limit": q.limit + 1,
                                            "offset": offset}).fetchall()
     more = len(rows) > q.limit
-    items = [{"id": ext("rec", rec), "version_id": ext("rv", finding),
-              "ad_account": {"id": ext("acc", account_id), "login": login},
-              "object": {"type": object_type, "id": str(object_id)},
-              "action_level": action_level, "exposure": value(lost), "can_save": value(recoverable),
-              "data_status": lost["data_status"],
-              "period": {"from": lost["period_from"], "to": lost["period_to"]},
-              "created_at": moment(created_at), "updated_at": moment(updated_at)}
-             for (rec, finding, account_id, login, object_type, object_id, action_level, lost, recoverable,
-                  created_at, updated_at) in rows[:q.limit]]
+    items = [recommendation_item(*row) for row in rows[:q.limit]]
     return {"items": items, "next_cursor": f"o{offset + q.limit}" if more else None}
 
 
