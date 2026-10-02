@@ -6,9 +6,11 @@ Yandex id (yandex_identities.yandex_uid), а не к login. В cookie уходи
 
 import hashlib
 import hmac
+import re
 import secrets
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from typing import Mapping
 
 import httpx
 import psycopg
@@ -18,12 +20,16 @@ from app.auth.yandex_oauth import TIMEOUT, OAuthApp, OAuthError, Reauthorization
 INFO_URL = "https://login.yandex.ru/info"
 SCOPES = ("login:info", "login:email")
 SESSION_TTL = timedelta(days=30)
+# Документы, которые пользователь принимает на сайте до перехода в Яндекс ID (версия = дата редакции).
+DOCUMENTS = frozenset({"offer", "pd_consent", "marketing"})
+REQUIRED_FOR_SIGN_UP = frozenset({"offer"})  # pd_consent — если юрист решит, что основания «договор» мало
+_VERSION = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}(\.[0-9]+)?")
 
 
 class LoginError(Exception):
     def __init__(self, code: str):
         super().__init__(code)
-        self.code = code  # state_mismatch · foreign_token · email_missing · user_deactivated
+        self.code = code  # state_mismatch · foreign_token · email_missing · user_deactivated · terms_not_accepted
 
 
 @dataclass(frozen=True)
@@ -62,13 +68,20 @@ def fetch_user(http: httpx.Client, app: OAuthApp, access_token: str) -> YandexUs
 
 
 def sign_in(conn: psycopg.Connection, http: httpx.Client, app: OAuthApp, *, code: str, state: str,
-            expected_state: str, now: datetime) -> SignedIn:
-    """Callback OAuth: state → обмен кода → профиль → локальный пользователь → сессия."""
+            expected_state: str, now: datetime, accepted: Mapping[str, str]) -> SignedIn:
+    """Callback OAuth: state → обмен кода → профиль → локальный пользователь → сессия.
+    accepted — документ → версия, которые пользователь принял на сайте перед входом; для нового пользователя
+    оферта обязательна. Принятое записывается в legal_acceptances в той же транзакции, что и пользователь."""
     if not expected_state or not hmac.compare_digest(state.encode(), expected_state.encode()):
         raise LoginError("state_mismatch")  # до обращения к Яндексу: чужой callback код не обменивает
+    if not (accepted.keys() <= DOCUMENTS and all(_VERSION.fullmatch(v or "") for v in accepted.values())):
+        raise LoginError("terms_not_accepted")
     user = fetch_user(http, app, exchange_code(http, app, code, now).access_token)
     with conn.transaction():
-        user_id, created = _local_user(conn, user)
+        user_id, created = _local_user(conn, user, accepted)
+        with conn.cursor() as cur:
+            cur.executemany("INSERT INTO legal_acceptances (user_id, document, version, accepted_at) "
+                            "VALUES (%s, %s, %s, %s)", [(user_id, d, v, now) for d, v in sorted(accepted.items())])
         token = secrets.token_urlsafe(32)
         expires_at = now + SESSION_TTL
         conn.execute("INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (%s, %s, %s, %s)",
@@ -76,9 +89,11 @@ def sign_in(conn: psycopg.Connection, http: httpx.Client, app: OAuthApp, *, code
     return SignedIn(user_id, token, expires_at, created)
 
 
-def _local_user(conn: psycopg.Connection, user: YandexUser) -> tuple[int, bool]:
+def _local_user(conn: psycopg.Connection, user: YandexUser, accepted: Mapping[str, str]) -> tuple[int, bool]:
     if existing := _existing(conn, user.uid):
         return existing, False
+    if not REQUIRED_FOR_SIGN_UP <= accepted.keys():
+        raise LoginError("terms_not_accepted")  # без принятой оферты договора нет — и основания хранить email тоже
     if not user.email:
         raise LoginError("email_missing")  # email нужен для уведомлений о биллинге (users.email NOT NULL)
     try:

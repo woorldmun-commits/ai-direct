@@ -129,8 +129,8 @@ def fresh_access_token(conn: psycopg.Connection, http: httpx.Client, app: OAuthA
     invalid_grant → статус token_expired (нужно переподключить), шифротекст остаётся; удаление токена — отдельное
     явное действие (drop_connection_token)."""
     assert conn.autocommit, "блокировка сессионная, HTTP вне транзакции: нужен autocommit"
-    lock = (f"token:{ref.kind}", ref.connection_id)
-    conn.execute("SELECT pg_advisory_lock(hashtext(%s), %s::int)", lock)
+    lock = (f"token:{ref.kind}:{ref.connection_id}",)  # тот же ключ берёт drop_connection_token (schema.sql)
+    conn.execute("SELECT pg_advisory_lock(hashtextextended(%s, 0))", lock)
     try:
         stored = load(conn, keys, ref)
         expires_at = _expires_at(conn, ref)
@@ -145,7 +145,7 @@ def fresh_access_token(conn: psycopg.Connection, http: httpx.Client, app: OAuthA
         store(conn, keys, ref, Tokens(new.access_token, new.refresh_token or stored.refresh_token, new.expires_at))
         return new.access_token
     finally:
-        conn.execute("SELECT pg_advisory_unlock(hashtext(%s), %s::int)", lock)
+        conn.execute("SELECT pg_advisory_unlock(hashtextextended(%s, 0))", lock)
 
 
 def _expires_at(conn: psycopg.Connection, ref: ConnectionRef) -> datetime | None:

@@ -82,9 +82,12 @@ def _token(http: httpx.Client, app: OAuthApp, data: dict, now: datetime) -> Toke
     except httpx.TransportError:
         raise OAuthError("yandex_unavailable") from None
     if r.status_code == 200:
-        body = r.json()
-        return Tokens(body["access_token"], body.get("refresh_token"),
-                      now + timedelta(seconds=int(body["expires_in"])))
+        try:
+            body = r.json()
+            return Tokens(body["access_token"], body.get("refresh_token"),
+                          now + timedelta(seconds=int(body["expires_in"])))
+        except (ValueError, KeyError, TypeError, AttributeError):
+            raise OAuthError("bad_response") from None
     if r.status_code >= 500:
         raise OAuthError("yandex_unavailable")
     code = _error_code(r)

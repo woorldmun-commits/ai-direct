@@ -71,5 +71,5 @@ def test_security_definer_functions_have_fixed_search_path(rw):
     rows = rw.execute("""SELECT p.proname, p.proconfig FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
                          WHERE n.nspname = 'public' AND p.prosecdef""").fetchall()
     assert {name for name, _ in rows} == {"delete_workspace_data", "purge_search_query_texts", "set_connection_token",
-                                          "drop_connection_token", "connection_token"}
+                                          "drop_connection_token", "connection_token", "purge_personal_data"}
     assert all(cfg and any(c.startswith("search_path=") for c in cfg) for _, cfg in rows)

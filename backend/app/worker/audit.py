@@ -27,8 +27,10 @@ class Audited:
     audit_run_id: int
 
 
-def _existing(conn: psycopg.Connection, task_key: str) -> int | None:
-    row = conn.execute("SELECT id FROM audit_runs WHERE task_key = %s", (task_key,)).fetchone()
+def _existing(conn: psycopg.Connection, workspace_id: int, task_key: str) -> int | None:
+    """Только свой workspace: ключ другого — не «тот же аудит», а коллизия (UniqueViolation наружу)."""
+    row = conn.execute("SELECT id FROM audit_runs WHERE task_key = %s AND workspace_id = %s",
+                       (task_key, workspace_id)).fetchone()
     return row[0] if row else None
 
 
@@ -88,7 +90,7 @@ def _write(conn: psycopg.Connection, workspace_id: int, task_key: str, release_i
 def run_audit(conn: psycopg.Connection, *, workspace_id: int, task_key: str, data_cutoff: date, release_id: int,
               now: datetime) -> Audited | Skipped:
     assert conn.autocommit, "воркер требует соединение с autocommit=True"
-    if (existing := _existing(conn, task_key)) is not None:
+    if (existing := _existing(conn, workspace_id, task_key)) is not None:
         return Audited(existing)
     if isinstance(d := guard(Task.AUDIT, load_state(conn, workspace_id, None, now)), Skip):
         return Skipped(d.reason, d.detail)
@@ -98,13 +100,13 @@ def run_audit(conn: psycopg.Connection, *, workspace_id: int, task_key: str, dat
             audit_exclusive(conn, workspace_id)  # два аудита одного workspace не пишут проблемы одновременно
             if isinstance(d := guard(Task.AUDIT, load_state(conn, workspace_id, None, now)), Skip):
                 return Skipped(d.reason, d.detail)
-            if (existing := _existing(conn, task_key)) is not None:
+            if (existing := _existing(conn, workspace_id, task_key)) is not None:
                 return Audited(existing)
             sel = select_accounts(conn, workspace_id, data_cutoff, now)
             if not sel.included:
                 return Skipped("no_snapshots_for_cutoff", data_cutoff.isoformat())
             return Audited(_write(conn, workspace_id, task_key, release_id, sel))
     except psycopg.errors.UniqueViolation:
-        if (existing := _existing(conn, task_key)) is None:
+        if (existing := _existing(conn, workspace_id, task_key)) is None:
             raise
         return Audited(existing)

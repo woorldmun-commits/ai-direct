@@ -231,3 +231,21 @@ def test_lifecycle_events_go_to_outbox_with_ids_only(rw, ws):
                           "verdict": "effect"}
     allowed = {"issue_id", "finding_id", "rule_version", "result_id", "measurement_id", "verdict", "reason"}
     assert all(set(p) <= allowed for _, p in rows)
+
+
+def test_worker_that_lost_the_race_returns_the_winner_without_duplicates(rw, ws):
+    """Два воркера прошли проверку «уже замерено» до блокировки: опоздавший не падает на UNIQUE и не пишет дубль
+    события пропуска — под блокировкой видит итог первого."""
+    from app.worker import measure as measure_module
+    from app.worker.guard import Skip
+    rec, finding = audited(rw, ws)
+    m = done(rw, ws, rec, finding)
+    measurement_snapshot(rw, ws, m)
+    first = measure(rw, ws, m)
+    loaded = measure_module._load(rw, m["id"])
+    late = measure_module._write(rw, loaded, release_id=ws["release"], now=after_window(m), snapshot=None,
+                                 verdict="insufficient", before={}, after={}, saved=None, effect={})
+    assert late == first
+    assert measure_module._skip(rw, loaded, Skip("subscription_inactive", "expired")) == first
+    assert one(rw, "SELECT count(*) FROM recommendation_events WHERE recommendation_id = %s "
+                   "AND type IN ('measured', 'measurement_skipped')", rec) == 1

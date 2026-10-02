@@ -240,3 +240,13 @@ def test_problem_returns_after_resolve_as_new_lifecycle(rw, ws):
     audit(rw, ws, "d3")
     assert one(rw, "SELECT count(*) FROM issues WHERE workspace_id = %s AND id <> %s", ws["ws"], ws["issue"]) == 2
     assert open_issues(rw, ws) == 1
+
+
+def test_task_key_of_another_workspace_does_not_return_its_audit(rw, ws):
+    sync(rw, ws)
+    mine = audit(rw, ws, key="shared")
+    assert isinstance(mine, Audited)
+    other = one(rw, "INSERT INTO workspaces (name) VALUES ('other') RETURNING id")
+    out = run_audit(rw, workspace_id=other, task_key=f"{ws['ws']}:shared", data_cutoff=CUTOFF,
+                    release_id=ws["release"], now=NOW)
+    assert out != mine

@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlparse
 
 import httpx
+import psycopg
 import pytest
 
 from app.auth.login import SCOPES, LoginError, sign_in
@@ -55,8 +56,11 @@ def http(fake):
     return httpx.Client(transport=httpx.MockTransport(fake))
 
 
-def login(rw, fake, code="c1", state="s", expected="s"):
-    return sign_in(rw, http(fake), APP, code=code, state=state, expected_state=expected, now=NOW)
+OFFER = {"offer": "2026-10-01"}
+
+
+def login(rw, fake, code="c1", state="s", expected="s", accepted=OFFER):
+    return sign_in(rw, http(fake), APP, code=code, state=state, expected_state=expected, now=NOW, accepted=accepted)
 
 
 def test_authorize_url():
@@ -148,3 +152,47 @@ def test_config_from_env_and_secret_not_in_repr():
     assert app.client_secret == "s3cr3t" and "s3cr3t" not in repr(app)
     with pytest.raises(RuntimeError, match="YANDEX_LOGIN_CLIENT_SECRET"):
         OAuthApp.from_env("YANDEX_LOGIN", SCOPES, {k: v for k, v in env.items() if "SECRET" not in k})
+
+
+def test_token_response_without_access_token_is_oauth_error():
+    http = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={"error_description": "?"})))
+    with pytest.raises(OAuthError, match="bad_response"):
+        refresh(http, APP, "good-refresh", NOW)
+
+
+# --- Принятие оферты и согласий: доказательство — на операторе (ч. 3 ст. 9 152-ФЗ) ----------------
+
+def acceptances(rw, user_id):
+    return rw.execute("SELECT document, version, accepted_at FROM legal_acceptances WHERE user_id = %s ORDER BY document",
+                      (user_id,)).fetchall()
+
+
+def test_new_user_without_accepted_offer_is_not_created(rw):
+    p = profile()
+    with pytest.raises(LoginError, match="terms_not_accepted"):
+        login(rw, FakeYandex({"c1": p}), accepted={})
+    assert one(rw, "SELECT count(*) FROM yandex_identities WHERE yandex_uid = %s", p["id"]) == 0
+
+
+def test_acceptance_is_recorded_with_version_and_time_each_document_separately(rw):
+    out = login(rw, FakeYandex({"c1": profile()}), accepted={**OFFER, "marketing": "2026-10-01"})
+    assert acceptances(rw, out.user_id) == [("marketing", "2026-10-01", NOW), ("offer", "2026-10-01", NOW)]
+
+
+def test_existing_user_signs_in_without_new_acceptance(rw):
+    p = profile()
+    first = login(rw, FakeYandex({"c1": p}))
+    again = login(rw, FakeYandex({"c2": p}), code="c2", accepted={})
+    assert again.user_id == first.user_id and len(acceptances(rw, first.user_id)) == 1
+
+
+@pytest.mark.parametrize("accepted", [{"offer": ""}, {"offer": "v1; DROP"}, {"unknown_doc": "2026-10-01", **OFFER}])
+def test_unknown_document_or_bad_version_is_rejected(rw, accepted):
+    with pytest.raises(LoginError, match="terms_not_accepted"):
+        login(rw, FakeYandex({"c1": profile()}), accepted=accepted)
+
+
+def test_acceptance_cannot_be_rewritten(rw):
+    out = login(rw, FakeYandex({"c1": profile()}))
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):  # и триггер append-only — второй барьер
+        rw.execute("UPDATE legal_acceptances SET version = 'other' WHERE user_id = %s", (out.user_id,))
