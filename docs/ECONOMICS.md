@@ -56,7 +56,7 @@
 ### 3.4 Ответ
 ```json
 {"total": "Value", "components": [{"issue_type": "…", "amount": "Value"}], "overlap": "Value",
- "method": "exposure_total@1", "formula": "Σ по кабинетам max(...)"}
+ "version": "exposure_total@1", "formula": "Σ по кабинетам max(...)"}
 ```
 - `components` — суммы карточек по типам проблем (до вычета пересечений).
 - `overlap = Σ components − total` — сколько вычтено как пересечение.
