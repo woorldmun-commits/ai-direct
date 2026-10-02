@@ -24,14 +24,15 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { DemoBadge, Logo } from "@/components/ui";
-import { CAMPAIGNS, PERIOD, SYNC, USER } from "@/lib/demo";
+import { CAMPAIGNS, PERIOD, PROBLEMS, SYNC, USER } from "@/lib/demo";
+import { rub } from "@/lib/site";
 import { WhyDrawer } from "./why-drawer";
 
 type NavItem = { href: string; label: string; icon: LucideIcon };
 
 const NAV: NavItem[] = [
   { href: "/demo", label: "Обзор", icon: LayoutDashboard },
-  { href: "/demo/losses", label: "Потери", icon: TrendingDown },
+  { href: "/demo/losses", label: "Неэффективный расход", icon: TrendingDown },
   { href: "/demo/recommendations", label: "Рекомендации", icon: Lightbulb },
   { href: "/demo/changes", label: "Что изменилось", icon: GitCompareArrows },
   { href: "/demo/finance", label: "Финансы", icon: Wallet },
@@ -130,7 +131,7 @@ function Notifications() {
       {open && (
         <div className="glass anim-fade absolute right-0 z-40 mt-2 w-[300px] rounded-2xl p-2">
           {[
-            ["Новая проблема: CPA выше цели", `≈ 42 750 ₽ · ${SYNC.date}`],
+            ["Новая проблема: CPA выше цели", `Расход с признаками неэффективности ≈ ${rub(PROBLEMS[0].loss)} · ${SYNC.date}`],
             ["Синхронизация завершена", `Директ ${SYNC.direct} · Метрика ${SYNC.metrika}`],
           ].map(([t, s]) => (
             <Link key={t} href="/demo/losses" className="block rounded-xl p-3 hover:bg-surface/70" onClick={() => setOpen(false)}>
@@ -189,7 +190,7 @@ function CommandPalette({ onClose, theme }: { onClose: () => void; theme: Theme 
     const go = (href: string) => () => router.push(href);
     const all = [
       ...CAMPAIGNS.map((c) => ({ label: c.name, hint: "Кампания", run: go("/demo/losses") })),
-      { label: "Открыть потери", hint: "Раздел", run: go("/demo/losses") },
+      { label: "Открыть неэффективный расход", hint: "Раздел", run: go("/demo/losses") },
       { label: "Открыть рекомендации", hint: "Раздел", run: go("/demo/recommendations") },
       { label: "Спросить AI-Директора", hint: "AI", run: go("/demo/ai") },
       { label: "Интеграции", hint: "Раздел", run: go("/demo/integrations") },

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { AuthLayout, ConnectSources } from "@/components/auth";
+import { AuthLayout } from "@/components/auth";
+import { ConnectSources } from "@/components/connect-sources";
 
 export const metadata: Metadata = {
   title: "Подключите рекламу",

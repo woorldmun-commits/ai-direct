@@ -83,7 +83,7 @@ export function LineChart({
   );
 }
 
-/** Stacked bars: `a` is the base (e.g. useful spend), `b` sits on top (e.g. losses). */
+/** Stacked bars: `a` is the base (other spend), `b` sits on top (estimated inefficient spend). */
 export function Bars({ a, b, labels, height = H }: { a: number[]; b: number[]; labels: string[]; height?: number }) {
   const w = 600;
   const totals = a.map((v, i) => v + b[i]);
@@ -91,7 +91,7 @@ export function Bars({ a, b, labels, height = H }: { a: number[]; b: number[]; l
   const bw = w / a.length;
   const k = (height - 20) / max;
   return (
-    <svg viewBox={`0 0 ${w} ${height}`} className="anim-fade w-full" style={{ height }} role="img" aria-label="Расход и потери по дням">
+    <svg viewBox={`0 0 ${w} ${height}`} className="anim-fade w-full" style={{ height }} role="img" aria-label="Расход и неэффективный расход по дням">
       {a.map((v, i) => {
         const x = i * bw + bw * 0.2;
         const hb = b[i] * k;

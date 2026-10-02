@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { PageHeader, StateBox } from "@/components/ui";
-import { TARGET_CPA, USER } from "@/lib/demo";
+import { PROBLEMS, TARGET_CPA, USER } from "@/lib/demo";
+import { rub } from "@/lib/site";
 
 const SECTIONS = [
   ["profile", "Профиль"],
@@ -74,7 +75,10 @@ export default function SettingsPage() {
               <Field label="Имя">
                 <input className={input} defaultValue={USER.name} maxLength={80} />
               </Field>
-              <Field label="Email">
+              <Field label="Телефон для входа">
+                <input className={`${input} text-muted`} defaultValue="+7 900 000-00-00" readOnly aria-readonly />
+              </Field>
+              <Field label="Email для чеков (необязательно)">
                 <input className={input} type="email" defaultValue="demo@example.com" autoComplete="email" maxLength={254} />
               </Field>
             </div>
@@ -115,7 +119,13 @@ export default function SettingsPage() {
 
           <Block id="notify" title="Уведомления">
             <div className="divide-y divide-line">
-              <Toggle label="Новые проблемы — в Telegram" defaultOn />
+              <div>
+                <Toggle label="Новые проблемы — в Telegram" defaultOn />
+                <p className="pb-2.5 text-xs text-muted">
+                  Пример: «🔴 Новая проблема · Расход с признаками неэффективности ≈ {rub(PROBLEMS[0].loss)} · Открыть AdPilot». Без названий
+                  клиентов, кампаний и запросов — подробности после входа.
+                </p>
+              </div>
               <Toggle label="Ежедневная сводка на почту" />
               <Toggle label="Замер эффекта после решения" defaultOn />
             </div>
@@ -142,12 +152,12 @@ export default function SettingsPage() {
 
           <Block id="security" title="Безопасность">
             <ul className="space-y-2 text-sm">
-              <li>Вход по email и паролю. Пароль хранится только в виде хеша.</li>
+              <li>Вход по номеру телефона и одноразовому коду из SMS. Пароля нет.</li>
               <li>Токены Яндекса хранятся в зашифрованном виде.</li>
               <li>Активная сессия: этот браузер.</li>
             </ul>
             <div className="mt-4 flex flex-wrap gap-2">
-              <button className="btn btn-secondary btn-sm">Сменить пароль</button>
+              <button className="btn btn-secondary btn-sm">Сменить номер телефона</button>
               <button className="btn btn-secondary btn-sm">Выйти на всех устройствах</button>
               <button className="btn btn-ghost btn-sm text-danger">Отозвать доступ и удалить данные</button>
             </div>

@@ -13,7 +13,10 @@ export interface Problem {
   platform: Platform;
   title: string;
   reason: string;
+  /** Estimated spend with signs of inefficiency (internal name kept, API calls it `exposure`). */
   loss: number;
+  /** "campaign" covers the whole campaign's spend; "object" covers part of it (placements, queries). */
+  level: "campaign" | "object";
   recommendation: string;
   action: string;
   days: number;
@@ -44,7 +47,7 @@ function fmt(n: number) {
   return new Intl.NumberFormat("ru-RU").format(n);
 }
 
-const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
+export const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
 
 const CPA_SEARCH = 5250;
 const CONV_SEARCH = 19;
@@ -66,6 +69,7 @@ export const PROBLEMS: Problem[] = [
     title: "CPA выше целевого уровня",
     reason: `CPA ${fmt(CPA_SEARCH)} ₽ при цели ${fmt(TARGET_CPA)} ₽ — на ${DEV}% выше`,
     loss: (CPA_SEARCH - TARGET_CPA) * CONV_SEARCH,
+    level: "campaign",
     recommendation: `Снизить ставку на ${CUT}%`,
     action: "Снизить ставку",
     days: 7,
@@ -90,6 +94,7 @@ export const PROBLEMS: Problem[] = [
     title: "Расход без конверсий",
     reason: "14 площадок РСЯ: 1 860 кликов, 0 конверсий за 7 дней",
     loss: 12_400,
+    level: "object",
     recommendation: "Исключить 14 площадок без конверсий",
     action: "Исключить площадки",
     days: 7,
@@ -114,6 +119,7 @@ export const PROBLEMS: Problem[] = [
     title: "Нерелевантные запросы",
     reason: "23 запроса с расходом и без конверсий",
     loss: 3_800,
+    level: "object",
     recommendation: "Добавить 23 минус-слова",
     action: "Проверить запросы",
     days: 7,
@@ -158,9 +164,32 @@ function totals(w: typeof WEEK) {
 export const KPI = totals(WEEK);
 export const PREV_KPI = totals(PREV_WEEK);
 
-export const TOTAL_LOSS = sum(PROBLEMS.map((p) => p.loss));
-// Recoverable = losses backed by a high-confidence recommendation.
-export const RECOVERABLE = sum(PROBLEMS.filter((p) => p.quality === "Высокая").map((p) => p.loss));
+/**
+ * Total without double counting (mirrors exposure_total@1): a campaign-level finding already covers
+ * the campaign's spend, so object-level findings in the same campaign are not added on top of it.
+ * The demo has one finding per campaign, so overlap is 0, but the arithmetic always adds up:
+ * sum(cards) − overlap = total.
+ */
+export function exposureTotal(problems: Problem[]): { total: number; cards: number; overlap: number; covered: Set<string> } {
+  const cards = sum(problems.map((p) => p.loss));
+  const covered = new Set<string>();
+  let total = 0;
+  for (const camp of new Set(problems.map((p) => p.campaign))) {
+    const items = problems.filter((p) => p.campaign === camp);
+    const top = items.filter((p) => p.level === "campaign").sort((a, b) => b.loss - a.loss)[0];
+    if (top) {
+      total += top.loss;
+      items.filter((p) => p !== top).forEach((p) => covered.add(p.id));
+    } else {
+      total += sum(items.map((p) => p.loss));
+    }
+  }
+  return { total, cards, overlap: cards - total, covered };
+}
+
+export const TOTAL_LOSS = exposureTotal(PROBLEMS).total;
+// "Можно сэкономить": findings backed by a high-confidence recommendation, deduplicated the same way.
+export const RECOVERABLE = exposureTotal(PROBLEMS.filter((p) => p.quality === "Высокая")).total;
 
 export const SAVINGS = [
   { title: "Исключены 9 площадок РСЯ", campaign: "РСЯ · Москва", value: 21_200, period: "15–21 сентября" },
@@ -184,10 +213,10 @@ export type HistoryKind = "found" | "rec" | "action" | "measure";
 export const HISTORY: { date: string; kind: HistoryKind; title: string; detail: string; amount?: number }[] = [
   { date: "30 сентября, 10:45", kind: "found", title: "Найдена проблема: CPA выше цели", detail: `${CAMPAIGNS[0].name} · ${PERIOD}`, amount: PROBLEMS[0].loss },
   { date: "30 сентября, 10:45", kind: "rec", title: `Создана рекомендация: снизить ставку на ${CUT}%`, detail: "Правило bid_cpa v3 · уверенность высокая" },
-  { date: "22 сентября, 09:12", kind: "measure", title: "Замер эффекта: исключение площадок РСЯ", detail: "Через 7 дней после решения · расчётная оценка", amount: SAVINGS[0].value },
+  { date: "22 сентября, 09:12", kind: "measure", title: "Замер эффекта: исключение площадок РСЯ", detail: "Расчётный эффект · 7 дней до и после, без контрольной группы", amount: SAVINGS[0].value },
   { date: "15 сентября, 14:30", kind: "action", title: "Вы исключили 9 площадок РСЯ", detail: "Изменение внесено вручную в Яндекс Директе" },
   { date: "15 сентября, 10:40", kind: "rec", title: "Создана рекомендация: исключить 9 площадок", detail: "Правило zero_conv_placements v2" },
-  { date: "15 сентября, 09:05", kind: "measure", title: "Замер эффекта: минус-слова", detail: "Через 7 дней после решения · расчётная оценка", amount: SAVINGS[1].value },
+  { date: "15 сентября, 09:05", kind: "measure", title: "Замер эффекта: минус-слова", detail: "Расчётный эффект · 7 дней до и после, без контрольной группы", amount: SAVINGS[1].value },
   { date: "8 сентября, 16:20", kind: "action", title: "Вы добавили 17 минус-слов", detail: "Поиск · Регионы" },
 ];
 

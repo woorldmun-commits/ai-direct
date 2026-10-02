@@ -23,7 +23,7 @@ const PAINS: { icon: LucideIcon; tone: string; title: string; text: string; chec
     tone: "bg-danger-bg text-danger",
     title: "CPA выше цели",
     text: "Конверсия обходится дороже, чем вы готовы платить.",
-    check: "Сравниваем CPA кампании с вашей целью и считаем переплату в ₽.",
+    check: "Сравниваем CPA кампании с вашей целью и оцениваем переплату в ₽ (≈).",
   },
   {
     icon: MousePointerClick,
@@ -52,7 +52,7 @@ export function Pains() {
   return (
     <section id="features" aria-labelledby="pains-title" className="mx-auto max-w-[1360px] scroll-mt-24 px-4 pt-20 md:px-8">
       <h2 id="pains-title" className="text-[26px] font-bold tracking-tight md:text-[28px]">
-        Где реклама чаще всего теряет деньги
+        Где бюджет чаще всего расходуется неэффективно
       </h2>
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {PAINS.map((p) => (
@@ -71,7 +71,7 @@ export function Pains() {
 }
 
 const STEPS: { icon: LucideIcon; title: string; text: string }[] = [
-  { icon: Link2, title: "Подключаете рекламу", text: "Создаёте аккаунт по email и подключаете Директ и Метрику в кабинете." },
+  { icon: Link2, title: "Подключаете рекламу", text: "Входите по номеру телефона и подключаете Директ и Метрику в кабинете." },
   { icon: Code2, title: "Код проверяет данные", text: "Правила с открытыми формулами проходят по кампаниям каждый день." },
   { icon: ListChecks, title: "Показываем проблемы", text: "Сумма в ₽, причина, источник и уровень уверенности." },
   { icon: MessageSquareText, title: "Даём рекомендацию", text: "Конкретное действие. Решение и изменение в Директе — за вами." },
