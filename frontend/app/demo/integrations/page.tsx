@@ -1,6 +1,10 @@
 import { AlertTriangle, BarChart3, CheckCircle2, KeyRound, Loader2, Megaphone, PlugZap, ShieldAlert, Wallet } from "lucide-react";
 import { PageHeader, StateBox } from "@/components/ui";
-import { SYNC } from "@/lib/demo";
+import { integrations } from "@/lib/demo-backend";
+import { formatMoment } from "@/lib/value";
+
+const [DIRECT, METRIKA] = integrations("fresh");
+const synced = (iso: string | null) => (iso ? `${formatMoment(iso)} МСК` : "ещё не было");
 
 const STATES = [
   { icon: CheckCircle2, tone: "text-success bg-success-bg", title: "Подключено", text: "Данные обновляются каждый день.", action: "Проверить синхронизацию" },
@@ -29,7 +33,7 @@ function Source({ icon: Icon, name, time, scope, rows }: { icon: typeof Megaphon
         </div>
       </div>
       <dl className="mt-4 space-y-1.5 text-sm">
-        {[...rows, ["Последняя синхронизация", `сегодня, ${time}`] as [string, string]].map(([k, v]) => (
+        {[...rows, ["Последняя синхронизация", time] as [string, string]].map(([k, v]) => (
           <div key={k} className="flex justify-between gap-4">
             <dt className="text-muted">{k}</dt>
             <dd className="font-medium">{v}</dd>
@@ -49,8 +53,8 @@ export default function Integrations() {
     <>
       <PageHeader title="Интеграции" sub="Яндекс — подключаемый источник данных, а не способ входа. AdPilot читает статистику и не вносит изменений в рекламу." />
       <div className="grid gap-4 lg:grid-cols-2">
-        <Source icon={Megaphone} name="Яндекс Директ" time={SYNC.direct} scope="Расходы · кампании · CPA" rows={[["Аккаунт", "Демо-аккаунт"]]} />
-        <Source icon={BarChart3} name="Яндекс Метрика" time={SYNC.metrika} scope="Цели · конверсии · диагностика" rows={[["Счётчик", "12345678"], ["Цели", "3"]]} />
+        <Source icon={Megaphone} name="Яндекс Директ" time={synced(DIRECT.last_success_at)} scope="Расходы · кампании · CPA" rows={[["Аккаунт", "Демо-аккаунт"]]} />
+        <Source icon={BarChart3} name="Яндекс Метрика" time={synced(METRIKA.last_success_at)} scope="Цели · конверсии · диагностика" rows={[["Счётчик", "12345678"], ["Цели", "3"]]} />
       </div>
 
       <div className="mt-4">

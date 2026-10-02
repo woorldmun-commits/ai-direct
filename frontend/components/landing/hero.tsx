@@ -2,8 +2,13 @@ import { ArrowRight, BadgeCheck, CreditCard, Layers, Plug, Sparkles } from "luci
 import Link from "next/link";
 import { Sparkline } from "@/components/charts";
 import { Logo } from "@/components/ui";
-import { KPI, PROBLEMS, RECOVERABLE, SAVED, TOTAL_LOSS, WEEK } from "@/lib/demo";
-import { EXPOSURE_SHORT, rub } from "@/lib/site";
+import { ActionText } from "@/components/app/rec-parts";
+import { ValueView } from "@/components/value-view";
+import { RECOMMENDATIONS, WEEK, WEEK_VALUES } from "@/lib/demo";
+import { buildToday } from "@/lib/demo-backend";
+import { PAST_RECOMMENDATIONS } from "@/lib/demo-history";
+import { EXPOSURE_SHORT } from "@/lib/site";
+import type { Value } from "@/lib/value";
 
 const NAV = [
   { href: "#features", label: "Возможности" },
@@ -93,17 +98,21 @@ export function Hero() {
   );
 }
 
-function MiniMetric({ label, value, tone }: { label: string; value: string; tone: string }) {
+// Decorative preview: the same demo contract objects as the cabinet, without «Как посчитано» buttons.
+function MiniMetric({ label, v, tone }: { label: string; v: Value; tone: string }) {
   return (
     <div className="rounded-xl border border-line bg-surface p-3">
       <p className="text-[10px] text-muted">{label}</p>
-      <p className={`money mt-1 text-[15px] whitespace-nowrap xl:text-[17px] ${tone}`}>≈ {value}</p>
+      <p className="mt-1">
+        <ValueView v={v} hint={false} className={`text-[15px] xl:text-[17px] ${tone}`} />
+      </p>
     </div>
   );
 }
 
 function ProductPreview() {
-  const main = PROBLEMS[0];
+  const main = RECOMMENDATIONS[0];
+  const today = buildToday([...RECOMMENDATIONS, ...PAST_RECOMMENDATIONS]);
   return (
     <figure className="relative" aria-label="Интерфейс AdPilot с демонстрационными данными">
       <div className="relative rounded-[22px] border border-white/10 bg-white/5 p-2 shadow-[0_40px_120px_-30px_rgba(57,191,160,.45)] lg:[transform:perspective(1600px)_rotateY(-8deg)_rotateX(3deg)]">
@@ -124,20 +133,26 @@ function ProductPreview() {
               <span className="badge bg-warning-bg text-[9px] text-warning">ДЕМО-ДАННЫЕ</span>
             </div>
             <div className="mt-3 grid grid-cols-3 gap-2">
-              <MiniMetric label={EXPOSURE_SHORT} value={rub(TOTAL_LOSS)} tone="text-danger" />
-              <MiniMetric label="Можно сэкономить" value={rub(RECOVERABLE)} tone="text-warning" />
-              <MiniMetric label="Сэкономлено" value={rub(SAVED)} tone="text-success" />
+              <MiniMetric label={EXPOSURE_SHORT} v={today.exposure.total} tone="text-danger" />
+              <MiniMetric label="Можно сэкономить" v={today.can_save.total} tone="text-warning" />
+              <MiniMetric label="Сэкономлено" v={today.saved} tone="text-success" />
             </div>
             <div className="mt-2 grid grid-cols-[1.4fr_1fr] gap-2">
               <div className="rounded-xl border border-line bg-surface p-3">
                 <span className="badge bg-danger-bg text-[9px] text-danger">Сегодня важнее всего</span>
                 <p className="mt-2 text-[12px] font-bold">{main.title}</p>
-                <p className="money text-[15px] text-danger">≈ {rub(main.loss)}</p>
-                <p className="mt-1 text-[10px] text-muted">{main.recommendation}</p>
+                <p>
+                  <ValueView v={main.exposure} hint={false} className="text-[15px] text-danger" />
+                </p>
+                <p className="mt-1 text-[10px] text-muted">
+                  <ActionText action={main.action} />
+                </p>
               </div>
               <div className="rounded-xl border border-line bg-surface p-3">
                 <p className="text-[10px] text-muted">Расход, 7 дней</p>
-                <p className="money text-[13px]">{rub(KPI.spend)}</p>
+                <p>
+                  <ValueView v={WEEK_VALUES.spend} hint={false} className="text-[13px]" />
+                </p>
                 <div className="mt-2">
                   <Sparkline values={WEEK.spend} height={40} />
                 </div>
@@ -151,7 +166,7 @@ function ProductPreview() {
           <BadgeCheck size={15} className="text-[#39BFA0]" /> Почему AdPilot так решил
         </p>
         <p className="mt-1.5 text-xs text-white/70">
-          {main.reason}. {main.checks[1]}. Источник: Директ + Метрика.
+          {main.explanation.text.split(". ")[0]}. Источник: Директ + Метрика.
         </p>
       </div>
       <figcaption className="mt-6 text-xs text-white/45 sm:mt-14">Интерфейс с демонстрационными данными</figcaption>

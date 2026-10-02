@@ -2,58 +2,65 @@
 
 import { useState } from "react";
 import { LossesList, MetricCard } from "@/components/app/problem";
+import { SAVED_NOTE } from "@/components/app/rec-parts";
 import { useDemo } from "@/components/app/store";
 import { PageHeader, StateBox } from "@/components/ui";
-import { exposureTotal, PERIOD, RECOVERABLE, SAVED, type Priority } from "@/lib/demo";
-import { EXPOSURE, EXPOSURE_NOTE, rub, SAVED_NOTE } from "@/lib/site";
+import { ValueView } from "@/components/value-view";
+import { ruleName, RULE_TITLE } from "@/lib/contract";
+import { P7 } from "@/lib/demo";
+import { EXPOSURE, EXPOSURE_NOTE } from "@/lib/site";
+import { formatPeriod } from "@/lib/value";
 
-const FILTERS: { key: Priority | "all"; label: string }[] = [
+const FILTERS = [
   { key: "all", label: "Все" },
-  { key: "critical", label: "Критичные" },
-  { key: "medium", label: "Средние" },
-  { key: "low", label: "Низкие" },
-];
+  { key: "high_cpa", label: "Высокий CPA" },
+  { key: "zero_conv_campaign", label: "Без конверсий" },
+  { key: "zero_conv_placements", label: "Площадки РСЯ" },
+] as const;
 
 export default function Losses() {
-  const { problems } = useDemo();
-  const [filter, setFilter] = useState<Priority | "all">("all");
-  const shown = filter === "all" ? problems : problems.filter((p) => p.priority === filter);
-  const { total, cards, overlap } = exposureTotal(problems);
+  const { active, today: getToday } = useDemo();
+  const today = getToday("fresh");
+  const open = active.filter((r) => r.status !== "applied" && r.status !== "rejected");
+  const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("all");
+  const shown = filter === "all" ? open : open.filter((r) => ruleName(r.evidence.rule_version).startsWith(filter));
+  const { exposure } = today;
 
   return (
     <>
-      <PageHeader
-        title="Где бюджет расходуется неэффективно"
-        sub={`${problems.length} проблемы за ${PERIOD}. Сортировка — по сумме расхода с признаками неэффективности.`}
-      />
+      <PageHeader title="Где бюджет расходуется неэффективно" sub={`Открытые проблемы за ${formatPeriod(P7)}. Порядок — по сумме расхода с признаками неэффективности.`} />
       <div className="grid gap-4 sm:grid-cols-3">
-        <MetricCard
-          label={EXPOSURE}
-          value={rub(total)}
-          approx
-          tone="text-danger"
-          note={overlap > 0 ? `Карточки ≈ ${rub(cards)} · пересечение −${rub(overlap)} · оценка` : "оценка, без двойного счёта"}
-        />
-        <MetricCard label="Можно сэкономить" value={rub(RECOVERABLE)} approx tone="text-warning" note="оценка по рекомендациям с высокой уверенностью" />
-        <MetricCard label="Сэкономлено" value={rub(SAVED)} approx tone="text-success" note={SAVED_NOTE} />
+        <MetricCard label={EXPOSURE} v={exposure.total} tone="text-danger" />
+        <MetricCard label="Можно сэкономить" v={today.can_save.total} tone="text-warning" note="оценка по открытым рекомендациям, без двойного учёта" />
+        <MetricCard label="Сэкономлено" v={today.saved} tone="text-success" note={SAVED_NOTE} reason="Пока нет замеров с подтверждённым выполнением" />
       </div>
-      <p className="mt-3 text-xs text-muted">{EXPOSURE_NOTE}</p>
+      <div className="mt-3 space-y-1 text-xs text-muted">
+        <p>{EXPOSURE_NOTE}</p>
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span>
+            Пересечение карточек вычтено: <ValueView v={exposure.overlap} />
+          </span>
+          {exposure.components.map((c) => (
+            <span key={c.issue_type}>
+              {RULE_TITLE[c.issue_type] ?? c.issue_type}: <ValueView v={c.amount} />
+            </span>
+          ))}
+          {exposure.coverage.unavailable > 0 && <span>без суммы в итог не вошли: {exposure.coverage.unavailable}</span>}
+        </p>
+      </div>
 
-      <div className="mt-6 mb-4 flex flex-wrap gap-2" role="group" aria-label="Фильтр по приоритету">
-        {FILTERS.map((f) => {
-          const n = f.key === "all" ? problems.length : problems.filter((p) => p.priority === f.key).length;
-          return (
-            <button key={f.key} className="chip" aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>
-              {f.label} ({n})
-            </button>
-          );
-        })}
+      <div className="mt-6 mb-4 flex flex-wrap gap-2" role="group" aria-label="Фильтр по правилу">
+        {FILTERS.map((f) => (
+          <button key={f.key} className="chip" aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>
+            {f.label} ({f.key === "all" ? open.length : open.filter((r) => ruleName(r.evidence.rule_version).startsWith(f.key)).length})
+          </button>
+        ))}
       </div>
 
       {shown.length ? (
-        <LossesList key={filter} problems={shown} />
+        <LossesList key={filter} recs={shown} />
       ) : (
-        <StateBox kind="empty" title="Проблем с таким приоритетом нет" text="Выберите другой фильтр." />
+        <StateBox kind="empty" title="По этому правилу проблем не найдено" text={`Правило проверено на всех кампаниях за ${formatPeriod(P7)}.`} />
       )}
     </>
   );

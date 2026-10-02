@@ -20,17 +20,21 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { DemoBadge, Logo } from "@/components/ui";
-import { CAMPAIGNS, PERIOD, PROBLEMS, SYNC, USER } from "@/lib/demo";
-import { rub } from "@/lib/site";
+import { ValueView } from "@/components/value-view";
+import { DEMO_NOW, LAST_AUDIT_AT, P7, RECOMMENDATIONS, TODAY_DATE, USER } from "@/lib/demo";
+import { integrations, parseSources } from "@/lib/demo-backend";
+import { formatMoment, formatPeriod } from "@/lib/value";
+import { CommandPalette } from "./command-palette";
+import { FreshnessBar } from "./freshness";
 import { WhyDrawer } from "./why-drawer";
 
 type NavItem = { href: string; label: string; icon: LucideIcon };
 
 const NAV: NavItem[] = [
-  { href: "/demo", label: "Обзор", icon: LayoutDashboard },
+  { href: "/demo", label: "Сегодня", icon: LayoutDashboard },
   { href: "/demo/losses", label: "Неэффективный расход", icon: TrendingDown },
   { href: "/demo/recommendations", label: "Рекомендации", icon: Lightbulb },
   { href: "/demo/changes", label: "Что изменилось", icon: GitCompareArrows },
@@ -103,19 +107,10 @@ function Sidebar({ path }: { path: string }) {
   );
 }
 
-function Freshness() {
-  return (
-    <div className="hidden items-center gap-3 text-xs text-muted xl:flex">
-      {[
-        ["Яндекс Директ", SYNC.direct],
-        ["Яндекс Метрика", SYNC.metrika],
-      ].map(([name, t]) => (
-        <span key={name} className="inline-flex items-center gap-1.5">
-          <span className="pulse-dot size-1.5 rounded-full bg-success" /> {name} • {t}
-        </span>
-      ))}
-    </div>
-  );
+/** «Данные актуальны на …» + per-source status (PRODUCT_SPEC §4.2). Demo: `?sources=stale|no_access`. */
+function Freshness({ className = "" }: { className?: string }) {
+  const sources = parseSources(useSearchParams().get("sources"));
+  return <FreshnessBar lastAuditAt={LAST_AUDIT_AT} items={integrations(sources)} today={TODAY_DATE} now={DEMO_NOW} className={className} />;
 }
 
 function Notifications() {
@@ -129,11 +124,16 @@ function Notifications() {
       {open && (
         <div className="glass anim-fade absolute right-0 z-40 mt-2 w-[300px] rounded-2xl p-2">
           {[
-            ["Новая проблема: CPA выше цели", `Расход с признаками неэффективности ≈ ${rub(PROBLEMS[0].loss)} · ${SYNC.date}`],
-            ["Синхронизация завершена", `Директ ${SYNC.direct} · Метрика ${SYNC.metrika}`],
-          ].map(([t, s]) => (
+            { t: `Новая проблема: ${RECOMMENDATIONS[0].title}`, v: RECOMMENDATIONS[0].exposure, s: formatMoment(LAST_AUDIT_AT) },
+            { t: "Синхронизация завершена", v: null, s: `Директ и Метрика · ${formatMoment(LAST_AUDIT_AT)}` },
+          ].map(({ t, v, s }) => (
             <Link key={t} href="/demo/losses" className="block rounded-xl p-3 hover:bg-surface/70" onClick={() => setOpen(false)}>
               <p className="text-sm font-semibold">{t}</p>
+              {v && (
+                <p className="text-xs text-muted">
+                  Расход с признаками неэффективности <ValueView v={v} hint={false} className="font-semibold" />
+                </p>
+              )}
               <p className="text-xs text-muted">{s}</p>
             </Link>
           ))}
@@ -157,11 +157,10 @@ function Topbar({ onPalette, onMenu, theme }: { onPalette: () => void; onMenu: (
         <span className="truncate">Поиск и команды</span>
         <kbd className="ml-auto hidden rounded-md border border-line px-1.5 font-mono text-[11px] sm:inline">Ctrl K</kbd>
       </button>
-      <Freshness />
       <div className="ml-auto flex items-center gap-1 md:gap-2">
         <DemoBadge className="hidden sm:inline-flex" />
         <span className="hidden items-center gap-1.5 rounded-xl border border-line bg-surface px-3 py-2 text-xs md:inline-flex">
-          <CalendarDays size={14} className="text-muted" /> {PERIOD}
+          <CalendarDays size={14} className="text-muted" /> {formatPeriod(P7)}
         </span>
         <button className="btn btn-ghost size-10 p-0" aria-label={theme.dark ? "Светлая тема" : "Тёмная тема"} onClick={theme.toggle}>
           {theme.dark ? <Sun size={18} /> : <Moon size={18} />}
@@ -176,80 +175,6 @@ function Topbar({ onPalette, onMenu, theme }: { onPalette: () => void; onMenu: (
         </span>
       </div>
     </header>
-  );
-}
-
-function CommandPalette({ onClose, theme }: { onClose: () => void; theme: Theme }) {
-  const router = useRouter();
-  const [q, setQ] = useState("");
-  const [sel, setSel] = useState(0);
-  const input = useRef<HTMLInputElement>(null);
-  const items = useMemo(() => {
-    const go = (href: string) => () => router.push(href);
-    const all = [
-      ...CAMPAIGNS.map((c) => ({ label: c.name, hint: "Кампания", run: go("/demo/losses") })),
-      { label: "Открыть неэффективный расход", hint: "Раздел", run: go("/demo/losses") },
-      { label: "Открыть рекомендации", hint: "Раздел", run: go("/demo/recommendations") },
-      { label: "История решений", hint: "Раздел", run: go("/demo/history") },
-      { label: "Интеграции", hint: "Раздел", run: go("/demo/integrations") },
-      { label: "Настройки", hint: "Раздел", run: go("/demo/settings") },
-      { label: theme.dark ? "Светлая тема" : "Тёмная тема", hint: "Вид", run: theme.toggle },
-    ];
-    return all.filter((i) => i.label.toLowerCase().includes(q.toLowerCase()));
-  }, [q, router, theme]);
-
-  useEffect(() => input.current?.focus(), []);
-
-  function run(i: number) {
-    items[i]?.run();
-    onClose();
-  }
-
-  return (
-    <div className="fixed inset-0 z-[70] bg-black/30 p-4 pt-[12vh]" onClick={onClose}>
-      <div
-        role="dialog"
-        aria-label="Поиск и команды"
-        className="glass anim-fade mx-auto max-w-[560px] overflow-hidden rounded-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 border-b border-line px-4">
-          <Search size={18} className="text-muted" />
-          <input
-            ref={input}
-            value={q}
-            onChange={(e) => {
-              setQ(e.target.value);
-              setSel(0);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "ArrowDown") setSel((s) => Math.min(s + 1, items.length - 1));
-              if (e.key === "ArrowUp") setSel((s) => Math.max(s - 1, 0));
-              if (e.key === "Enter") run(sel);
-              if (e.key === "Escape") onClose();
-            }}
-            placeholder="Кампания или раздел…"
-            className="h-14 flex-1 bg-transparent outline-none"
-            aria-label="Поиск"
-          />
-        </div>
-        <ul className="max-h-[360px] overflow-auto p-2" role="listbox">
-          {items.length === 0 && <li className="p-4 text-sm text-muted">Ничего не найдено</li>}
-          {items.map((it, i) => (
-            <li key={it.label} role="option" aria-selected={i === sel}>
-              <button
-                onMouseEnter={() => setSel(i)}
-                onClick={() => run(i)}
-                className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm ${i === sel ? "bg-surface" : ""}`}
-              >
-                {it.label}
-                <span className="text-xs text-muted">{it.hint}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
   );
 }
 
@@ -325,13 +250,16 @@ export function Shell({ children }: { children: ReactNode }) {
       <div className="min-w-0 flex-1">
         <Topbar onPalette={() => setPalette(true)} onMenu={() => setMenu(true)} theme={theme} />
         <div className="flex items-center justify-center gap-2 bg-warning-bg px-4 py-1.5 text-xs font-semibold text-warning sm:hidden">
-          ДЕМО-ДАННЫЕ · {PERIOD}
+          ДЕМО-ДАННЫЕ · {formatPeriod(P7)}
         </div>
+        <Suspense fallback={null}>
+          <Freshness className="border-b border-line bg-bg/80 px-4 py-2 md:px-6" />
+        </Suspense>
         <main className="mx-auto max-w-[1360px] px-4 pt-6 pb-28 md:px-6 lg:pb-12">{children}</main>
       </div>
       <BottomNav path={path} onMore={() => setMenu(true)} />
       {menu && <MobileMenu path={path} onClose={() => setMenu(false)} />}
-      {palette && <CommandPalette onClose={() => setPalette(false)} theme={theme} />}
+      {palette && <CommandPalette onClose={() => setPalette(false)} />}
       <WhyDrawer />
     </div>
   );

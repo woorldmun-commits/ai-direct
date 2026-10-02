@@ -1,31 +1,44 @@
+import type { ReactNode } from "react";
+import { SAVED_NOTE } from "@/components/app/rec-parts";
 import { Bars, Donut } from "@/components/charts";
-import { Approx, PageHeader } from "@/components/ui";
-import { CAMPAIGNS, MONTH, MONTH_LOSS, MONTH_SPEND, PERIOD, RECOVERABLE, SAVED, SAVINGS } from "@/lib/demo";
-import { EXPOSURE, EXPOSURE_SHORT, rub, SAVED_NOTE } from "@/lib/site";
+import { PageHeader } from "@/components/ui";
+import { ValueView } from "@/components/value-view";
+import { CAMPAIGN_SHARES, MONTH, MONTH_VALUES, P7, RECOMMENDATIONS } from "@/lib/demo";
+import { buildToday } from "@/lib/demo-backend";
+import { PAST_RECOMMENDATIONS } from "@/lib/demo-history";
+import { EXPOSURE, EXPOSURE_SHORT } from "@/lib/site";
+import { formatPeriod, type Value } from "@/lib/value";
 
 const COLORS = ["var(--brand)", "var(--info)", "var(--warning)"];
 
-function Tile({ label, value, tone, bar, note, approx }: { label: string; value: number; tone: string; bar: string; note: string; approx?: boolean }) {
+function Tile({ label, v, tone = "", bar, note, reason }: { label: string; v: Value; tone?: string; bar: string; note?: ReactNode; reason?: string }) {
   return (
     <div className="card relative overflow-hidden p-5">
       <span aria-hidden className={`absolute inset-x-0 top-0 h-1 ${bar}`} />
       <p className="text-sm text-muted">{label}</p>
-      {approx ? <Approx className={`mt-2 block text-[28px] ${tone}`}>{rub(value)}</Approx> : <p className={`money mt-2 text-[28px] ${tone}`}>{rub(value)}</p>}
-      <p className="mt-1 text-xs text-muted">{note}</p>
+      <div className="mt-2">
+        <ValueView v={v} caption reason={reason} className={`text-[28px] ${tone}`} />
+      </div>
+      {note && <p className="mt-1 text-xs text-muted">{note}</p>}
     </div>
   );
 }
 
 export default function Finance() {
-  const spend7 = CAMPAIGNS.reduce((s, c) => s + c.spend, 0);
+  // Demo data source: the same contract response the screens get from GET /today.
+  const today = buildToday([...RECOMMENDATIONS, ...PAST_RECOMMENDATIONS]);
+  const savings = PAST_RECOMMENDATIONS.filter((r) => r.measurement?.saved);
   return (
     <>
       <PageHeader title="Финансы" sub="Сентябрь 2026. Потраченное, расход с признаками неэффективности и сэкономленное — разные деньги, мы их не смешиваем." />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Tile label="Потрачено" value={MONTH_SPEND} tone="" bar="bg-text/20" note="факт по Яндекс Директу" />
-        <Tile label={EXPOSURE} value={MONTH_LOSS} tone="text-danger" bar="bg-danger" note="оценка по правилам, без двойного счёта" approx />
-        <Tile label="Можно сэкономить" value={RECOVERABLE} tone="text-warning" bar="bg-warning" note={`оценка по открытым рекомендациям, ${PERIOD}`} approx />
-        <Tile label="Сэкономлено" value={SAVED} tone="text-success" bar="bg-success" note={SAVED_NOTE} approx />
+        <Tile label="Потрачено" v={MONTH_VALUES.spend} bar="bg-text/20" />
+        <Tile label={EXPOSURE} v={MONTH_VALUES.exposure} tone="text-danger" bar="bg-danger" note="без двойного учёта" />
+        <Tile label="Можно сэкономить" v={today.can_save.total} tone="text-warning" bar="bg-warning" note="по открытым рекомендациям" />
+        <Tile label="Сэкономлено" v={today.saved} tone="text-success" bar="bg-success" note={SAVED_NOTE} reason="Пока нет замеров с подтверждённым выполнением" />
+      </div>
+      <div className="mt-4">
+        <Tile label="Выручка и ROAS" v={MONTH_VALUES.revenue} bar="bg-line" reason="Источник выручки не подключён — ROAS и ДРР не считаем, чтобы не выдумывать цифры" />
       </div>
 
       <section className="card mt-4 p-5" aria-labelledby="trend">
@@ -44,8 +57,8 @@ export default function Finance() {
         </div>
         <div className="mt-4">
           <Bars
-            a={MONTH.map((d) => d.spend - d.loss)}
-            b={MONTH.map((d) => d.loss)}
+            a={MONTH.map((d) => d.spend - d.exposure)}
+            b={MONTH.map((d) => d.exposure)}
             labels={MONTH.map((d) => ([1, 8, 15, 22, 29].includes(d.day) ? `${d.day} сен` : ""))}
             height={200}
           />
@@ -57,16 +70,18 @@ export default function Finance() {
           <h2 id="struct" className="font-bold">
             Структура расходов
           </h2>
-          <p className="text-xs text-muted">{PERIOD}</p>
+          <p className="text-xs text-muted">{formatPeriod(P7)}</p>
           <div className="mt-4 flex flex-wrap items-center gap-6">
-            <Donut parts={CAMPAIGNS.map((c, i) => ({ label: c.name, value: c.spend, color: COLORS[i] }))} />
+            <Donut parts={CAMPAIGN_SHARES.map((c, i) => ({ label: c.name, value: c.spend, color: COLORS[i] }))} />
             <ul className="min-w-0 flex-1 space-y-3 text-sm">
-              {CAMPAIGNS.map((c, i) => (
+              {CAMPAIGN_SHARES.map((c, i) => (
                 <li key={c.name} className="flex items-center gap-3">
                   <span className="size-2.5 shrink-0 rounded-full" style={{ background: COLORS[i] }} />
                   <span className="min-w-0 flex-1 truncate">{c.name}</span>
-                  <span className="money">{rub(c.spend)}</span>
-                  <span className="w-10 text-right text-muted">{Math.round((c.spend / spend7) * 100)}%</span>
+                  <ValueView v={c.spendValue} />
+                  <span className="w-14 text-right text-muted">
+                    <ValueView v={c.share} hint={false} className="font-normal" />
+                  </span>
                 </li>
               ))}
             </ul>
@@ -74,20 +89,21 @@ export default function Finance() {
         </section>
 
         <section className="card p-5" aria-labelledby="savings">
-          <h2 id="savings" className="font-bold">
-            Сэкономлено ≈ {rub(SAVED)}
+          <h2 id="savings" className="flex flex-wrap items-baseline gap-2 font-bold">
+            Сэкономлено <ValueView v={today.saved} className="text-success" />
           </h2>
-          <p className="text-xs text-muted">{SAVED_NOTE}: расход до решения минус расход за 7 дней после, при той же цене клика.</p>
+          <p className="text-xs text-muted">{SAVED_NOTE}. Только выполнения, подтверждённые по данным Директа.</p>
           <ul className="mt-4 divide-y divide-line">
-            {SAVINGS.map((s) => (
-              <li key={s.title} className="flex items-center justify-between gap-3 py-3">
+            {savings.map((r) => (
+              <li key={r.id} className="flex items-center justify-between gap-3 py-3">
                 <div>
-                  <p className="font-semibold">{s.title}</p>
+                  <p className="font-semibold">{r.title}</p>
                   <p className="text-xs text-muted">
-                    {s.campaign} · замер {s.period}
+                    {r.object.name} · замер {formatPeriod(r.measurement!.windows.after)}
+                    {!r.measurement!.counts_in_saved_total && " · не входит в итог"}
                   </p>
                 </div>
-                <Approx className="text-success">{rub(s.value)}</Approx>
+                <ValueView v={r.measurement!.saved!} className="text-success" />
               </li>
             ))}
           </ul>

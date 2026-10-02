@@ -1,262 +1,274 @@
-// DEMO data only. Every derived figure is computed here, never typed by hand,
-// so totals on different screens always agree.
+// DEMO data only. It plays the backend: every figure is computed here once and handed to the screens as
+// contract objects (`Value`, `Recommendation`, lib/contract.ts), never typed into markup by hand, so totals on
+// different screens always agree. Screens only format what they get (`<ValueView>`).
 
-export type Priority = "critical" | "medium" | "low";
+import type { Recommendation } from "./contract";
+import type { ActualValue, DataStatus, EstimatedValue, Period, UnavailableValue, Unit } from "./value";
+
 export type Platform = "search" | "network";
-export type Quality = "Высокая" | "Средняя" | "Низкая";
-/**
- * v1.0 decision flow (STRATEGY): new → viewed → accepted → applied (done by hand in Direct, then
- * verified against Direct data) → measured. Side exits: postponed, rejected (with a reason).
- * AdPilot never changes the ad account itself in v1.0.
- */
-export type RecStatus = "new" | "viewed" | "accepted" | "applied" | "measured" | "postponed" | "rejected";
 
-export const REJECT_REASONS = [
-  "Неверные данные",
-  "Правило не подходит",
-  "Мало контекста",
-  "Слишком рискованно",
-  "Другое",
-] as const;
-export type RejectReason = (typeof REJECT_REASONS)[number];
+export const TODAY_DATE = "2026-10-02";
+/** Fixed demo clock, so "N minutes ago" renders the same on server and client. */
+export const DEMO_NOW = "2026-10-02T09:15:00+03:00";
+export const LAST_AUDIT_AT = "2026-10-02T07:01:54+03:00";
+export const P7: Period = { from: "2026-09-25", to: "2026-10-01" };
+export const PREV7: Period = { from: "2026-09-18", to: "2026-09-24" };
+export const SEPTEMBER: Period = { from: "2026-09-01", to: "2026-09-30" };
+export const DAYS = ["25", "26", "27", "28", "29", "30", "1"];
+export const USER = { name: "Алексей", account: "Демо-аккаунт" };
+export const AD_ACCOUNT = { id: "acc_demo", login: "demo-client" };
 
-export interface Problem {
-  id: string;
-  priority: Priority;
-  campaign: string;
-  platform: Platform;
-  title: string;
-  reason: string;
-  /** Estimated spend with signs of inefficiency (internal name kept, API calls it `exposure`). */
-  loss: number;
-  /** "campaign" covers the whole campaign's spend; "object" covers part of it (e.g. network placements). */
-  level: "campaign" | "object";
-  recommendation: string;
-  action: string;
-  days: number;
-  conversions: number;
-  quality: Quality;
-  facts: { label: string; value: string }[];
-  calc: string;
-  rule: string;
-  checks: string[];
-  ai: string;
-  status: RecStatus;
+const DIRECT = "yandex_direct";
+const BOTH = "yandex_direct+yandex_metrika";
+
+// --- Value builders (backend role: amounts become Decimal strings once, here) ---------------------
+/** Number → Decimal string with 2 places. Demo inputs are whole rubles or simple ratios. */
+export const dec = (n: number) => (Math.round(n * 100) / 100).toFixed(2);
+const amountOf = (n: number, unit: Unit) => (unit === "count" ? String(Math.round(n)) : dec(n));
+
+export function actual(
+  n: number,
+  unit: Unit,
+  source: string,
+  period: Period = P7,
+  opts: { formula?: string; data_status?: DataStatus; rule_version?: string } = {},
+): ActualValue {
+  return {
+    amount: amountOf(n, unit),
+    unit,
+    calculation_type: "actual",
+    source,
+    period,
+    data_status: opts.data_status ?? "complete",
+    data_sufficiency: "sufficient",
+    formula: opts.formula ?? null,
+    rule_version: opts.rule_version ?? null,
+  };
 }
 
-export const PERIOD = "23–29 сентября";
-export const PREV_PERIOD = "16–22 сентября";
-export const DAYS = ["23", "24", "25", "26", "27", "28", "29"];
-export const SYNC = { direct: "10:42", metrika: "10:38", date: "30 сентября 2026" };
-export const USER = { name: "Алексей", account: "Демо-аккаунт" };
+export function estimated(
+  n: number,
+  unit: Unit,
+  source: string,
+  formula: string,
+  rule_version: string | null,
+  period: Period = P7,
+  data_status: DataStatus = "complete",
+): EstimatedValue {
+  return { amount: amountOf(n, unit), unit, calculation_type: "estimated", source, period, data_status, data_sufficiency: "sufficient", formula, rule_version };
+}
+
+export function unavailable(unit: Unit, source: string, period: Period = P7, rule_version: string | null = null): UnavailableValue {
+  return { amount: null, unit, calculation_type: "unavailable", source, period, data_status: "complete", data_sufficiency: "insufficient", formula: null, rule_version };
+}
+
+// --- Raw demo week (charts use these series; screens show Values) -----------------------------------
+const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
 
 export const TARGET_CPA = 3000;
-
-// Bid rule: step down 5% per full 20% of CPA deviation above target.
-export function bidCut(deviationPct: number): number {
-  return Math.floor(deviationPct / 20) * 5;
-}
-
-function fmt(n: number) {
-  return new Intl.NumberFormat("ru-RU").format(n);
-}
-
-export const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
-
 const CPA_SEARCH = 5250;
 const CONV_SEARCH = 19;
 const DEV = Math.round(((CPA_SEARCH - TARGET_CPA) / TARGET_CPA) * 100);
-const CUT = bidCut(DEV);
+/** Bid rule: step down 5% per full 20% of CPA deviation above target. */
+const CUT = Math.floor(DEV / 20) * 5;
 
 export const CAMPAIGNS = [
-  { name: "Поиск · Москва · Услуги", platform: "search" as Platform, spend: CPA_SEARCH * CONV_SEARCH, conversions: CONV_SEARCH },
-  { name: "РСЯ · Москва", platform: "network" as Platform, spend: 41_300, conversions: 9 },
-  { name: "РСЯ · Регионы", platform: "network" as Platform, spend: 43_150, conversions: 19 },
-];
-
-// Second placements finding (rule zero_conv_placements): network placements in the regions campaign.
-const REG_PLACEMENTS = { count: 6, clicks: 410, spend: 3_800 };
-
-export const PROBLEMS: Problem[] = [
-  {
-    id: "cpa",
-    priority: "critical",
-    campaign: CAMPAIGNS[0].name,
-    platform: "search",
-    title: "CPA выше целевого уровня",
-    reason: `CPA ${fmt(CPA_SEARCH)} ₽ при цели ${fmt(TARGET_CPA)} ₽ — на ${DEV}% выше`,
-    loss: (CPA_SEARCH - TARGET_CPA) * CONV_SEARCH,
-    level: "campaign",
-    recommendation: `Снизить ставку на ${CUT}%`,
-    action: "Снизить ставку",
-    days: 7,
-    conversions: CONV_SEARCH,
-    quality: "Высокая",
-    facts: [
-      { label: "CPA", value: `${fmt(CPA_SEARCH)} ₽` },
-      { label: "Цель", value: `${fmt(TARGET_CPA)} ₽` },
-      { label: "Отклонение", value: `+${DEV}%` },
-    ],
-    calc: `floor(${DEV} / 20) × 5% = ${CUT}%`,
-    rule: "bid_cpa v3",
-    checks: ["7 дней данных", `${CONV_SEARCH} конверсий (нужно ≥ 10)`],
-    ai: `За неделю конверсия в этой кампании стоила ${fmt(CPA_SEARCH)} ₽ — на ${DEV}% дороже цели. Снижение ставки на ${CUT}% уменьшит цену клика; через 7 дней система сравнит CPA до и после.`,
-    status: "new",
-  },
-  {
-    id: "network",
-    priority: "medium",
-    campaign: CAMPAIGNS[1].name,
-    platform: "network",
-    title: "Площадки РСЯ без конверсий",
-    reason: "14 площадок РСЯ: 1 860 кликов, 0 конверсий за 7 дней",
-    loss: 12_400,
-    level: "object",
-    recommendation: "Исключить 14 площадок без конверсий",
-    action: "Исключить площадки",
-    days: 7,
-    conversions: 0,
-    quality: "Высокая",
-    facts: [
-      { label: "Расход", value: "12 400 ₽" },
-      { label: "Клики", value: "1 860" },
-      { label: "Конверсии", value: "0" },
-    ],
-    calc: "Σ расход площадок, где клики ≥ 50 и конверсии = 0",
-    rule: "zero_conv_placements v2",
-    checks: ["7 дней данных", "1 860 кликов (нужно ≥ 50 на площадку)"],
-    ai: "Эти площадки получили заметное число кликов, но ни одной конверсии. Исключение остановит расход на них; остальная часть РСЯ продолжит работать.",
-    status: "new",
-  },
-  {
-    id: "network_regions",
-    priority: "low",
-    campaign: CAMPAIGNS[2].name,
-    platform: "network",
-    title: "Площадки РСЯ без конверсий",
-    reason: `${REG_PLACEMENTS.count} площадок РСЯ: ${fmt(REG_PLACEMENTS.clicks)} кликов, 0 конверсий за 7 дней`,
-    loss: REG_PLACEMENTS.spend,
-    level: "object",
-    recommendation: `Проверить и исключить ${REG_PLACEMENTS.count} площадок без конверсий`,
-    action: "Проверить площадки",
-    days: 7,
-    conversions: 0,
-    quality: "Средняя",
-    facts: [
-      { label: "Расход", value: `${fmt(REG_PLACEMENTS.spend)} ₽` },
-      { label: "Клики", value: fmt(REG_PLACEMENTS.clicks) },
-      { label: "Конверсии", value: "0" },
-    ],
-    calc: "Σ расход площадок, где клики ≥ 50 и конверсии = 0",
-    rule: "zero_conv_placements v2",
-    checks: ["7 дней данных", `${fmt(REG_PLACEMENTS.clicks)} кликов (нужно ≥ 50 на площадку)`, "Часть площадок близка к порогу — проверьте список вручную"],
-    ai: "На этих площадках были клики, но не было конверсий. Объём по каждой площадке невелик, поэтому проверьте список перед исключением: исключение делается вручную в Директе.",
-    status: "accepted",
-  },
+  { id: "51234567", name: "Поиск · Москва · Услуги", platform: "search" as Platform, spend: CPA_SEARCH * CONV_SEARCH, conversions: CONV_SEARCH },
+  { id: "51234568", name: "РСЯ · Москва", platform: "network" as Platform, spend: 41_300, conversions: 9 },
+  { id: "51234569", name: "РСЯ · Регионы", platform: "network" as Platform, spend: 43_150, conversions: 19 },
 ];
 
 export const WEEK = {
   spend: [25_400, 26_100, 27_800, 26_300, 25_900, 27_200, 25_500],
   conversions: [7, 6, 7, 6, 7, 8, 6],
-  losses: [7_900, 8_300, 9_100, 8_400, 8_200, 9_050, 8_000],
+  exposure: [7_900, 8_300, 9_100, 8_400, 8_200, 9_050, 8_000],
 };
 export const PREV_WEEK = {
   spend: [24_100, 24_800, 25_300, 24_200, 24_700, 24_400, 24_100],
   conversions: [8, 8, 8, 7, 8, 8, 8],
-  losses: [5_600, 5_900, 6_100, 5_800, 6_000, 6_100, 5_800],
+  exposure: [5_600, 5_900, 6_100, 5_800, 6_000, 6_100, 5_800],
 };
+export const cpaSeries = (w: typeof WEEK) => w.spend.map((s, i) => Math.round(s / w.conversions[i]));
 
-function totals(w: typeof WEEK) {
+function weekTotals(w: typeof WEEK) {
   const spend = sum(w.spend);
   const conversions = sum(w.conversions);
-  return {
-    spend,
-    conversions,
-    losses: sum(w.losses),
-    cpa: Math.round(spend / conversions),
-    cpaDaily: w.spend.map((s, i) => Math.round(s / w.conversions[i])),
-  };
+  return { spend, conversions, exposure: sum(w.exposure), cpa: spend / conversions };
 }
+export const KPI = weekTotals(WEEK);
+export const PREV_KPI = weekTotals(PREV_WEEK);
+export const pctChange = (prev: number, cur: number) => ((cur - prev) / prev) * 100;
 
-export const KPI = totals(WEEK);
-export const PREV_KPI = totals(PREV_WEEK);
+/** Week KPIs as Values: conversions of the last days may still be recounted by Metrika. */
+export const WEEK_VALUES = {
+  spend: actual(KPI.spend, "rub", DIRECT),
+  conversions: actual(KPI.conversions, "count", "yandex_metrika", P7, { data_status: "partial" }),
+  cpa: actual(KPI.cpa, "rub", BOTH, P7, { formula: "расход / конверсии", data_status: "partial" }),
+  exposure: estimated(KPI.exposure, "rub", BOTH, "Σ по кабинету без двойного учёта", "exposure_total@1", P7, "partial"),
+};
+export const PREV_WEEK_VALUES = {
+  spend: actual(PREV_KPI.spend, "rub", DIRECT, PREV7),
+  conversions: actual(PREV_KPI.conversions, "count", "yandex_metrika", PREV7),
+  cpa: actual(PREV_KPI.cpa, "rub", BOTH, PREV7, { formula: "расход / конверсии" }),
+  exposure: estimated(PREV_KPI.exposure, "rub", BOTH, "Σ по кабинету без двойного учёта", "exposure_total@1", PREV7),
+};
+const deltaFormula = "(эта неделя − прошлая) / прошлая × 100";
+export const WEEK_DELTAS = {
+  spend: actual(pctChange(PREV_KPI.spend, KPI.spend), "pct", DIRECT, P7, { formula: deltaFormula }),
+  conversions: actual(pctChange(PREV_KPI.conversions, KPI.conversions), "pct", "yandex_metrika", P7, { formula: deltaFormula, data_status: "partial" }),
+  cpa: actual(pctChange(PREV_KPI.cpa, KPI.cpa), "pct", BOTH, P7, { formula: deltaFormula, data_status: "partial" }),
+  exposure: estimated(pctChange(PREV_KPI.exposure, KPI.exposure), "pct", BOTH, deltaFormula, "exposure_total@1", P7, "partial"),
+};
 
-/**
- * Total without double counting (mirrors exposure_total@1): a campaign-level finding already covers
- * the campaign's spend, so object-level findings in the same campaign are not added on top of it.
- * The demo has one finding per campaign, so overlap is 0, but the arithmetic always adds up:
- * sum(cards) − overlap = total.
- */
-export function exposureTotal(problems: Problem[]): { total: number; cards: number; overlap: number; covered: Set<string> } {
-  const cards = sum(problems.map((p) => p.loss));
-  const covered = new Set<string>();
-  let total = 0;
-  for (const camp of new Set(problems.map((p) => p.campaign))) {
-    const items = problems.filter((p) => p.campaign === camp);
-    const top = items.filter((p) => p.level === "campaign").sort((a, b) => b.loss - a.loss)[0];
-    if (top) {
-      total += top.loss;
-      items.filter((p) => p !== top).forEach((p) => covered.add(p.id));
-    } else {
-      total += sum(items.map((p) => p.loss));
-    }
-  }
-  return { total, cards, overlap: cards - total, covered };
+// --- Active recommendations (three rules of v1.0) ------------------------------------------------
+const RULE_CPA = "high_cpa_target@1";
+const RULE_PLACEMENTS = "zero_conv_placements@1";
+const PLACEMENTS_FORMULA = "Σ расход площадок, где клики ≥ 50 и конверсии = 0";
+const sys = "system" as const;
+
+function rec(r: Omit<Recommendation, "ad_account" | "postponed_until" | "blocked_actions" | "exposure_overlap" | "decision" | "measurement">): Recommendation {
+  return { ...r, ad_account: AD_ACCOUNT, postponed_until: null, blocked_actions: [], exposure_overlap: false, decision: null, measurement: null };
 }
+const noExecution = { execution_mode: null, verification_status: null, accepted_at: null, done_at: null, before_state: null, verification_checked_at: null };
 
-export const TOTAL_LOSS = exposureTotal(PROBLEMS).total;
-// "Можно сэкономить": findings backed by a high-confidence recommendation, deduplicated the same way.
-export const RECOVERABLE = exposureTotal(PROBLEMS.filter((p) => p.quality === "Высокая")).total;
+const NET_MSK = { count: 14, clicks: 1_860, spend: 12_400 };
+const NET_REG = { count: 6, clicks: 410, spend: 3_800 };
 
-export const SAVINGS = [
-  { title: "Исключены 9 площадок РСЯ", campaign: "РСЯ · Москва", value: 21_200, period: "15–21 сентября" },
-  { title: "Исключены 5 площадок РСЯ", campaign: "РСЯ · Регионы", value: 9_800, period: "8–14 сентября" },
+export const RECOMMENDATIONS: Recommendation[] = [
+  rec({
+    id: "rec_cpa01",
+    version_id: "rv_cpa01_2",
+    title: `CPA выше цели на ${DEV}%`,
+    object: { type: "campaign", id: CAMPAIGNS[0].id, name: CAMPAIGNS[0].name },
+    status: "new",
+    action_level: "review",
+    allowed_actions: [],
+    exposure: estimated((CPA_SEARCH - TARGET_CPA) * CONV_SEARCH, "rub", BOTH, "(cpa − target_cpa) × conversions", RULE_CPA, P7, "partial"),
+    can_save: estimated((CPA_SEARCH * CONV_SEARCH * CUT) / 100, "rub", BOTH, "cost × |change_pct| / 100", RULE_CPA, P7, "partial"),
+    explanation: {
+      text: `За неделю конверсия в кампании стоила ${CPA_SEARCH} ₽ при цели ${TARGET_CPA} ₽ — на ${DEV}% дороже. Расход вырос, а конверсий стало меньше, основной вклад — эта кампания. Снижение ставки уменьшит цену клика; через 7 дней после выполнения AdPilot сравнит CPA до и после.`,
+      source: "template",
+    },
+    action: { type: "decrease_bid", change_pct: dec(-CUT) },
+    evidence: {
+      facts: {
+        cost: actual(CAMPAIGNS[0].spend, "rub", DIRECT),
+        conversions: actual(CONV_SEARCH, "count", "yandex_metrika", P7, { data_status: "partial" }),
+        cpa: actual(CPA_SEARCH, "rub", BOTH, P7, { formula: "cost / conversions", data_status: "partial" }),
+        target_cpa: actual(TARGET_CPA, "rub", "user_input"),
+        deviation_pct: actual(DEV, "pct", BOTH, P7, { formula: "(cpa − target_cpa) / target_cpa × 100", rule_version: RULE_CPA, data_status: "partial" }),
+      },
+      meta: { baseline_data_quality: "high" },
+      rule_version: RULE_CPA,
+    },
+    safety: { safety_policy: "safety_policy@2", candidate_level: "change", policy_reasons: ["data_partial"], data_status: "partial" },
+    limitations: ["strategy_unknown"],
+    execution: noExecution,
+    history: [
+      { event: "created", at: "2026-10-01T07:02:11+03:00", actor: sys },
+      { event: "seen_again", at: LAST_AUDIT_AT, actor: sys },
+    ],
+    created_at: "2026-10-01T07:02:11+03:00",
+  }),
+  rec({
+    id: "rec_net01",
+    version_id: "rv_net01_1",
+    title: "Площадки РСЯ без конверсий",
+    object: { type: "campaign", id: CAMPAIGNS[1].id, name: CAMPAIGNS[1].name },
+    status: "requires_decision",
+    action_level: "change",
+    allowed_actions: [],
+    exposure: estimated(NET_MSK.spend, "rub", BOTH, PLACEMENTS_FORMULA, RULE_PLACEMENTS),
+    can_save: estimated(NET_MSK.spend, "rub", BOTH, "Σ расход исключаемых площадок за период", RULE_PLACEMENTS),
+    explanation: {
+      text: `${NET_MSK.count} площадок РСЯ получили ${NET_MSK.clicks} кликов и ни одной конверсии за 7 дней. Исключение остановит расход на них; остальная часть РСЯ продолжит работать.`,
+      source: "template",
+    },
+    action: { type: "exclude_placements", placements_count: NET_MSK.count },
+    evidence: {
+      facts: {
+        cost: actual(NET_MSK.spend, "rub", DIRECT),
+        clicks: actual(NET_MSK.clicks, "count", DIRECT),
+        conversions: actual(0, "count", "yandex_metrika"),
+        placements: actual(NET_MSK.count, "count", DIRECT, P7, { rule_version: RULE_PLACEMENTS }),
+      },
+      meta: { baseline_data_quality: "high" },
+      rule_version: RULE_PLACEMENTS,
+    },
+    safety: { safety_policy: "safety_policy@2", candidate_level: "change", policy_reasons: [], data_status: "complete" },
+    limitations: [],
+    execution: noExecution,
+    history: [
+      { event: "created", at: "2026-09-30T07:03:40+03:00", actor: sys },
+      { event: "delivered", at: "2026-09-30T09:00:02+03:00", actor: sys },
+      { event: "seen_again", at: LAST_AUDIT_AT, actor: sys },
+    ],
+    created_at: "2026-09-30T07:03:40+03:00",
+  }),
+  rec({
+    id: "rec_net02",
+    version_id: "rv_net02_1",
+    title: "Площадки РСЯ без конверсий",
+    object: { type: "campaign", id: CAMPAIGNS[2].id, name: CAMPAIGNS[2].name },
+    status: "accepted",
+    action_level: "review",
+    allowed_actions: [],
+    exposure: estimated(NET_REG.spend, "rub", BOTH, PLACEMENTS_FORMULA, RULE_PLACEMENTS),
+    can_save: unavailable("rub", BOTH, P7, RULE_PLACEMENTS),
+    explanation: {
+      text: `На ${NET_REG.count} площадках были клики, но не было конверсий. Объём по каждой площадке невелик, поэтому проверьте список перед исключением: исключение делается вручную в Директе.`,
+      source: "template",
+    },
+    action: { type: "exclude_placements", placements_count: NET_REG.count },
+    evidence: {
+      facts: {
+        cost: actual(NET_REG.spend, "rub", DIRECT),
+        clicks: actual(NET_REG.clicks, "count", DIRECT),
+        conversions: actual(0, "count", "yandex_metrika"),
+        placements: actual(NET_REG.count, "count", DIRECT, P7, { rule_version: RULE_PLACEMENTS }),
+      },
+      meta: { baseline_data_quality: "medium" },
+      rule_version: RULE_PLACEMENTS,
+    },
+    safety: { safety_policy: "safety_policy@2", candidate_level: "change", policy_reasons: ["data_sufficiency_medium"], data_status: "complete" },
+    limitations: [],
+    execution: {
+      ...noExecution,
+      accepted_at: "2026-10-01T11:20:00+03:00",
+      before_state: { captured_at: "accept", reliability: "normal", read_at: "2026-10-01T11:20:01+03:00", parameters: {} },
+    },
+    history: [
+      { event: "created", at: "2026-09-30T07:03:40+03:00", actor: sys },
+      { event: "viewed", at: "2026-10-01T11:18:00+03:00", actor: { user_id: "u_demo", name: USER.name } },
+      { event: "accepted", at: "2026-10-01T11:20:00+03:00", actor: { user_id: "u_demo", name: USER.name } },
+    ],
+    created_at: "2026-09-30T07:03:40+03:00",
+  }),
 ];
-export const SAVED = sum(SAVINGS.map((s) => s.value));
 
-// 30 days of September, deterministic pseudo-noise.
-// Days 23–29 are the demo week itself, so the chart agrees with WEEK.
+// --- September (Finance) ------------------------------------------------------------------------
+// 30 days of deterministic pseudo-noise; days 25–30 are the first days of the demo week.
 export const MONTH = Array.from({ length: 30 }, (_, i) => {
-  const w = i - 22;
-  if (w >= 0 && w < WEEK.spend.length) return { day: i + 1, spend: WEEK.spend[w], loss: WEEK.losses[w] };
+  const w = i - 24;
+  if (w >= 0 && w < 6) return { day: i + 1, spend: WEEK.spend[w], exposure: WEEK.exposure[w] };
   const spend = 24_000 + ((i * 7919) % 6000) + (i > 21 ? 1500 : 0);
-  const loss = Math.round(spend * (0.18 + ((i * 31) % 13) / 100));
-  return { day: i + 1, spend, loss };
+  const exposure = Math.round(spend * (0.18 + ((i * 31) % 13) / 100));
+  return { day: i + 1, spend, exposure };
 });
-export const MONTH_SPEND = sum(MONTH.map((d) => d.spend));
-export const MONTH_LOSS = sum(MONTH.map((d) => d.loss));
-
-export type HistoryKind = "found" | "rec" | "action" | "verify" | "measure";
-export const HISTORY: { date: string; kind: HistoryKind; title: string; detail: string; amount?: number }[] = [
-  { date: "30 сентября, 10:45", kind: "found", title: "Найдена проблема: CPA выше цели", detail: `${CAMPAIGNS[0].name} · ${PERIOD}`, amount: PROBLEMS[0].loss },
-  { date: "30 сентября, 10:45", kind: "rec", title: `Создана рекомендация: снизить ставку на ${CUT}%`, detail: "Правило bid_cpa v3 · уверенность высокая" },
-  { date: "22 сентября, 09:12", kind: "measure", title: "Замер эффекта: исключение площадок РСЯ", detail: "Расчётный эффект · 7 дней до и после, без контрольной группы", amount: SAVINGS[0].value },
-  { date: "16 сентября, 10:41", kind: "verify", title: "Сверка: исключение 9 площадок найдено в данных Директа", detail: "РСЯ · Москва · следующий снимок после ручного изменения" },
-  { date: "15 сентября, 14:30", kind: "action", title: "Вы исключили 9 площадок РСЯ", detail: "Изменение внесено вручную в Яндекс Директе" },
-  { date: "15 сентября, 10:40", kind: "rec", title: "Создана рекомендация: исключить 9 площадок", detail: "Правило zero_conv_placements v2" },
-  { date: "15 сентября, 09:05", kind: "measure", title: "Замер эффекта: исключение площадок РСЯ (Регионы)", detail: "Расчётный эффект · 7 дней до и после, без контрольной группы", amount: SAVINGS[1].value },
-  { date: "8 сентября, 16:20", kind: "action", title: "Вы исключили 5 площадок РСЯ", detail: "РСЯ · Регионы · изменение внесено вручную в Яндекс Директе" },
-];
+export const MONTH_VALUES = {
+  spend: actual(sum(MONTH.map((d) => d.spend)), "rub", DIRECT, SEPTEMBER),
+  exposure: estimated(sum(MONTH.map((d) => d.exposure)), "rub", BOTH, "Σ по дневным аудитам без двойного учёта", "exposure_total@1", SEPTEMBER),
+  revenue: unavailable("rub", "yandex_metrika", SEPTEMBER),
+};
+export const CAMPAIGN_SHARES = CAMPAIGNS.map((c) => ({
+  ...c,
+  spendValue: actual(c.spend, "rub", DIRECT),
+  share: actual((c.spend / KPI.spend) * 100, "pct", DIRECT, P7, { formula: "расход кампании / расход кабинета × 100" }),
+}));
 
 export const SYSTEM_LOG = [
-  { date: "30.09 10:45", text: "Rule engine 3.2: 3 проблемы, снимок #4815" },
-  { date: "30.09 10:42", text: "Синхронизация Яндекс Директ: 3 кампании, 7 дней" },
-  { date: "30.09 10:38", text: "Синхронизация Яндекс Метрика: 2 цели" },
-  { date: "29.09 10:41", text: "Синхронизация Яндекс Директ: без ошибок" },
+  { date: "02.10 07:01", text: "Аудит: 3 правила v1.0, 3 рекомендации, снимок #4815" },
+  { date: "02.10 06:58", text: "Синхронизация Яндекс Директ: 3 кампании, 37 дней" },
+  { date: "02.10 06:55", text: "Синхронизация Яндекс Метрика: 2 цели" },
+  { date: "01.10 20:04", text: "Досинхронизация Яндекс Директ: без ошибок" },
 ];
-
-export const PRIORITY_LABEL: Record<Priority, string> = {
-  critical: "Критичная",
-  medium: "Средняя",
-  low: "Низкая",
-};
-
-export const STATUS_LABEL: Record<RecStatus, string> = {
-  new: "Новая",
-  viewed: "Просмотрена",
-  accepted: "Принята к выполнению",
-  applied: "Выполнена вручную · сверка",
-  measured: "Эффект измерен",
-  postponed: "Отложена",
-  rejected: "Не буду",
-};

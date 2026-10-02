@@ -1,70 +1,72 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import { PROBLEMS, STATUS_LABEL, type Problem, type RecStatus, type RejectReason } from "@/lib/demo";
+import type { Recommendation, TodayResponse, UserAction } from "@/lib/contract";
+import { RECOMMENDATIONS } from "@/lib/demo";
+import { applyAction, buildToday, sortForList, withAllowed, type ActionPayload, type SourcesScenario } from "@/lib/demo-backend";
+import { PAST_RECOMMENDATIONS } from "@/lib/demo-history";
 
-interface UserAction {
-  id: string;
-  title: string;
-  status: RecStatus;
-  at: string;
-}
-
-export type DemoProblem = Problem & { rejectReason?: RejectReason };
-
+/**
+ * Demo data source. With the real API, `recs` comes from `GET /recommendations` and `today` from `GET /today`,
+ * and `act` becomes `POST /recommendations/{id}/actions` — the screens keep the same contract shapes.
+ * Decisions live in memory and reset on reload; nothing is ever changed in an ad account.
+ */
 interface DemoState {
-  problems: DemoProblem[];
-  setStatus: (id: string, status: RecStatus, reason?: RejectReason) => void;
-  actions: UserAction[];
+  /** Current recommendations of the last audit (backend order). */
+  active: Recommendation[];
+  /** Every recommendation, including finished cycles (for «История решений»). */
+  all: Recommendation[];
+  get: (id: string) => Recommendation | undefined;
+  act: (id: string, action: UserAction, payload?: ActionPayload) => void;
+  /** Demo only: put a recommendation back to its initial state. */
+  reset: (id: string) => void;
+  today: (sources: SourcesScenario) => TodayResponse;
   whyId: string | null;
   openWhy: (id: string) => void;
   closeWhy: () => void;
 }
 
 const Ctx = createContext<DemoState | null>(null);
+const INITIAL = [...RECOMMENDATIONS, ...PAST_RECOMMENDATIONS];
+const ACTIVE_IDS = new Set(RECOMMENDATIONS.map((r) => r.id));
 
-// Demo only: decisions live in memory and reset on reload. Nothing is sent anywhere,
-// and nothing is ever changed in an ad account: the user makes changes by hand.
 export function DemoProvider({ children }: { children: ReactNode }) {
-  const [statuses, setStatuses] = useState<Record<string, RecStatus>>(() =>
-    Object.fromEntries(PROBLEMS.map((p) => [p.id, p.status])),
-  );
-  const [reasons, setReasons] = useState<Record<string, RejectReason>>({});
-  const [actions, setActions] = useState<UserAction[]>([]);
+  const [recs, setRecs] = useState<Record<string, Recommendation>>(() => Object.fromEntries(INITIAL.map((r) => [r.id, r])));
   const [whyId, setWhyId] = useState<string | null>(null);
 
-  const setStatus = useCallback((id: string, status: RecStatus, reason?: RejectReason) => {
-    setStatuses((s) => ({ ...s, [id]: status }));
-    setReasons((r) => {
-      const next = { ...r };
-      if (status === "rejected" && reason) next[id] = reason;
-      else delete next[id];
-      return next;
-    });
-    const p = PROBLEMS.find((x) => x.id === id);
-    if (!p) return;
-    const at = new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
-    const why = status === "rejected" && reason ? ` (причина: ${reason.toLowerCase()})` : "";
-    setActions((a) => [{ id, title: `${STATUS_LABEL[status]}: ${p.recommendation.toLowerCase()}${why}`, status, at }, ...a]);
+  const act = useCallback((id: string, action: UserAction, payload?: ActionPayload) => {
+    setRecs((s) => (s[id] ? { ...s, [id]: applyAction(s[id], action, payload) } : s));
   }, []);
 
-  // Opening the evidence marks a new recommendation as viewed.
-  const openWhy = useCallback((id: string) => {
-    setWhyId(id);
-    setStatuses((s) => (s[id] === "new" ? { ...s, [id]: "viewed" } : s));
+  const reset = useCallback((id: string) => {
+    const initial = INITIAL.find((r) => r.id === id);
+    if (initial) setRecs((s) => ({ ...s, [id]: initial }));
   }, []);
 
-  const value = useMemo<DemoState>(
-    () => ({
-      problems: PROBLEMS.map((p) => ({ ...p, status: statuses[p.id], rejectReason: reasons[p.id] })),
-      setStatus,
-      actions,
+  // Opening the passport sends `view`: new → requires_decision.
+  const openWhy = useCallback(
+    (id: string) => {
+      setWhyId(id);
+      act(id, "view");
+    },
+    [act],
+  );
+
+  const value = useMemo<DemoState>(() => {
+    const all = Object.values(recs).map(withAllowed);
+    const active = sortForList(all.filter((r) => ACTIVE_IDS.has(r.id)));
+    return {
+      active,
+      all,
+      get: (id) => all.find((r) => r.id === id),
+      act,
+      reset,
+      today: (sources) => buildToday(all, sources),
       whyId,
       openWhy,
       closeWhy: () => setWhyId(null),
-    }),
-    [statuses, reasons, setStatus, actions, whyId, openWhy],
-  );
+    };
+  }, [recs, act, reset, whyId, openWhy]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

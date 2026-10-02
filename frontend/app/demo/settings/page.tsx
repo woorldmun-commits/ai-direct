@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { PageHeader, StateBox } from "@/components/ui";
-import { PROBLEMS, TARGET_CPA, USER } from "@/lib/demo";
-import { rub } from "@/lib/site";
+import { ValueView } from "@/components/value-view";
+import { RECOMMENDATIONS, TARGET_CPA, USER } from "@/lib/demo";
 
 const SECTIONS = [
   ["profile", "Профиль"],
@@ -122,7 +122,7 @@ export default function SettingsPage() {
               <div>
                 <Toggle label="Новые проблемы — в Telegram" defaultOn />
                 <p className="pb-2.5 text-xs text-muted">
-                  Пример: «🔴 Новая проблема · Расход с признаками неэффективности ≈ {rub(PROBLEMS[0].loss)} · Открыть AdPilot». Без названий
+                  Пример: «🔴 Новая проблема · Расход с признаками неэффективности <ValueView v={RECOMMENDATIONS[0].exposure} hint={false} className="font-semibold" /> · Открыть AdPilot». Без названий
                   клиентов, кампаний и запросов — подробности после входа.
                 </p>
               </div>
