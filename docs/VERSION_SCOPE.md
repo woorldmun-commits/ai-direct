@@ -13,7 +13,7 @@
 | 5 | [DATA_MODEL.md](DATA_MODEL.md) | таблицы, состояния, инварианты |
 | 6 | [API_CONTRACT.md](API_CONTRACT.md) (v1.0) · [API_CONTRACT_EXECUTION.md](API_CONTRACT_EXECUTION.md) (v1.1) | контракт frontend ↔ backend; write-модель исполнения — отдельно |
 
-Специализированные документы детализируют темы и подчиняются цепочке выше: [EXECUTION_SAFETY.md](EXECUTION_SAFETY.md) (контур исполнения, **v1.1**), [AI_GOVERNANCE.md](AI_GOVERNANCE.md), [ECONOMICS.md](ECONOMICS.md), [DISASTER_RECOVERY.md](DISASTER_RECOVERY.md), [LEGAL.md](LEGAL.md).
+Специализированные документы детализируют темы и подчиняются цепочке выше: [PRODUCT_SPEC.md](PRODUCT_SPEC.md) (пять принципов как требования, UX-паттерны и критерии готовности экранов v1.0), [EXECUTION_SAFETY.md](EXECUTION_SAFETY.md) (контур исполнения, **v1.1**), [AI_GOVERNANCE.md](AI_GOVERNANCE.md), [ECONOMICS.md](ECONOMICS.md), [DISASTER_RECOVERY.md](DISASTER_RECOVERY.md), [LEGAL.md](LEGAL.md).
 
 **Выжимки** — `_docs/project.md`, `_docs/stack.md`, `PRODUCT.md`. Короткие и могут отставать; при расхождении правы первоисточники.
 
