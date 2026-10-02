@@ -4,7 +4,21 @@
 export type Priority = "critical" | "medium" | "low";
 export type Platform = "search" | "network";
 export type Quality = "Высокая" | "Средняя" | "Низкая";
-export type RecStatus = "new" | "in_progress" | "done" | "postponed" | "rejected";
+/**
+ * v1.0 decision flow (STRATEGY): new → viewed → accepted → applied (done by hand in Direct, then
+ * verified against Direct data) → measured. Side exits: postponed, rejected (with a reason).
+ * AdPilot never changes the ad account itself in v1.0.
+ */
+export type RecStatus = "new" | "viewed" | "accepted" | "applied" | "measured" | "postponed" | "rejected";
+
+export const REJECT_REASONS = [
+  "Неверные данные",
+  "Правило не подходит",
+  "Мало контекста",
+  "Слишком рискованно",
+  "Другое",
+] as const;
+export type RejectReason = (typeof REJECT_REASONS)[number];
 
 export interface Problem {
   id: string;
@@ -134,7 +148,7 @@ export const PROBLEMS: Problem[] = [
     rule: "irrelevant_queries v1",
     checks: ["7 дней данных", "Часть запросов скрыта Директом — данные неполные"],
     ai: "По этим запросам были клики без конверсий. Проверьте список перед добавлением минус-слов: часть запросов может быть полезной.",
-    status: "in_progress",
+    status: "accepted",
   },
 ];
 
@@ -209,11 +223,12 @@ export const MONTH = Array.from({ length: 30 }, (_, i) => {
 export const MONTH_SPEND = sum(MONTH.map((d) => d.spend));
 export const MONTH_LOSS = sum(MONTH.map((d) => d.loss));
 
-export type HistoryKind = "found" | "rec" | "action" | "measure";
+export type HistoryKind = "found" | "rec" | "action" | "verify" | "measure";
 export const HISTORY: { date: string; kind: HistoryKind; title: string; detail: string; amount?: number }[] = [
   { date: "30 сентября, 10:45", kind: "found", title: "Найдена проблема: CPA выше цели", detail: `${CAMPAIGNS[0].name} · ${PERIOD}`, amount: PROBLEMS[0].loss },
   { date: "30 сентября, 10:45", kind: "rec", title: `Создана рекомендация: снизить ставку на ${CUT}%`, detail: "Правило bid_cpa v3 · уверенность высокая" },
   { date: "22 сентября, 09:12", kind: "measure", title: "Замер эффекта: исключение площадок РСЯ", detail: "Расчётный эффект · 7 дней до и после, без контрольной группы", amount: SAVINGS[0].value },
+  { date: "16 сентября, 10:41", kind: "verify", title: "Сверка: исключение 9 площадок найдено в данных Директа", detail: "РСЯ · Москва · следующий снимок после ручного изменения" },
   { date: "15 сентября, 14:30", kind: "action", title: "Вы исключили 9 площадок РСЯ", detail: "Изменение внесено вручную в Яндекс Директе" },
   { date: "15 сентября, 10:40", kind: "rec", title: "Создана рекомендация: исключить 9 площадок", detail: "Правило zero_conv_placements v2" },
   { date: "15 сентября, 09:05", kind: "measure", title: "Замер эффекта: минус-слова", detail: "Расчётный эффект · 7 дней до и после, без контрольной группы", amount: SAVINGS[1].value },
@@ -235,8 +250,10 @@ export const PRIORITY_LABEL: Record<Priority, string> = {
 
 export const STATUS_LABEL: Record<RecStatus, string> = {
   new: "Новая",
-  in_progress: "В работе",
-  done: "Выполнена",
+  viewed: "Просмотрена",
+  accepted: "Принята к выполнению",
+  applied: "Выполнена вручную · сверка",
+  measured: "Эффект измерен",
   postponed: "Отложена",
-  rejected: "Отклонена",
+  rejected: "Не буду",
 };

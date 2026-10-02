@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Bot, CheckCircle2, PiggyBank } from "lucide-react";
+import { ArrowRight, CheckCircle2, ListChecks, PiggyBank } from "lucide-react";
 import Link from "next/link";
 import { Sparkline } from "@/components/charts";
 import { MainFocus, MetricCard, StatusBadge } from "@/components/app/problem";
@@ -33,18 +33,19 @@ export default function Overview() {
 
       <div className="mt-4 grid gap-4 xl:grid-cols-[2fr_1fr]">
         <MainFocus p={main} />
-        <Link href="/demo/ai" className="card group flex flex-col justify-between bg-premium p-6 text-white">
+        <Link href="/demo/recommendations" className="card group flex flex-col justify-between bg-premium p-6 text-white">
           <div>
             <p className="flex items-center gap-2 text-sm font-semibold text-white/80">
-              <Bot size={18} className="text-[#39BFA0]" /> AI-Директор
+              <ListChecks size={18} className="text-[#39BFA0]" /> Сводка дня
             </p>
-            <p className="mt-4 text-xl font-bold">Сегодня я нашёл {problems.length} проблемы.</p>
+            <p className="mt-4 text-xl font-bold">Найдено проблем: {problems.length}.</p>
             <p className="mt-2 text-sm text-white/70">
-              Главная — CPA выше цели. Начните с неё: это {Math.round((main.loss / KPI.losses) * 100)}% расхода с признаками неэффективности.
+              Главная — CPA выше цели: это {Math.round((main.loss / KPI.losses) * 100)}% расхода с признаками неэффективности. Решение
+              и изменение в Директе — за вами.
             </p>
           </div>
           <span className="mt-6 inline-flex items-center gap-1 text-sm font-semibold text-[#39BFA0]">
-            Спросить AI <ArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" />
+            К рекомендациям <ArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" />
           </span>
         </Link>
       </div>

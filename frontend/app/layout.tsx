@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, Manrope } from "next/font/google";
+import { headers } from "next/headers";
 import { CookieBanner } from "@/components/cookie-banner";
 import { SITE_URL } from "@/lib/site";
 import "./globals.css";
@@ -17,9 +18,9 @@ const plexMono = IBM_Plex_Mono({
   display: "swap",
 });
 
-const TITLE = "AdPilot — аудит Яндекс Директ: где бюджет расходуется неэффективно";
+const TITLE = "AdPilot — контроль кабинетов Яндекс Директа для агентств и директологов";
 const DESCRIPTION =
-  "AdPilot ежедневно анализирует Яндекс Директ и Метрику, показывает, где рекламный бюджет расходуется неэффективно, — с оценкой в рублях и тем, что исправить. Первый аудит бесплатно, без карты.";
+  "AdPilot каждый день проверяет кабинеты Яндекс Директа и Метрики и показывает расход с признаками неэффективности в рублях — с доказательством на данных. Решение и изменения — за специалистом. Первый аудит бесплатно, без карты.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -49,7 +50,9 @@ export const viewport: Viewport = {
 // Runs before paint so a saved dark theme doesn't flash light.
 const themeScript = `try{var t=localStorage.getItem("adpilot-theme");if(t==="dark")document.documentElement.dataset.theme="dark"}catch(e){}`;
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // Per-request CSP nonce from proxy.ts; reading headers() also makes rendering dynamic, which nonces require.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html
       lang="ru"
@@ -57,7 +60,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
     >
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className="min-h-full">
         {children}

@@ -5,7 +5,7 @@ import { useEffect } from "react";
 import { Approx, PriorityBadge } from "@/components/ui";
 import { PERIOD, SYNC } from "@/lib/demo";
 import { EXPOSURE, EXPOSURE_NOTE, rub } from "@/lib/site";
-import { RecActions } from "./problem";
+import { RecActions } from "./rec-actions";
 import { useDemo } from "./store";
 
 export function WhyDrawer() {
@@ -34,9 +34,10 @@ export function WhyDrawer() {
           <div>
             <PriorityBadge priority={p.priority} />
             <h2 id="why-title" className="mt-3 text-xl leading-snug font-bold">
-              Почему система рекомендует {p.recommendation.charAt(0).toLowerCase() + p.recommendation.slice(1)}
+              Почему AdPilot так решил
             </h2>
-            <p className="mt-1 text-sm text-muted">{p.campaign}</p>
+            <p className="mt-1 font-semibold">{p.recommendation}</p>
+            <p className="text-sm text-muted">{p.campaign}</p>
           </div>
           <button className="btn btn-ghost size-10 shrink-0 p-0" aria-label="Закрыть" onClick={closeWhy} autoFocus>
             <X size={20} />
@@ -86,7 +87,7 @@ export function WhyDrawer() {
             <Bot size={16} className="text-brand" /> Объяснение AI
           </h3>
           <p className="mt-2 text-sm">{p.ai}</p>
-          <p className="mt-2 text-xs text-muted">Ответ сгенерирован AI на основе данных аккаунта. Проверьте перед применением.</p>
+          <p className="mt-2 text-xs text-muted">Пояснение сгенерировано AI по цифрам выше и не добавляет новых. Проверьте его, прежде чем вносить изменение в Директе.</p>
         </section>
 
         <p className="mt-5 flex items-center gap-2 text-xs text-muted">

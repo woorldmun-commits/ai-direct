@@ -1,4 +1,4 @@
-import { ArrowRight, Bot, CreditCard, Plug, Sparkles, UserPlus } from "lucide-react";
+import { ArrowRight, BadgeCheck, CreditCard, Layers, Plug, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { Sparkline } from "@/components/charts";
 import { Logo } from "@/components/ui";
@@ -56,14 +56,16 @@ export function Hero() {
       <div className="relative mx-auto grid max-w-[1360px] items-center gap-12 px-4 pt-16 pb-24 md:px-8 lg:grid-cols-[1.1fr_1fr] lg:pt-20 lg:pb-32">
         <div>
           <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs text-white/80">
-            <Sparkles size={14} className="text-[#39BFA0]" /> AI-директор по рекламе для Яндекс Директ
+            <Sparkles size={14} className="text-[#39BFA0]" /> Для малых агентств и директологов · Яндекс Директ
           </span>
           <h1 className="mt-6 text-[38px] leading-[1.06] font-bold tracking-[-0.03em] md:text-[52px] xl:text-[60px]">
-            Показываем, где рекламный бюджет <span className="text-[#39BFA0]">расходуется неэффективно</span>, и как это{" "}
-            <span className="text-[#39BFA0]">исправить</span>.
+            Где бюджет клиентов <span className="text-[#39BFA0]">расходуется неэффективно</span> — с{" "}
+            <span className="text-[#39BFA0]">доказательством</span> на данных.
           </h1>
           <p className="mt-6 max-w-[540px] text-lg text-white/70">
-            AdPilot ежедневно анализирует рекламу, оценивает расход с признаками неэффективности в рублях и показывает конкретные действия — с формулой и источником каждой цифры.
+            AdPilot каждый день проверяет все ваши кабинеты Директа и Метрики, оценивает расход с признаками неэффективности в рублях
+            и показывает формулу и источник каждой цифры. Решение и изменение в кабинете остаются за вами, а AdPilot сверяет его по
+            данным Директа, измеряет эффект и собирает отчёт для клиента.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link href="/signup" className="btn h-12 bg-[#39BFA0] px-6 text-[15px] text-[#04130f] hover:bg-[#52cfb2]">
@@ -78,7 +80,7 @@ export function Hero() {
               <CreditCard size={16} /> Без карты
             </li>
             <li className="flex items-center gap-2">
-              <UserPlus size={16} /> Вход по номеру телефона
+              <Layers size={16} /> Несколько кабинетов в одном обзоре
             </li>
             <li className="flex items-center gap-2">
               <Plug size={16} /> Подключение в пару кликов
@@ -109,7 +111,7 @@ function ProductPreview() {
           <aside className="hidden w-[132px] shrink-0 border-r border-line bg-surface p-3 sm:block" aria-hidden>
             <Logo size={18} />
             <ul className="mt-4 space-y-1 text-[10px] text-muted">
-              {["Обзор", "Неэфф. расход", "Рекомендации", "Что изменилось", "Финансы", "История", "AI-Директор"].map((x, i) => (
+              {["Обзор", "Неэфф. расход", "Рекомендации", "Что изменилось", "Финансы", "История", "Интеграции"].map((x, i) => (
                 <li key={x} className={`rounded-md px-2 py-1.5 ${i === 0 ? "bg-brand-soft font-semibold text-brand" : ""}`}>
                   {x}
                 </li>
@@ -146,9 +148,11 @@ function ProductPreview() {
       </div>
       <div className="absolute -right-2 -bottom-10 hidden w-[260px] rounded-2xl border border-white/15 bg-[#0c1916]/80 p-4 text-white shadow-[0_20px_50px_-20px_rgba(0,0,0,.7)] backdrop-blur-xl sm:block lg:-right-6">
         <p className="flex items-center gap-2 text-xs font-bold">
-          <Bot size={15} className="text-[#39BFA0]" /> AI-Директор
+          <BadgeCheck size={15} className="text-[#39BFA0]" /> Почему AdPilot так решил
         </p>
-        <p className="mt-1.5 text-xs text-white/70">Сегодня я нашёл 3 проблемы. Главная — CPA выше цели на 75%.</p>
+        <p className="mt-1.5 text-xs text-white/70">
+          {main.reason}. {main.checks[1]}. Источник: Директ + Метрика.
+        </p>
       </div>
       <figcaption className="mt-6 text-xs text-white/45 sm:mt-14">Интерфейс с демонстрационными данными</figcaption>
     </figure>

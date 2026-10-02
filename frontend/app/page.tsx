@@ -20,7 +20,7 @@ const jsonLd = {
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web",
       inLanguage: "ru",
-      description: "AI-директор по рекламе для Яндекс Директ и Яндекс Метрики",
+      description: "Доказательный контроль кабинетов Яндекс Директа и Метрики для малых агентств и директологов",
       publisher: { "@id": `${SITE_URL}/#org` },
     },
     {

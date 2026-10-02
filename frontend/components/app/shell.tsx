@@ -2,7 +2,6 @@
 
 import {
   Bell,
-  Bot,
   CalendarDays,
   GitCompareArrows,
   History,
@@ -37,11 +36,10 @@ const NAV: NavItem[] = [
   { href: "/demo/changes", label: "Что изменилось", icon: GitCompareArrows },
   { href: "/demo/finance", label: "Финансы", icon: Wallet },
   { href: "/demo/history", label: "История решений", icon: History },
-  { href: "/demo/ai", label: "AI-Директор", icon: Bot },
   { href: "/demo/integrations", label: "Интеграции", icon: Plug },
   { href: "/demo/settings", label: "Настройки", icon: Settings },
 ];
-const MOBILE_NAV = [NAV[0], NAV[1], NAV[2], { ...NAV[6], label: "AI" }];
+const MOBILE_NAV = [NAV[0], NAV[1], NAV[2], { ...NAV[5], label: "История" }];
 
 function useTheme() {
   const [dark, setDark] = useState(false);
@@ -94,9 +92,9 @@ function Sidebar({ path }: { path: string }) {
       </nav>
       <div className="rounded-2xl border border-dashed border-line p-4 opacity-80" aria-disabled>
         <p className="flex items-center gap-2 text-sm font-semibold">
-          <Zap size={16} className="text-muted" /> Автопилот — скоро
+          <Zap size={16} className="text-muted" /> Применение через API после одобрения — в планах
         </p>
-        <p className="mt-1 text-xs text-muted">Сейчас все изменения в рекламе вносите вы.</p>
+        <p className="mt-1 text-xs text-muted">Сейчас изменения в Директе вносите вы, а AdPilot сверяет их по данным и измеряет эффект.</p>
       </div>
       <Link href="/signup" className="btn btn-primary mt-3">
         Запустить свой аудит
@@ -192,7 +190,7 @@ function CommandPalette({ onClose, theme }: { onClose: () => void; theme: Theme 
       ...CAMPAIGNS.map((c) => ({ label: c.name, hint: "Кампания", run: go("/demo/losses") })),
       { label: "Открыть неэффективный расход", hint: "Раздел", run: go("/demo/losses") },
       { label: "Открыть рекомендации", hint: "Раздел", run: go("/demo/recommendations") },
-      { label: "Спросить AI-Директора", hint: "AI", run: go("/demo/ai") },
+      { label: "История решений", hint: "Раздел", run: go("/demo/history") },
       { label: "Интеграции", hint: "Раздел", run: go("/demo/integrations") },
       { label: "Настройки", hint: "Раздел", run: go("/demo/settings") },
       { label: theme.dark ? "Светлая тема" : "Тёмная тема", hint: "Вид", run: theme.toggle },
@@ -230,7 +228,7 @@ function CommandPalette({ onClose, theme }: { onClose: () => void; theme: Theme 
               if (e.key === "Enter") run(sel);
               if (e.key === "Escape") onClose();
             }}
-            placeholder="Кампания, раздел или вопрос…"
+            placeholder="Кампания или раздел…"
             className="h-14 flex-1 bg-transparent outline-none"
             aria-label="Поиск"
           />
