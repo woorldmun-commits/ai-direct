@@ -1,7 +1,7 @@
 import { AlertTriangle, CheckCircle2, Plug } from "lucide-react";
 import Link from "next/link";
-import type { ApiError } from "@/lib/contract";
-import { formatMoment, formatPeriod, formatRuleVersion, type Period } from "@/lib/value";
+import { RULE_CHECK_TEXT, RULE_TITLE, ruleName, type ApiError, type AuditScope } from "@/lib/contract";
+import { formatMoment, formatPeriod, formatRuleVersion } from "@/lib/value";
 
 /**
  * Four states of every screen (PRODUCT_SPEC §4.6): loading, empty («Подключите Директ» / «Проблем не найдено —
@@ -90,7 +90,7 @@ export function NothingFound({
   lastAuditAt,
   title = "Проблем не найдено — вот что проверено",
 }: {
-  scope: { period: Period; campaigns: number; rules: { rule_version: string; text: string }[] };
+  scope: AuditScope;
   lastAuditAt: string | null;
   title?: string;
 }) {
@@ -100,15 +100,17 @@ export function NothingFound({
         <CheckCircle2 size={20} className="text-success" /> {title}
       </h2>
       <p className="mt-1 text-sm text-muted">
-        Период: {formatPeriod(scope.period)} · кампаний проверено: {scope.campaigns}
+        Период: {formatPeriod(scope.period)} · кабинетов: {scope.ad_accounts.checked}
+        {scope.ad_accounts.excluded > 0 && ` (не вошли: ${scope.ad_accounts.excluded})`} · кампаний проверено: {scope.campaigns}
         {lastAuditAt && ` · аудит ${formatMoment(lastAuditAt)} МСК`}
       </p>
       <ul className="mt-4 space-y-2">
-        {scope.rules.map((r) => (
-          <li key={r.rule_version} className="flex items-start gap-2 text-sm">
+        {scope.rules.map((rv) => (
+          <li key={rv} className="flex items-start gap-2 text-sm">
             <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-success" />
             <span>
-              {r.text} <span className="font-mono text-xs text-muted">({formatRuleVersion(r.rule_version)})</span>
+              {RULE_CHECK_TEXT[ruleName(rv)] ?? RULE_TITLE[ruleName(rv)] ?? ruleName(rv)}{" "}
+              <span className="font-mono text-xs text-muted">({formatRuleVersion(rv)})</span>
             </span>
           </li>
         ))}

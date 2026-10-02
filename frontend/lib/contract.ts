@@ -3,7 +3,7 @@
  * the real `GET /api/v1/workspaces/{ws}/…` endpoints is a change of data source, not of screens.
  * Unknown fields from the server are ignored (§1); enums are the v1.0 sets.
  */
-import type { Period, Value } from "./value";
+import type { DataStatus, DecimalString, Period, Value } from "./value";
 
 // §3 — recommendation lifecycle
 export type RecStatus = "new" | "requires_decision" | "accepted" | "applied" | "postponed" | "rejected";
@@ -71,12 +71,40 @@ export interface ObjectRef {
   name: string;
 }
 
-/** What the rule asks the human to change by hand. Only `decrease_bid` + `change_pct` is spelled out in §5. */
-export interface RecommendationAction {
-  type: string;
-  change_pct?: string;
-  placements_count?: number;
+// §5 — what the human changes in Direct by hand: exactly four shapes of the three v1.0 rules, `execution` is
+// always `manual`. A discriminated union on `type`, so a screen has to handle each one.
+export type ActionSuggestion = "set_target_cpa";
+export type ZeroConversionCheck = "conversion_goals" | "strategy" | "search_queries_negative_keywords";
+
+export interface DecreaseBidAction {
+  type: "decrease_bid";
+  execution: "manual";
+  /** Negative Decimal string, e.g. `"-15.00"`. */
+  change_pct: DecimalString;
 }
+export interface InvestigateCpaGrowthAction {
+  type: "investigate_cpa_growth";
+  execution: "manual";
+  suggest: ActionSuggestion | null;
+}
+export interface InvestigateZeroConversionsAction {
+  type: "investigate_zero_conversions";
+  execution: "manual";
+  checks: ZeroConversionCheck[];
+  suggest: ActionSuggestion | null;
+}
+export interface ExcludePlacementsAction {
+  type: "exclude_placements";
+  execution: "manual";
+  placements_count: number;
+  /** `id` is opaque; `name` is the site domain or app id (not personal data), `null` when unknown. */
+  placements: { id: string; name: string | null }[];
+}
+export type RecommendationAction =
+  | DecreaseBidAction
+  | InvestigateCpaGrowthAction
+  | InvestigateZeroConversionsAction
+  | ExcludePlacementsAction;
 
 // §5 — list item
 export interface RecommendationListItem {
@@ -86,6 +114,7 @@ export interface RecommendationListItem {
   ad_account: AdAccountRef;
   object: ObjectRef;
   action_level: ActionLevel;
+  action: RecommendationAction;
   status: RecStatus;
   execution_mode: ExecutionMode | null;
   verification_status: VerificationStatus | null;
@@ -94,6 +123,8 @@ export interface RecommendationListItem {
   can_save: Value;
   data_status: Value["data_status"];
   period: Period;
+  /** When the current version (`version_id`) was calculated. */
+  computed_at: string;
   created_at: string;
   updated_at: string;
 }
@@ -160,6 +191,7 @@ export interface Recommendation {
   decision: Decision | null;
   measurement: Measurement | null;
   history: HistoryEvent[];
+  computed_at: string;
   created_at: string;
 }
 
@@ -176,20 +208,46 @@ export interface ExposureSummary {
   coverage: { included: number; unavailable: number };
 }
 
+/** What the last audit checked — «Проблем не найдено — вот что проверено». */
+export interface AuditScope {
+  /** `rule@N` that ran. */
+  rules: string[];
+  period: Period;
+  ad_accounts: { checked: number; excluded: number };
+  campaigns: number;
+}
+
+export interface SourceFreshness {
+  /** `null` — the source is not connected. */
+  status: ConnectionStatus | null;
+  data_to: string | null;
+  last_success_at: string | null;
+}
+
+export interface StatusCounts {
+  new: number;
+  requires_decision: number;
+  accepted: number;
+  postponed: number;
+}
+
 export interface TodayResponse {
-  access: "free_audit" | "paid" | "inactive";
-  today: string;
   last_audit_at: string | null;
+  data_status: DataStatus;
+  audit_scope: AuditScope | null;
   spent: Value;
   exposure: ExposureSummary;
-  can_save: ExposureSummary;
-  saved: Value;
-  conversions: Value;
-  counts: { new: number; requires_decision: number; accepted: number; postponed: number };
+  /** `active` now; counts by status come with the v1.0 events (week 4). */
+  counts: { active: number } & Partial<StatusCounts>;
   top: RecommendationListItem[];
-  recent_actions: { recommendation_id: string; title: string; event: RecEvent; at: string }[];
-  changes: { period: Period; spent_delta_pct: Value; conversions_delta_pct: Value; cpa_delta_pct: Value };
-  data_freshness: Record<Provider, { status: ConnectionStatus; data_to: string | null }>;
+  data_freshness: { last_snapshot_at: string | null } & Record<Provider, SourceFreshness>;
+  // Announced in §8 but not sent yet («появится»): the screen must work without them.
+  access?: "free_audit" | "paid" | "inactive";
+  can_save?: ExposureSummary;
+  saved?: Value;
+  conversions?: Value;
+  recent_actions?: { recommendation_id: string; title: string; event: RecEvent; at: string }[];
+  changes?: { period: Period; spent_delta_pct: Value; conversions_delta_pct: Value; cpa_delta_pct: Value };
 }
 
 // §8 — «Настройки → Интеграции»
@@ -234,6 +292,14 @@ export const RULE_TITLE: Record<string, string> = {
   high_cpa_baseline: "Высокий CPA",
   zero_conv_campaign: "Нулевые конверсии",
   zero_conv_placements: "Площадки РСЯ без конверсий",
+};
+
+/** What each rule checks — for «Проблем не найдено — вот что проверено» (`audit_scope.rules`). */
+export const RULE_CHECK_TEXT: Record<string, string> = {
+  zero_conv_campaign: "Расход без конверсий при достаточном объёме кликов",
+  high_cpa_target: "CPA выше целевого при достаточном числе конверсий",
+  high_cpa_baseline: "CPA выше обычного уровня кампании при достаточном числе конверсий",
+  zero_conv_placements: "Площадки РСЯ с расходом и без конверсий",
 };
 
 export const ruleName = (ruleVersion: string) => ruleVersion.split("@")[0];

@@ -1,9 +1,9 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import type { Recommendation, TodayResponse, UserAction } from "@/lib/contract";
+import type { Recommendation, UserAction } from "@/lib/contract";
 import { RECOMMENDATIONS } from "@/lib/demo";
-import { applyAction, buildToday, sortForList, withAllowed, type ActionPayload, type SourcesScenario } from "@/lib/demo-backend";
+import { applyAction, buildToday, sortForList, withAllowed, type ActionPayload, type DemoToday, type SourcesScenario } from "@/lib/demo-backend";
 import { PAST_RECOMMENDATIONS } from "@/lib/demo-history";
 
 /**
@@ -20,7 +20,8 @@ interface DemoState {
   act: (id: string, action: UserAction, payload?: ActionPayload) => void;
   /** Demo only: put a recommendation back to its initial state. */
   reset: (id: string) => void;
-  today: (sources: SourcesScenario) => TodayResponse;
+  /** `GET /today` as the demo plays it: also the fields §8 announces for later (see `DemoToday`). */
+  today: (sources: SourcesScenario) => DemoToday;
   whyId: string | null;
   openWhy: (id: string) => void;
   closeWhy: () => void;

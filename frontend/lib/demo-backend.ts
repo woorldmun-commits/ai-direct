@@ -4,6 +4,7 @@
 
 import type {
   ApiError,
+  AuditScope,
   ConnectionStatus,
   HistoryEvent,
   IntegrationItem,
@@ -11,6 +12,7 @@ import type {
   Recommendation,
   RecommendationListItem,
   RejectReason,
+  StatusCounts,
   TodayResponse,
   UserAction,
 } from "./contract";
@@ -116,6 +118,7 @@ export function toListItem(r: Recommendation): RecommendationListItem {
     ad_account: r.ad_account,
     object: r.object,
     action_level: r.action_level,
+    action: r.action,
     status: r.status,
     execution_mode: r.execution.execution_mode,
     verification_status: r.execution.verification_status,
@@ -124,6 +127,7 @@ export function toListItem(r: Recommendation): RecommendationListItem {
     can_save: r.can_save,
     data_status: r.safety.data_status,
     period: r.exposure.period,
+    computed_at: r.computed_at,
     created_at: r.created_at,
     updated_at: r.history[r.history.length - 1]?.at ?? r.created_at,
   };
@@ -150,7 +154,7 @@ function summary(values: Value[], formula: string, version: string) {
   const total = included.reduce((s, v) => s + kop(v.amount as string), B0);
   const totalValue: Value = included.length
     ? { ...estimated(0, "rub", BOTH, formula, version), amount: fromKop(total) }
-    : unavailable("rub", BOTH, P7, version);
+    : unavailable("rub", BOTH, "no_data", P7, version);
   return {
     total: totalValue,
     // One finding per campaign in the demo, so nothing overlaps; the field is still shown.
@@ -162,7 +166,15 @@ function summary(values: Value[], formula: string, version: string) {
   };
 }
 
-export function buildToday(recs: Recommendation[], sources: SourcesScenario = "fresh"): TodayResponse {
+/**
+ * The demo plays the full v1.0 product, so it also fills the fields §8 announces for later (`saved`, counts by
+ * status, `recent_actions`, …). Screens written against `TodayResponse` must still work without them.
+ */
+export type DemoToday = TodayResponse & Required<Pick<TodayResponse, "access" | "can_save" | "saved" | "conversions" | "recent_actions" | "changes">> & {
+  counts: { active: number } & StatusCounts;
+};
+
+export function buildToday(recs: Recommendation[], sources: SourcesScenario = "fresh"): DemoToday {
   const active = recs.filter((r) => ACTIVE.has(r.status));
   const exposure = summary(active.map((r) => r.exposure), "Σ по кабинетам max(...) — без двойного учёта", "exposure_total@1");
   const byRule = new Map<string, Value[]>();
@@ -173,7 +185,7 @@ export function buildToday(recs: Recommendation[], sources: SourcesScenario = "f
   const savedKop = measured.reduce((s, r) => s + kop(r.measurement!.saved!.amount as string), B0);
   const saved: Value = measured.length
     ? { ...estimated(0, "rub", BOTH, "Σ замеров с подтверждённым выполнением", "measurement@1", { from: "2026-09-01", to: TODAY_DATE }), amount: fromKop(savedKop) }
-    : unavailable("rub", BOTH);
+    : unavailable("rub", BOTH, "no_data");
 
   const count = (s: string) => recs.filter((r) => r.status === s).length;
   const events = recs
@@ -188,15 +200,16 @@ export function buildToday(recs: Recommendation[], sources: SourcesScenario = "f
 
   return {
     access: "paid",
-    today: TODAY_DATE,
     last_audit_at: LAST_AUDIT_AT,
+    data_status: active.some((r) => r.exposure.data_status === "partial") ? "partial" : "complete",
+    audit_scope: AUDIT_SCOPE,
     spent: WEEK_VALUES.spend,
     exposure,
     can_save: summary(active.map((r) => r.can_save), "Σ «можно сэкономить» без двойного учёта", "exposure_total@1"),
     saved,
     conversions: WEEK_VALUES.conversions,
-    counts: { new: count("new"), requires_decision: count("requires_decision"), accepted: count("accepted"), postponed: count("postponed") },
-    top: sortForList(active).slice(0, 5).map(toListItem),
+    counts: { active: active.length, new: count("new"), requires_decision: count("requires_decision"), accepted: count("accepted"), postponed: count("postponed") },
+    top: sortForList(active).slice(0, 3).map(toListItem),
     recent_actions: events,
     changes: {
       period: day,
@@ -204,7 +217,13 @@ export function buildToday(recs: Recommendation[], sources: SourcesScenario = "f
       conversions_delta_pct: actual(pctChange(y.conv, t.conv), "pct", "yandex_metrika", day, { formula: f, data_status: "partial" }),
       cpa_delta_pct: actual(pctChange(y.spend / y.conv, t.spend / t.conv), "pct", BOTH, day, { formula: f, data_status: "partial" }),
     },
-    data_freshness: Object.fromEntries(integrations(sources).map((i) => [i.provider, { status: i.status, data_to: i.data_to }])) as TodayResponse["data_freshness"],
+    data_freshness: {
+      last_snapshot_at: "2026-10-02T06:58:40+03:00",
+      ...(Object.fromEntries(integrations(sources).map((i) => [i.provider, { status: i.status, data_to: i.data_to, last_success_at: i.last_success_at }])) as Omit<
+        TodayResponse["data_freshness"],
+        "last_snapshot_at"
+      >),
+    },
   };
 }
 
@@ -240,18 +259,12 @@ export const WORKSPACES = [
   { id: "ws_flowers", name: "Цветы 24", href: "/demo?state=empty", note: "проблем не найдено" },
 ];
 
-/**
- * What the last audit checked — for «Проблем не найдено — вот что проверено». Not in API_CONTRACT §8 yet
- * (only `last_audit_at`); kept here until the backend adds it.
- */
-export const AUDIT_SCOPE = {
+/** `audit_scope` of GET /today (§8): what the last audit checked — rules@versions, window, accounts, campaigns. */
+export const AUDIT_SCOPE: AuditScope = {
+  rules: ["high_cpa_target@1", "zero_conv_campaign@1", "zero_conv_placements@1"],
   period: P7,
+  ad_accounts: { checked: 1, excluded: 0 },
   campaigns: 3,
-  rules: [
-    { rule_version: "zero_conv_campaign@1", text: "Расход без конверсий при достаточном объёме кликов" },
-    { rule_version: "high_cpa_target@1", text: "CPA выше целевого при достаточном числе конверсий" },
-    { rule_version: "zero_conv_placements@1", text: "Площадки РСЯ с расходом и без конверсий" },
-  ],
 };
 
 export const DEMO_ERROR: ApiError = {

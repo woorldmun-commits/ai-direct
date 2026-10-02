@@ -1,7 +1,7 @@
 import { ChevronDown } from "lucide-react";
 import type { ReactNode } from "react";
 import { ParamView, ValueView } from "@/components/value-view";
-import type { Measurement, Recommendation, RecommendationAction } from "@/lib/contract";
+import type { Measurement, Recommendation, RecommendationAction, ZeroConversionCheck } from "@/lib/contract";
 import { formatMoment, formatPeriod, formatRuleVersion, PARTIAL_NOTE, sourceLabel, type Value } from "@/lib/value";
 
 // Shared pieces of a recommendation: action text, fact labels, «Откуда это число?», measurement.
@@ -29,31 +29,44 @@ export const POLICY_REASON_LABEL: Record<string, string> = {
   strategy_unknown: "стратегия неизвестна",
 };
 
-/** What the human changes by hand in Direct (from `action`; only `decrease_bid` is spelled out in the contract). */
+/** What the human changes by hand in Direct (`action`, API_CONTRACT §5): one text per action type. */
 export function ActionText({ action }: { action: RecommendationAction }) {
   switch (action.type) {
     case "decrease_bid":
-      return action.change_pct ? (
+      return (
         <>
           Снизить ставку на <ParamView amount={action.change_pct.replace(/^-/, "")} unit="pct" />
         </>
-      ) : (
-        <>Снизить ставку</>
       );
-    case "exclude_placements":
-      return <>Исключить площадки без конверсий{action.placements_count ? ` (${action.placements_count})` : ""}</>;
-    case "review_conversion_goal":
-      return <>Проверить цель конверсии и разметку</>;
-    default:
-      return <>Проверить кампанию в Директе</>;
+    case "exclude_placements": {
+      const named = action.placements.filter((p) => p.name).map((p) => p.name);
+      const list = named.slice(0, 3).join(", ") + (named.length > 3 ? ` и ещё ${action.placements_count - 3}` : "");
+      return (
+        <>
+          Исключить площадки без конверсий ({action.placements_count}){list && `: ${list}`}
+        </>
+      );
+    }
+    case "investigate_zero_conversions":
+      return (
+        <>
+          Проверить: {action.checks.map((c) => CHECK_LABEL[c]).join(", ")}
+          {action.suggest === "set_target_cpa" && "; укажите целевой CPA"}
+        </>
+      );
+    case "investigate_cpa_growth":
+      return <>Проверить причину роста CPA{action.suggest === "set_target_cpa" && "; укажите целевой CPA"}</>;
   }
 }
 
-/** Time of the calculation: the audit that produced the current version. */
-export function calculatedAt(r: Recommendation): string {
-  const last = [...r.history].reverse().find((h) => h.event === "seen_again" || h.event === "created");
-  return last?.at ?? r.created_at;
-}
+const CHECK_LABEL: Record<ZeroConversionCheck, string> = {
+  conversion_goals: "цели и учёт конверсий",
+  strategy: "стратегию и цель CPA",
+  search_queries_negative_keywords: "поисковые запросы и минус-фразы",
+};
+
+/** Time of the calculation of the current version (`computed_at`, API_CONTRACT §5). */
+export const calculatedAt = (r: Pick<Recommendation, "computed_at">): string => r.computed_at;
 
 /** «Откуда это число?» — period, campaign, spend, conversions, rule and version, calculation time, data used. */
 export function Origin({ r, v }: { r: Recommendation; v: Value }) {

@@ -106,7 +106,7 @@ export function WhyDrawer() {
           <p className="text-sm text-muted">Вручную в Яндекс Директе — AdPilot в v1.0 не меняет кабинет.</p>
           <div className="mt-3 rounded-xl bg-surface p-3">
             <p className="label">Можно сэкономить</p>
-            <ValueView v={r.can_save} caption className="text-lg text-warning" reason="Для этого действия нет обоснованной формулы эффекта — оцените по факту после замера" />
+            <ValueView v={r.can_save} caption className="text-lg text-warning" />
           </div>
           {(lowered || r.limitations.length > 0) && (
             <ul className="mt-2 space-y-1 text-xs text-muted">

@@ -32,7 +32,7 @@ export default function Losses() {
       <div className="grid gap-4 sm:grid-cols-3">
         <MetricCard label={EXPOSURE} v={exposure.total} tone="text-danger" />
         <MetricCard label="Можно сэкономить" v={today.can_save.total} tone="text-warning" note="оценка по открытым рекомендациям, без двойного учёта" />
-        <MetricCard label="Сэкономлено" v={today.saved} tone="text-success" note={SAVED_NOTE} reason="Пока нет замеров с подтверждённым выполнением" />
+        <MetricCard label="Сэкономлено" v={today.saved} tone="text-success" note={SAVED_NOTE} />
       </div>
       <div className="mt-3 space-y-1 text-xs text-muted">
         <p>{EXPOSURE_NOTE}</p>

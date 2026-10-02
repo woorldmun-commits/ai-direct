@@ -10,6 +10,7 @@ import {
   isPositive,
   PARTIAL_NOTE,
   sourceLabel,
+  UNAVAILABLE_REASON_LABEL,
   type DecimalString,
   type Unit,
   type Value,
@@ -17,7 +18,8 @@ import {
 
 /**
  * The only way to show a number (PRODUCT_SPEC §4.1). `actual` — plain, `estimated` — «≈» with «Как посчитано»
- * (formula, period, source, rule@version), `unavailable` — «Недостаточно данных» and a reason, never 0 or a dash.
+ * (formula, period, source, rule@version), `unavailable` — «Недостаточно данных» and the reason from
+ * `v.unavailable_reason` (API_CONTRACT §2), never 0 or a dash.
  * `data_status = partial` gets a «уточняется» mark. Rendering `.amount` anywhere else is a lint error.
  *
  * «Как посчитано» uses the native `popover` attribute: no script, top layer (not clipped by cards).
@@ -27,7 +29,6 @@ export function ValueView({
   className = "",
   caption = false,
   signed = false,
-  reason,
   hint = true,
 }: {
   v: Value;
@@ -37,8 +38,6 @@ export function ValueView({
   caption?: boolean;
   /** Show «+» for positive values (deltas). */
   signed?: boolean;
-  /** Why the value is unavailable and what to connect; the contract has no field for it. */
-  reason?: string;
   /** `false` only for decorative previews (landing): hides the «Как посчитано» button. */
   hint?: boolean;
 }) {
@@ -53,7 +52,7 @@ export function ValueView({
         </span>
         <span className={`text-xs text-muted ${caption ? "mt-0.5" : "ml-1"}`}>
           {caption ? "" : "· "}
-          {reason ?? "Данных за период не хватает для расчёта"}
+          {UNAVAILABLE_REASON_LABEL[v.unavailable_reason] ?? UNAVAILABLE_REASON_LABEL.no_data}
         </span>
       </span>
     );
@@ -148,7 +147,7 @@ function HowCalculated({ id, v }: { id: string; v: Value }) {
 
 /** Change badge for a `pct` Value. Color follows the sign of the string; `goodWhenDown` for costs. */
 export function DeltaBadge({ v, goodWhenDown = false }: { v: Value; goodWhenDown?: boolean }) {
-  if (v.amount === null) return <ValueView v={v} reason="нет данных для сравнения" />;
+  if (v.amount === null) return <ValueView v={v} />;
   const up = isPositive(v.amount);
   const down = isNegative(v.amount);
   const good = goodWhenDown ? down : up;

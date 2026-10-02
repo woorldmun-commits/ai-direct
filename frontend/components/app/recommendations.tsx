@@ -27,7 +27,7 @@ export function RecommendationsScreen({
   const scoped = active.filter((r) => (!rule || ruleName(r.evidence.rule_version).startsWith(rule)) && (!campaign || r.object.id === campaign));
   const match = TABS.find((t) => t.key === tab)!.match;
   const shown = scoped.filter((r) => match(r.status));
-  const ruleScope = rule ? { ...AUDIT_SCOPE, rules: AUDIT_SCOPE.rules.filter((x) => x.rule_version.startsWith(rule)) } : AUDIT_SCOPE;
+  const ruleScope = rule ? { ...AUDIT_SCOPE, rules: AUDIT_SCOPE.rules.filter((rv) => rv.startsWith(rule)) } : AUDIT_SCOPE;
   const selection = rule ? RULE_TITLE[rule] ?? rule : campaign ? active.find((r) => r.object.id === campaign)?.object.name ?? "кампания" : null;
 
   return (

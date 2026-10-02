@@ -2,6 +2,7 @@
 Прямой путь: API → Pydantic → БД. Обратный: БД → SQL-проверка → Pydantic."""
 
 from datetime import date
+from typing import get_args
 from decimal import Decimal
 
 import pytest
@@ -9,8 +10,8 @@ from psycopg.types.json import Jsonb
 from pydantic import ValidationError
 
 from app.audit.values import to_value
-from app.contract import Value
-from app.rules.domain import Fact, Window
+from app.contract import LEGACY_UNAVAILABLE_REASON, UNAVAILABLE_REASONS, Value
+from app.rules.domain import UNAVAILABLE_REASON_OF, Fact, Reason, UnavailableReason, Window
 
 BASE = {
     "amount": "12400.00", "unit": "rub", "source": "yandex_direct",
@@ -18,7 +19,8 @@ BASE = {
     "calculation_type": "actual", "data_status": "complete", "data_sufficiency": "sufficient",
     "snapshot_id": 1, "rule_version": None, "formula": None,
 }
-UNAVAILABLE = {"amount": None, "calculation_type": "unavailable", "data_sufficiency": "insufficient"}
+UNAVAILABLE = {"amount": None, "calculation_type": "unavailable", "data_sufficiency": "insufficient",
+               "unavailable_reason": "volume_insufficient"}
 
 
 def v(**kw) -> dict:
@@ -42,6 +44,7 @@ CASES = [
     ("составной source", v(source="yandex_direct+user_input"), True),
     ("period_from = period_to", v(period_from="2026-09-28"), True),
     ("partial", v(data_status="partial"), True),
+    ("unavailable_reason = null у actual", v(unavailable_reason=None), True),
     # --- инварианты ---
     ("actual без числа", v(amount=None), False),
     ("unavailable с числом", v(calculation_type="unavailable", data_sufficiency="insufficient"), False),
@@ -50,6 +53,10 @@ CASES = [
     ("estimated без формулы", v(calculation_type="estimated"), False),
     ("estimated с пустой формулой", v(calculation_type="estimated", formula=""), False),
     ("период задом наперёд", v(period_from="2026-09-29"), False),
+    ("причина у actual", v(unavailable_reason="no_data"), False),
+    ("причина вне списка", v(**{**UNAVAILABLE, "unavailable_reason": "bad_weather"}), False),
+    ("пустая причина", v(**{**UNAVAILABLE, "unavailable_reason": ""}), False),
+    ("причина числом", v(**{**UNAVAILABLE, "unavailable_reason": 1}), False),
     # --- словари значений ---
     ("неизвестный unit", v(unit="usd"), False),
     ("неизвестный source", v(source="google_ads"), False),
@@ -144,9 +151,10 @@ WINDOW = Window(date(2026, 9, 24), date(2026, 9, 30))
 
 
 def test_unavailable_fact_becomes_valid_unavailable_value(rw):
-    fact = Fact.unavailable("rub", "yandex_direct+yandex_metrika", WINDOW)
+    fact = Fact.unavailable("rub", "yandex_direct+yandex_metrika", WINDOW, reason="no_forecast")
     value = to_value(fact, 1, WINDOW.date_from, "zero_conv_campaign@1")
     assert (value.amount, value.calculation_type, value.data_sufficiency) == (None, "unavailable", "insufficient")
+    assert value.unavailable_reason == "no_forecast"
     dumped = value.model_dump(mode="json")
     assert rw.execute("SELECT value_is_valid(%s)", (Jsonb(dumped),)).fetchone()[0] is True
 
@@ -155,7 +163,31 @@ def test_unavailable_fact_becomes_valid_unavailable_value(rw):
     {"amount": None},                                                   # нет числа — но не unavailable
     {"amount": Decimal(1), "calculation_type": "unavailable"},          # unavailable с числом
     {"amount": Decimal(1), "calculation_type": "estimated"},            # estimated без формулы
+    {"amount": None, "calculation_type": "unavailable"},                # unavailable без причины
+    {"amount": Decimal(1), "reason": "no_data"},                        # причина у числа
 ])
 def test_fact_keeps_value_invariants(kw):
     with pytest.raises(ValueError):
         Fact(unit="rub", source="yandex_direct", period=WINDOW, **{"calculation_type": "actual", **kw})
+
+
+# --- unavailable_reason: закрытый список, одинаковый в правилах, модели и SQL ---------------------------------
+
+def test_reason_lists_agree(rw):
+    assert UNAVAILABLE_REASONS == get_args(UnavailableReason)
+    assert set(UNAVAILABLE_REASON_OF) == set(Reason) and set(UNAVAILABLE_REASON_OF.values()) <= set(UNAVAILABLE_REASONS)
+    for reason in UNAVAILABLE_REASONS:
+        payload = v(**{**UNAVAILABLE, "unavailable_reason": reason})
+        assert pydantic_accepts(payload)
+        assert rw.execute("SELECT value_is_valid(%s)", (Jsonb(payload),)).fetchone()[0] is True
+
+
+def test_unavailable_without_reason_is_legacy_only(rw):
+    """Value до 0004 — без причины: SQL принимает (старые append-only строки), модель — нет; при чтении из БД
+    (Value.from_stored) причина — LEGACY_UNAVAILABLE_REASON, а не выдуманная конкретная."""
+    legacy = {k: x for k, x in v(**UNAVAILABLE).items() if k != "unavailable_reason"}
+    assert not pydantic_accepts(legacy)
+    assert not pydantic_accepts({**legacy, "unavailable_reason": None})
+    assert rw.execute("SELECT value_is_valid(%s)", (Jsonb(legacy),)).fetchone()[0] is True
+    assert Value.from_stored(legacy).unavailable_reason == LEGACY_UNAVAILABLE_REASON
+    assert Value.from_stored(v(**UNAVAILABLE)).unavailable_reason == "volume_insufficient"  # записанная — как есть

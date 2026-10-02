@@ -24,7 +24,7 @@ def lost(amount, *, frm=D1, to=D7, status="complete", snapshot=1, formula="sum(c
     if amount is None:
         return Value(amount=None, unit="rub", source=source, period_from=frm, period_to=to,
                      calculation_type="unavailable", data_status=status, data_sufficiency="insufficient",
-                     snapshot_id=snapshot)
+                     snapshot_id=snapshot, unavailable_reason="volume_insufficient")
     return Value(amount=Decimal(amount), unit="rub", source=source, period_from=frm, period_to=to,
                  calculation_type="estimated", data_status=status, data_sufficiency="sufficient",
                  snapshot_id=snapshot, rule_version="x@1", formula=formula)
@@ -146,6 +146,7 @@ def test_empty_input_is_unavailable_not_zero():
     for v in (out.total, out.overlap):
         assert v.amount is None and v.calculation_type == "unavailable" and v.data_sufficiency == "insufficient"
         assert (v.period_from, v.period_to) == (AS_OF, AS_OF)
+        assert v.unavailable_reason == "no_data"  # карточек нет — нечего складывать
     assert out.components == () and (out.coverage.included, out.coverage.unavailable) == (0, 0)
 
 
@@ -153,6 +154,7 @@ def test_only_unavailable_cards_are_unavailable_and_counted_in_coverage():
     out = exposure_total([card("high_cpa", "campaign", A, None), card("high_cpa", "campaign", B, None)], [],
                          as_of=AS_OF)
     assert out.total.amount is None and out.total.calculation_type == "unavailable"
+    assert out.total.unavailable_reason == "volume_insufficient"  # общая причина карточек
     assert (out.coverage.included, out.coverage.unavailable) == (0, 2)
 
 

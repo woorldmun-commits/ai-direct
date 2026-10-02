@@ -87,7 +87,7 @@ def recommendation(rw, ws: int, login: str, amount: str) -> dict:
                                  'review', 'review') RETURNING id""",
                   audit, issue, Jsonb(lost),
                   Jsonb(value(amount=None, calculation_type="unavailable", data_sufficiency="insufficient")),
-                  Jsonb({"clicks": value(unit="count", amount=487)}), Jsonb({"type": "decrease_bid"}))
+                  Jsonb({"clicks": value(unit="count", amount=487)}), Jsonb({"type": "decrease_bid", "change_pct": -15}))
     explanation = one(rw, """INSERT INTO explanations (finding_id, source, text, release_id)
                              VALUES (%s, 'template', 'CPA выше цели', %s) RETURNING id""", finding, release)
     rec = one(rw, "INSERT INTO recommendations (issue_id, finding_id, explanation_id) VALUES (%s, %s, %s) RETURNING id",

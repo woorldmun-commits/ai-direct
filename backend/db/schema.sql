@@ -9,7 +9,9 @@
 -- ============================================================================
 
 -- Value: {"amount","unit","source","period_from","period_to","calculation_type",
---         "data_status","data_sufficiency","snapshot_id", ["rule_version"], ["formula"]}
+--         "data_status","data_sufficiency","snapshot_id", ["rule_version"], ["formula"], ["unavailable_reason"]}
+-- unavailable_reason (0004): допустим только у unavailable и только из закрытого списка. Обязателен он в модели
+-- (contract.Value), а не здесь: Value до 0004 записаны без него, и append-only строки не переписываются.
 -- Те же правила, что в backend/app/contract.py; согласованность проверяет tests/test_value_contract.py.
 -- Ошибка приведения типа (например, 2026-02-30) трактуется как «невалидно», а не как исключение.
 CREATE FUNCTION value_is_valid_raw(v jsonb) RETURNS boolean
@@ -21,7 +23,8 @@ LANGUAGE sql IMMUTABLE AS $$
     -- лишних ключей нет
     AND NOT EXISTS (SELECT 1 FROM jsonb_object_keys(v) AS k
                     WHERE k NOT IN ('amount', 'unit', 'source', 'period_from', 'period_to', 'calculation_type',
-                                    'data_status', 'data_sufficiency', 'snapshot_id', 'rule_version', 'formula'))
+                                    'data_status', 'data_sufficiency', 'snapshot_id', 'rule_version', 'formula',
+                                    'unavailable_reason'))
     AND v->>'unit' IN ('rub', 'count', 'pct')
     AND jsonb_typeof(v->'source') = 'string'
     AND v->>'source' ~ '^(yandex_direct|yandex_metrika|user_input)(\+(yandex_direct|yandex_metrika|user_input))*$'
@@ -38,6 +41,12 @@ LANGUAGE sql IMMUTABLE AS $$
     AND (v->>'calculation_type' <> 'estimated' OR length(coalesce(v->>'formula', '')) > 0)
     AND jsonb_typeof(coalesce(v->'rule_version', 'null'::jsonb)) IN ('null', 'string')
     AND coalesce(v->>'rule_version' ~ '^[a-z0-9_]+@[0-9]+$', true)
+    -- причина «недостаточно данных»: только у unavailable и только из списка (contract.UNAVAILABLE_REASONS)
+    AND jsonb_typeof(coalesce(v->'unavailable_reason', 'null'::jsonb)) IN ('null', 'string')
+    AND (jsonb_typeof(coalesce(v->'unavailable_reason', 'null'::jsonb)) = 'null'
+         OR (v->>'calculation_type' = 'unavailable'
+             AND v->>'unavailable_reason' IN ('source_missing', 'no_conversions', 'history_insufficient',
+                                              'volume_insufficient', 'no_forecast', 'no_data')))
     AND jsonb_typeof(v->'snapshot_id') = 'number' AND v->>'snapshot_id' ~ '^[0-9]+$'
     AND jsonb_typeof(v->'period_from') = 'string' AND jsonb_typeof(v->'period_to') = 'string'
     AND v->>'period_from' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' AND v->>'period_to' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
