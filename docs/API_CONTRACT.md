@@ -437,11 +437,9 @@ workspace, полноты данных (`data_status`), права записи 
 | `analyst` | да | да | нет | да | нет |
 | `viewer` | да | только `view` | нет | нет | нет |
 
-**`approve` ≠ `execute`.** Роль без права approve не может создать одобрение; право execute позволяет исполнить или
-откатить только уже одобренную версию действия (analyst исполняет одобренное, но не одобряет).
+**`approve` ≠ `execute`.** Роль без права approve не может создать одобрение; право execute позволяет исполнить или откатить только уже одобренную версию действия (analyst исполняет одобренное, но не одобряет).
 
-`approval_mode` workspace: `single_step` (по умолчанию для `kind = business`: одна кнопка «Применить» =
-`approve_and_apply`) или `two_step` (по умолчанию для `agency`: одобряет approve-роль, исполняет роль с правом execute).
+`approval_mode` workspace: `single_step` (по умолчанию для `kind = business`: одна кнопка «Применить» = `approve_and_apply`) или `two_step` (по умолчанию для `agency`: одобряет approve-роль, исполняет роль с правом execute).
 
 Команда: `GET/POST /organizations/{org}/invitations`, `PATCH/DELETE /organizations/{org}/members/{user}` — только
 `owner` / `admin`. Последнего `owner` удалить или понизить нельзя (`409 last_owner`).
