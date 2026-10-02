@@ -9,8 +9,8 @@ from datetime import date, datetime
 import psycopg
 from psycopg.types.json import Jsonb
 
-from app.rules.domain import CampaignDay, SnapshotView
-from app.sync.parse import query_hash
+from app.rules.domain import CampaignDay, PlacementDay, SnapshotView
+from app.sync.parse import PlacementRow, placement_id, query_hash
 from app.sync.snapshot import Snapshot, SyncFailure, capabilities
 
 
@@ -86,7 +86,12 @@ def write_snapshot(conn: psycopg.Connection, *, sync_run_id: int, workspace_id: 
             with conn.cursor().copy("""COPY stat_rows_load (snapshot_id, source, level, object_id, campaign_id, date,
                                          impressions, clicks, cost, conversions) FROM STDIN""") as copy:
                 for r in snapshot.rows:
-                    object_id = query_ids[r.query] if r.level == "query" else r.campaign_id
+                    if r.level == "query":
+                        object_id = query_ids[r.query]
+                    elif isinstance(r, PlacementRow):  # имя площадки в stat_rows не хранится — только её хэш-ID
+                        object_id = placement_id(r.placement)
+                    else:
+                        object_id = r.campaign_id
                     copy.write_row((snapshot_id, "yandex_direct", r.level, object_id, r.campaign_id, r.date,
                                     r.impressions, r.clicks, r.cost, r.conversions))
                 for g in snapshot.goal_rows:  # цель сайта: вне кампаний, только достижения
@@ -120,15 +125,20 @@ def record_failure(conn: psycopg.Connection, sync_run_id: int, failure: SyncFail
 def load_view(conn: psycopg.Connection, snapshot_id: int) -> SnapshotView:
     """Снимок из БД → вход правил. Тот же вид, что to_view() из памяти: аудит не зависит от того, откуда снимок."""
     row = conn.execute(
-        """SELECT s.workspace_id, r.direct_account_id, s.period_from, s.period_to, s.sources,
+        """SELECT s.workspace_id, r.direct_account_id, s.period_from, s.period_to, s.partial_from, s.sources,
                   s.conversion_definition IS NOT NULL
            FROM snapshots s JOIN sync_runs r ON r.id = s.sync_run_id
            WHERE s.id = %s AND s.status = 'complete'""", (snapshot_id,)).fetchone()
     if row is None:
         raise SnapshotNotComplete(snapshot_id)
-    ws, account, period_from, period_to, sources, has_conversions = row
+    ws, account, period_from, period_to, partial_from, sources, has_conversions = row
     days = conn.execute("""SELECT campaign_id, date, cost, clicks, conversions FROM stat_rows
                            WHERE snapshot_id = %s AND level = 'campaign' ORDER BY campaign_id, date""",
                         (snapshot_id,)).fetchall()
+    # Имена площадок здесь неизвестны (в stat_rows только object_id) — PlacementDay.placement = None
+    placements = conn.execute("""SELECT campaign_id, object_id, date, cost, clicks, conversions FROM stat_rows
+                                 WHERE snapshot_id = %s AND source = 'yandex_direct' AND level = 'placement'
+                                 ORDER BY campaign_id, date, object_id""", (snapshot_id,)).fetchall()
     return SnapshotView(snapshot_id, ws, account, period_from, period_to,
-                        capabilities(frozenset(sources), has_conversions), tuple(CampaignDay(*d) for d in days))
+                        capabilities(frozenset(sources), has_conversions), tuple(CampaignDay(*d) for d in days),
+                        placement_days=tuple(PlacementDay(*p) for p in placements), partial_from=partial_from)

@@ -27,13 +27,32 @@ REPORT_HEADERS = {
 class ReportSpec:
     report_type: str
     level: str
-    fields: tuple[str, ...]  # запрашиваем только то, что храним
+    fields: tuple[str, ...]  # запрашиваем только то, что храним (и столбцы-проверки фильтра, см. PLACEMENT_REPORT)
+    filters: tuple[tuple[str, str, tuple[str, ...]], ...] = ()  # SelectionCriteria.Filter: (поле, оператор, значения)
+    name: str | None = None  # имя отчёта, когда report_type не уникален (CUSTOM_REPORT)
+
+    @property
+    def key(self) -> str:
+        """Уникальное имя отчёта: суффикс ReportName и имя файла DirectFixture."""
+        return self.name or self.report_type
 
 
 CAMPAIGN_REPORT = ReportSpec("CAMPAIGN_PERFORMANCE_REPORT", "campaign",
                              ("Date", "CampaignId", "Impressions", "Clicks", "Cost"))
 QUERY_REPORT = ReportSpec("SEARCH_QUERY_PERFORMANCE_REPORT", "query",
                           ("Date", "CampaignId", "Query", "Impressions", "Clicks", "Cost"))
+# Площадки РСЯ (правило zero_conv_placements). CUSTOM_REPORT с полем Placement, только сети: фильтр по AdNetworkType,
+# а сам столбец AdNetworkType запрашивается как проверка — парсер отвергает строку не из сетей, а не верит фильтру.
+# Placement — домен сайта или идентификатор приложения, не ПД; нормализуется sync/sanitize.py: sanitize_placement.
+# ПРОВЕРИТЬ на песочнице/живом аккаунте: что Placement и фильтр AdNetworkType EQUALS AD_NETWORK допустимы в
+# CUSTOM_REPORT вместе с Goals/AttributionModels (Conversions_<цель>_<модель>), и формат значений Placement
+# для приложений (bundle id или название магазина). Нагрузка: отчёт по площадкам × дни × кампании на 37 дней —
+# самый объёмный из трёх; Reports API не списывает баллы, но держит общий для пользователя лимит офлайн-отчётов
+# в очереди (5) и запросов (20 за 10 с) — отчёты одного аккаунта запрашиваются последовательно; предел размера
+# отчёта — ПРОВЕРИТЬ (при превышении API отвечает ошибкой запроса → invalid_request; тогда — дробить период).
+PLACEMENT_REPORT = ReportSpec("CUSTOM_REPORT", "placement",
+                              ("Date", "CampaignId", "AdNetworkType", "Placement", "Impressions", "Clicks", "Cost"),
+                              filters=(("AdNetworkType", "EQUALS", ("AD_NETWORK",)),), name="PLACEMENT_REPORT")
 
 
 # Три класса ошибок Директа (ARCHITECTURE.md §2.6):
@@ -93,7 +112,7 @@ class DirectSource(Protocol):
 
 
 class DirectFixture:
-    """Отчёты из файлов <root>/<login>/<report_type>.tsv. Ошибки: <root>/connection_error — код ошибки токена,
+    """Отчёты из файлов <root>/<login>/<ReportSpec.key>.tsv (CAMPAIGN_PERFORMANCE_REPORT.tsv, PLACEMENT_REPORT.tsv…). Ошибки: <root>/connection_error — код ошибки токена,
     <root>/<login>/unavailable — код ошибки доступа к аккаунту; каталога аккаунта нет — account_not_found."""
 
     def __init__(self, root: Path):
@@ -113,7 +132,7 @@ class DirectFixture:
         self._account(login)
 
     def fetch_report(self, login, spec, conversions, date_from, date_to) -> str:
-        return (self._account(login) / f"{spec.report_type}.tsv").read_text(encoding="utf-8")
+        return (self._account(login) / f"{spec.key}.tsv").read_text(encoding="utf-8")
 
 
 # --- Reports API ----------------------------------------------------------------------------------------------
@@ -174,12 +193,15 @@ class DirectApi:
                     date_from: date, date_to: date) -> dict:
         if date_from > date_to:
             raise ValueError(f"период задом наперёд: {date_from} > {date_to}")
+        criteria: dict = {"DateFrom": date_from.isoformat(), "DateTo": date_to.isoformat()}
+        if spec.filters:
+            criteria["Filter"] = [{"Field": f, "Operator": op, "Values": list(values)} for f, op, values in spec.filters]
         params = {
-            "SelectionCriteria": {"DateFrom": date_from.isoformat(), "DateTo": date_to.isoformat()},
+            "SelectionCriteria": criteria,
             # Conversions последним: API разворачивает его в Conversions_<цель>_<модель> на этом месте —
             # порядок столбцов совпадает с тем, что ждёт парсер
             "FieldNames": list(spec.fields) + (["Conversions"] if conversions else []),
-            "ReportName": f"ai-direct:{self.run_key}:{spec.report_type}",
+            "ReportName": f"ai-direct:{self.run_key}:{spec.key}",
             "ReportType": spec.report_type,
             "DateRangeType": "CUSTOM_DATE",
             "Format": "TSV",

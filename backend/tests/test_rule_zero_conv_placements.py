@@ -1,0 +1,228 @@
+"""zero_conv_placements@1 — площадки РСЯ без конверсий: пороги на границах, досчёт конверсий, ориентир CPA,
+доказательства для объединения расхода без двойного учёта, golden-кейсы (evals/cases/zero_conv_placements/)."""
+
+import dataclasses
+import json
+from datetime import date, timedelta
+from decimal import Decimal
+from pathlib import Path
+
+import pytest
+from psycopg.types.json import Jsonb
+
+from app.audit.values import to_value
+from app.contract import Value
+from app.rules.domain import (DIRECT_CONVERSIONS, AuditSettings, CampaignDay, Finding, NotEnoughData, PlacementDay,
+                              Reason, SnapshotView, run)
+from app.rules.zero_conv_placements import ZERO_CONV_PLACEMENTS as RULE
+from app.sync.parse import placement_id
+
+CASES = Path(__file__).parents[1] / "evals" / "cases" / "zero_conv_placements"
+TO = date(2026, 9, 30)
+PARTIAL = TO - timedelta(2)
+DONE = TO - timedelta(4)  # завершённый день внутри окна оценки (24–30.09)
+CID = 101
+SOURCES = frozenset({"yandex_direct", DIRECT_CONVERSIONS})
+
+
+def cday(cid, day, cost, clicks, conv) -> CampaignDay:
+    return CampaignDay(cid, day, Decimal(cost), clicks, None if conv is None else Decimal(conv))
+
+
+def pday(cid, name, day, cost, clicks, conv) -> PlacementDay:
+    return PlacementDay(cid, placement_id(name), day, Decimal(cost), clicks,
+                        None if conv is None else Decimal(conv), name)
+
+
+def view(campaign_days, placement_days, partial_from=PARTIAL, sources=SOURCES) -> SnapshotView:
+    return SnapshotView(84721, 7, 3, TO - timedelta(36), TO, frozenset(sources), tuple(campaign_days),
+                        placement_days=tuple(placement_days), partial_from=partial_from)
+
+
+# CPA кампании ровно 1500 ₽: 30 000 ₽ / 20 конверсий
+CAMPAIGN = [cday(CID, TO - timedelta(20), "30000.00", 1000, "20")]
+
+
+def evaluate(placements, settings=AuditSettings(), campaign=CAMPAIGN, **kw):
+    return run(RULE, view(campaign, placements, **kw), settings)
+
+
+# --- Пороги на границах ---------------------------------------------------------------------------------
+
+@pytest.mark.parametrize("cost, clicks, flagged", [
+    ("1500.00", 20, True),    # ровно 1 × CPA и ровно 20 кликов — проходит
+    ("1499.99", 200, False),  # на копейку меньше CPA
+    ("9000.00", 19, False),   # кликов меньше порога
+])
+def test_thresholds_are_inclusive(cost, clicks, flagged):
+    out = evaluate([pday(CID, "a.ru", DONE, cost, clicks, "0")])
+    assert bool(out) is flagged
+    if flagged:
+        (f,) = out
+        assert f.lost.amount == Decimal(cost) and f.reference == Decimal("1500.00")
+
+
+def test_thresholds_sum_days_inside_window_only():
+    """Расход до окна оценки в порог не входит; конверсия до окна — входит (площадка уже конвертировала)."""
+    before = TO - timedelta(10)
+    assert evaluate([pday(CID, "a.ru", before, "5000.00", 100, "0"), pday(CID, "a.ru", DONE, "10.00", 1, "0")]) == ()
+    two_days = [pday(CID, "a.ru", DONE, "800.00", 10, "0"), pday(CID, "a.ru", DONE - timedelta(1), "700.00", 10, "0")]
+    (f,) = evaluate(two_days)
+    assert f.lost.amount == Decimal("1500.00")
+    assert evaluate(two_days + [pday(CID, "a.ru", TO - timedelta(30), "1.00", 1, "1")]) == ()
+
+
+def test_any_conversion_in_window_excludes_placement():
+    assert evaluate([pday(CID, "a.ru", DONE, "5000.00", 100, "0.5")]) == ()
+
+
+def test_masked_placement_is_never_proposed():
+    assert evaluate([pday(CID, "***", DONE, "50000.00", 1000, "0")]) == ()
+
+
+def test_campaign_without_network_spend_in_window_is_silent():
+    assert evaluate([pday(CID, "a.ru", TO - timedelta(15), "5000.00", 100, "0")]) == ()
+    assert evaluate([]) == ()
+
+
+# --- Ориентир CPA ---------------------------------------------------------------------------------------
+
+def test_target_cpa_is_reference_when_set():
+    (f,) = evaluate([pday(CID, "a.ru", DONE, "1000.00", 30, "0")], AuditSettings(target_cpa=Decimal(1000)))
+    assert (f.reference, f.reference_type, f.evidence_meta["reference_mode"]) == (Decimal(1000), "target", "target")
+    assert f.evidence["reference_cpa"].source == "user_input" and f.lost.source.endswith("+user_input")
+    # без цели тот же расход ниже CPA кампании (1500) — вывода нет
+    assert evaluate([pday(CID, "a.ru", DONE, "1000.00", 30, "0")]) == ()
+
+
+@pytest.mark.parametrize("conversions, reason", [
+    ("0", Reason.NO_CONVERSIONS),
+    ("4", Reason.BASELINE_DATA_INSUFFICIENT),
+])
+def test_no_reliable_reference_is_not_enough_data(conversions, reason):
+    out = evaluate([pday(CID, "a.ru", DONE, "9000.00", 100, "0")],
+                   campaign=[cday(CID, TO - timedelta(20), "30000.00", 1000, conversions)])
+    assert out == (NotEnoughData("zero_conv_placements@1", reason, "campaign", CID),)
+
+
+def test_without_conversion_source_rule_is_not_computed():
+    out = run(RULE, view(CAMPAIGN, [pday(CID, "a.ru", DONE, "9000.00", 100, None)], sources={"yandex_direct"}),
+              AuditSettings())
+    assert out == (NotEnoughData("zero_conv_placements@1", Reason.SOURCE_MISSING),)
+
+
+# --- Досчёт конверсий -----------------------------------------------------------------------------------
+
+def test_placement_passing_only_with_partial_days_is_marked():
+    (f,) = evaluate([pday(CID, "a.ru", DONE, "1000.00", 30, "0"), pday(CID, "a.ru", TO, "600.00", 10, "0")])
+    assert f.evidence_meta["level_reason"] == "conversions_partial"
+    assert f.evidence_meta[f"placement_{placement_id('a.ru')}_status"] == "partial"
+
+
+def test_solid_placement_has_no_partial_reason():
+    (f,) = evaluate([pday(CID, "a.ru", DONE, "1600.00", 30, "0"), pday(CID, "a.ru", TO, "600.00", 10, "0")])
+    assert "level_reason" not in f.evidence_meta
+
+
+def test_unknown_partial_boundary_is_treated_as_partial():
+    (f,) = evaluate([pday(CID, "a.ru", DONE, "1600.00", 30, "0")], partial_from=None)
+    assert f.evidence_meta["level_reason"] == "conversions_partial"
+
+
+@pytest.mark.parametrize("cost, partial, quality", [
+    ("4499.99", False, "low"),       # < 3 ожидаемых конверсий
+    ("4500.00", False, "medium"),    # ровно 3
+    ("15000.00", False, "high"),     # ровно 10
+    ("15000.00", True, "medium"),    # high, но конверсии досчитываются → не выше review
+])
+def test_data_quality_by_expected_conversions(cost, partial, quality):
+    days = [pday(CID, "a.ru", DONE, cost, 500, "0")]
+    (f,) = evaluate(days, partial_from=None if partial else PARTIAL)
+    assert f.current_data_quality == quality
+
+
+# --- Вывод: агрегат по кампании, доказательства по площадкам -------------------------------------------
+
+def test_one_finding_per_campaign_with_placements_in_evidence():
+    placements = [pday(CID, "a.ru", DONE, "1600.00", 30, "0"), pday(CID, "b.ru", DONE, "3000.00", 50, "0"),
+                  pday(202, "a.ru", DONE, "1600.00", 30, "0")]
+    campaign = CAMPAIGN + [cday(202, TO - timedelta(20), "30000.00", 1000, "20")]
+    f1, f2 = evaluate(placements, campaign=campaign)
+    assert (f1.object_type, f1.object_id, f2.object_id) == ("campaign", CID, 202)
+    a, b = placement_id("a.ru"), placement_id("b.ru")
+    assert f1.action == {"type": "exclude_placements", "execution": "manual", "placement_ids": (b, a)}  # по расходу
+    assert f1.evidence_meta["placement_ids"] == f"{b},{a}"
+    assert (f1.evidence_meta[f"placement_{a}_name"], f1.evidence_meta[f"placement_{b}_name"]) == ("a.ru", "b.ru")
+    # сумма по площадкам = exposure: audit/exposure.py объединяет по (кампания, площадка, период)
+    per_placement = [x for k, x in f1.evidence.items() if k.startswith("placement_") and k.endswith("_cost")]
+    assert sum(x.amount for x in per_placement) == f1.lost.amount == f1.evidence["cost"].amount == Decimal("4600.00")
+    assert {(x.period.date_from, x.period.date_to) for x in per_placement} == {(TO - timedelta(6), TO)}
+    assert f1.evidence["placements"].amount == 2 and f1.evidence["conversions"].amount == 0
+    assert (f1.lost.calculation_type, f1.recoverable.calculation_type) == ("estimated", "estimated")
+    assert f1.lost.formula and f1.recoverable.formula and f1.lost.formula != f1.recoverable.formula
+
+
+def test_issue_key_is_campaign_level_and_stable_across_placement_sets():
+    (f1,) = evaluate([pday(CID, "a.ru", DONE, "1600.00", 30, "0")])
+    (f2,) = evaluate([pday(CID, "b.ru", DONE, "1600.00", 30, "0")])
+    assert f1.issue_key == f2.issue_key and f1.issue_type == "zero_conv_placements"
+
+
+def test_names_unknown_when_loaded_from_db():
+    (f,) = evaluate([dataclasses.replace(pday(CID, "a.ru", DONE, "1600.00", 30, "0"), placement=None)])
+    assert f.evidence_meta["placement_ids"] == str(placement_id("a.ru"))
+    assert not any(k.endswith("_name") for k in f.evidence_meta)
+
+
+def test_deterministic():
+    days = [pday(CID, n, DONE, "1600.00", 30, "0") for n in ("a.ru", "b.ru", "c.ru")]
+    assert evaluate(days) == evaluate(list(reversed(days)))
+
+
+def test_every_fact_is_a_valid_value_in_python_and_sql(rw):
+    (f,) = evaluate([pday(CID, "a.ru", DONE, "1600.00", 30, "0"), pday(CID, "b.ru", TO, "2000.00", 40, "0")])
+    values = {k: to_value(x, 84721, PARTIAL, f.rule_version).model_dump(mode="json")
+              for k, x in {**f.evidence, "lost": f.lost, "recoverable": f.recoverable}.items()}
+    assert all(Value(**v) for v in values.values())
+    assert rw.execute("SELECT evidence_is_valid(%s)", (Jsonb(values),)).fetchone()[0] is True
+    assert json.loads(json.dumps(dict(f.action))) == {"type": "exclude_placements", "execution": "manual",
+                                                      "placement_ids": list(f.action["placement_ids"])}
+
+
+# --- Golden-кейсы ---------------------------------------------------------------------------------------
+
+def _case_view(snapshot: dict) -> SnapshotView:
+    period_to = date.fromisoformat(snapshot["period_to"])
+    campaign = [cday(c, date.fromisoformat(d), cost, clicks, conv) for c, d, cost, clicks, conv in
+                snapshot["campaign_days"]]
+    placements = [pday(c, n, date.fromisoformat(d), cost, clicks, conv) for c, n, d, cost, clicks, conv in
+                  snapshot["placement_days"]]
+    sources = snapshot.get("sources", sorted(SOURCES))
+    return SnapshotView(1, 7, 3, period_to - timedelta(36), period_to, frozenset(sources), tuple(campaign),
+                        placement_days=tuple(placements),
+                        partial_from=date.fromisoformat(snapshot["partial_from"]))
+
+
+def _actual(out) -> dict:
+    if isinstance(out, NotEnoughData):
+        return {"kind": "not_enough_data", "object_id": out.object_id, "reason": out.reason.value}
+    assert isinstance(out, Finding)
+    ids = [int(x) for x in out.evidence_meta["placement_ids"].split(",")]
+    return {"kind": "finding", "object_id": out.object_id, "lost": str(out.lost.amount),
+            "reference": str(out.reference), "reference_mode": out.evidence_meta["reference_mode"],
+            "placements": [out.evidence_meta[f"placement_{i}_name"] for i in ids],
+            "current_data_quality": out.current_data_quality,
+            "level_reason": out.evidence_meta.get("level_reason")}
+
+
+@pytest.mark.parametrize("path", sorted(CASES.glob("*.json")), ids=lambda p: p.stem)
+def test_golden_case(path):
+    case = json.loads(path.read_text(encoding="utf-8"))
+    assert case["rule"] == RULE.rule_version
+    target = case["settings"]["target_cpa"]
+    settings = AuditSettings(target_cpa=None if target is None else Decimal(target))
+    assert [_actual(o) for o in run(RULE, _case_view(case["snapshot"]), settings)] == case["expected"]
+
+
+def test_golden_set_is_not_empty():
+    assert len(list(CASES.glob("*.json"))) >= 5

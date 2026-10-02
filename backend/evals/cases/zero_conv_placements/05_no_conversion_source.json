@@ -1,0 +1,20 @@
+{
+  "id": "zero_conv_placements/05_no_conversion_source",
+  "description": "Цели не выбраны: конверсий в отчёте Директа нет — правило не вычисляется («недостаточно данных: подключите цели Метрики»), а не «все площадки без конверсий».",
+  "rule": "zero_conv_placements@1",
+  "settings": {"target_cpa": "1000"},
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "partial_from": "2026-09-28",
+    "sources": ["yandex_direct"],
+    "campaign_days": [
+      [505, "2026-09-25", "5000.00", 300, null]
+    ],
+    "placement_days": [
+      [505, "a.ru", "2026-09-25", "5000.00", 300, null]
+    ]
+  },
+  "expected": [
+    {"kind": "not_enough_data", "object_id": null, "reason": "source_missing"}
+  ]
+}

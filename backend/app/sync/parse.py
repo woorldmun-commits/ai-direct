@@ -10,7 +10,7 @@ from decimal import Decimal
 
 from app.sources.conversion import ConversionDefinition
 from app.sources.direct import ReportSpec
-from app.sync.sanitize import sanitize
+from app.sync.sanitize import MASK, sanitize, sanitize_placement
 
 # Reports API показывает отсутствующее значение как "--". Смысл зависит от столбца:
 #   Conversions_*            "--" → 0: за день по цели конверсий не было;
@@ -37,6 +37,7 @@ class FormatError(str, Enum):
     INVALID_JSON = "invalid_json"
     QUERY_MISMATCH = "query_mismatch"   # Метрика ответила не на тот запрос (счётчик, метрики, период)
     SAMPLED_REPORT = "sampled_report"   # Метрика отдала сэмплированные данные
+    UNEXPECTED_VALUE = "unexpected_value"  # значение вне фильтра запроса (AdNetworkType не AD_NETWORK)
 
 
 class ReportFormatError(ValueError):
@@ -61,6 +62,24 @@ class StatRow:
 
     def key(self) -> tuple:
         return (self.level, self.campaign_id, self.query, self.date)
+
+
+@dataclass(frozen=True)
+class PlacementRow(StatRow):
+    """Строка уровня placement: площадка сетей внутри кампании. Отдельный класс, а не поле StatRow, — allowlist
+    площадок заморожен своим тестом (tests/test_placements_sync.py). AdNetworkType не хранится: это проверка
+    фильтра отчёта, а все строки здесь — сети."""
+    placement: str = MASK  # нормализованный домен/приложение (sanitize_placement); MASK — имя не прошло allowlist
+
+    def key(self) -> tuple:
+        return (self.level, self.campaign_id, self.placement, self.date)
+
+
+def placement_id(name: str) -> int:
+    """object_id площадки в stat_rows: у площадки в Reports API нет числового ID — стабильный 63-битный хэш
+    нормализованного имени (одинаковый во всех снимках и workspace; имя — не ПД). Коллизия при 2^63 —
+    пренебрежимо; она упёрлась бы в уникальный индекс stat_rows_grain, а не смешала бы данные молча."""
+    return int.from_bytes(hashlib.sha256(f"placement:{name}".encode()).digest()[:8], "big") >> 1
 
 
 def query_hash(sanitized: str) -> bytes:
@@ -107,12 +126,17 @@ def _row(values: dict[str, str], spec: ReportSpec, conv_columns: tuple[str, ...]
     campaign_id = _count(values["CampaignId"], "CampaignId")
     conversions = (sum((Decimal(0) if values[c] == EMPTY else _money(values[c], c) for c in conv_columns),
                        Decimal(0)) if conv_columns else None)
-    return StatRow(
+    common = dict(
         level=spec.level, campaign_id=campaign_id, date=day,
         impressions=_count(values["Impressions"], "Impressions"), clicks=_count(values["Clicks"], "Clicks"),
         cost=_money(values["Cost"], "Cost"), conversions=conversions,
-        query=sanitize(values["Query"]) if "Query" in values else None,
     )
+    if "Placement" in values:
+        # фильтр отчёта — «только сети»; строка поиска значит, что фильтр не применился: ошибка, а не данные
+        if values.get("AdNetworkType") != "AD_NETWORK":
+            raise ReportFormatError(FormatError.UNEXPECTED_VALUE, f"AdNetworkType={values.get('AdNetworkType')!r}")
+        return PlacementRow(**common, placement=sanitize_placement(values["Placement"]))
+    return StatRow(**common, query=sanitize(values["Query"]) if "Query" in values else None)
 
 
 def parse_report(text: str, spec: ReportSpec, conversions: ConversionDefinition | None,
