@@ -13,7 +13,9 @@ VIA_PARENT = {"direct_accounts", "metrika_counters", "stat_rows", "search_query_
               "measurements", "subscription_events", "payments"}
 # Сознательно без RLS (schema.sql «Изоляция арендаторов»): данные пользователя и глобальные таблицы.
 NO_RLS = {"users", "yandex_identities", "sessions", "telegram_links", "organizations", "organization_memberships",
-          "releases", "free_audit_claims"}
+          "releases", "free_audit_claims",
+          # вход по телефону: не данные workspace; рабочим ролям таблицы недоступны вовсе — только функции
+          "phone_auth_codes", "phone_auth_events"}
 
 
 def rls_tables(conn) -> set[str]:
