@@ -4,7 +4,6 @@ import { Bars, Donut } from "@/components/charts";
 import { PageHeader } from "@/components/ui";
 import { ValueView } from "@/components/value-view";
 import { CAMPAIGN_SHARES, MONTH, MONTH_VALUES, P7, RECOMMENDATIONS } from "@/lib/demo";
-import { objectLabel } from "@/lib/contract";
 import { buildToday } from "@/lib/demo-backend";
 import { PAST_RECOMMENDATIONS } from "@/lib/demo-history";
 import { EXPOSURE, EXPOSURE_SHORT } from "@/lib/site";
@@ -100,7 +99,7 @@ export default function Finance() {
                 <div>
                   <p className="font-semibold">{r.title}</p>
                   <p className="text-xs text-muted">
-                    {objectLabel(r.object)} · замер {formatPeriod(r.measurement!.windows.after)}
+                    замер {formatPeriod(r.measurement!.windows.after)}
                     {!r.measurement!.counts_in_saved_total && " · не входит в итог"}
                   </p>
                 </div>

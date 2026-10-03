@@ -2,7 +2,7 @@
 // with history, execution and measurement). They feed «История решений» and «Сэкономлено ≈».
 
 import type { HistoryEvent, Measurement, Recommendation } from "./contract";
-import { AD_ACCOUNT, actual, computedAt, demoPlacements, estimated, unavailable, USER } from "./demo";
+import { AD_ACCOUNT, actual, computedAt, demoPlacements, demoTitle, estimated, lowerCpa, unavailable, USER } from "./demo";
 import type { Period } from "./value";
 
 const sys = "system" as const;
@@ -48,7 +48,7 @@ function placements(id: string, campaign: { id: string; name: string }, count: n
     ...base,
     id,
     version_id: `rv_${id}_1`,
-    title: "Площадки РСЯ без конверсий",
+    title: demoTitle.placements({ type: "campaign", ...campaign }, count, spend),
     object: { type: "campaign", id: campaign.id, name: campaign.name },
     // safety_policy@1: excluding placements changes the campaign's reach — `review` at most, never `change`.
     action_level: "review" as const,
@@ -133,7 +133,7 @@ const PAST: Omit<Recommendation, "computed_at" | "exposure_overlap">[] = [
     ...base,
     id: "rec_h03",
     version_id: "rv_h03_1",
-    title: "Расход без конверсий",
+    title: demoTitle.zeroConv({ type: "campaign", ...SPB }, 14_600),
     object: { type: "campaign", ...SPB },
     status: "applied",
     // zero_conv_campaign is `inspect_only` by rule (safety_policy@1): «проверить», settings are not changed, no measurement.
@@ -141,7 +141,7 @@ const PAST: Omit<Recommendation, "computed_at" | "exposure_overlap">[] = [
     exposure: estimated(14_600, "rub", BOTH, "cost при conversions = 0 и достаточном объёме кликов", "zero_conv_campaign@1", { from: "2026-09-11", to: "2026-09-17" }),
     can_save: unavailable("rub", BOTH, "no_forecast", { from: "2026-09-11", to: "2026-09-17" }, "zero_conv_campaign@1"),
     explanation: { text: "Кампания тратила бюджет без конверсий при достаточном числе кликов. Проверьте цель конверсии и корректность разметки.", source: "template" },
-    action: { type: "investigate", execution: "manual", topic: "zero_conv_campaign", checks: ["conversion_goals", "strategy", "search_queries_negative_keywords"] },
+    action: { type: "investigate", execution: "manual", topic: "zero_conv_campaign", checks: ["conversion_goals", "strategy", "search_queries_negative_keywords"], suggest: null, placements: null },
     evidence: {
       facts: { cost: actual(14_600, "rub", DIRECT, { from: "2026-09-11", to: "2026-09-17" }), conversions: actual(0, "count", "yandex_metrika", { from: "2026-09-11", to: "2026-09-17" }) },
       meta: {},
@@ -169,22 +169,14 @@ const PAST: Omit<Recommendation, "computed_at" | "exposure_overlap">[] = [
     ...base,
     id: "rec_h04",
     version_id: "rv_h04_1",
-    title: "CPA выше цели на 40%",
+    title: demoTitle.highCpa({ type: "campaign", ...BRAND }, 4_200, 3_000),
     object: { type: "campaign", ...BRAND },
     status: "applied",
     action_level: "review",
     exposure: estimated(8_400, "rub", BOTH, "(cpa − target_cpa) × conversions", "high_cpa_target@1", { from: "2026-09-19", to: "2026-09-25" }),
     can_save: estimated(3_150, "rub", BOTH, "cost × |change_pct| / 100", "high_cpa_target@1", { from: "2026-09-19", to: "2026-09-25" }),
     explanation: { text: "CPA бренд-кампании на 40% выше цели при достаточном числе конверсий. Если ставки ручные — снизьте ставку на 10%, если автостратегия — снизьте целевую цену конверсии.", source: "template" },
-    action: {
-      type: "decrease_bid",
-      execution: "manual",
-      change_pct: "-10.00",
-      levers: [
-        { strategy: "manual", text: "снизить ставку", change_pct: "-10.00" },
-        { strategy: "auto", text: "снизить целевую цену конверсии в стратегии или проверить, на какие цели она оптимизируется" },
-      ],
-    },
+    action: lowerCpa("-10.00"),
     evidence: {
       facts: {
         cpa: actual(4_200, "rub", BOTH, { from: "2026-09-19", to: "2026-09-25" }, { formula: "cost / conversions" }),

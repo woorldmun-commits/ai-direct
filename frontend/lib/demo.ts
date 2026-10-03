@@ -2,7 +2,7 @@
 // contract objects (`Value`, `Recommendation`, lib/contract.ts), never typed into markup by hand, so totals on
 // different screens always agree. Screens only format what they get (`<ValueView>`).
 
-import type { DecreaseBidAction, ExcludePlacementsAction, HistoryEvent, Recommendation } from "./contract";
+import type { ExcludePlacementsAction, HistoryEvent, LowerCpaAction, PlacementRef, Recommendation } from "./contract";
 import type { ActualValue, DataStatus, EstimatedValue, Period, UnavailableReason, UnavailableValue, Unit } from "./value";
 
 export type Platform = "search" | "network";
@@ -68,11 +68,51 @@ export function computedAt(history: HistoryEvent[], created_at: string): string 
   return [...history].reverse().find((h) => h.event === "seen_again" || h.event === "created")?.at ?? created_at;
 }
 
-/** Demo placements for `exclude_placements` (opaque ids, site names as the sanitized directory keeps them). */
-export function demoPlacements(count: number, prefix: string): ExcludePlacementsAction {
-  const placements = Array.from({ length: count }, (_, i) => ({ id: `${prefix}${String(i + 1).padStart(3, "0")}`, name: `site-${prefix}${i + 1}.example` }));
-  return { type: "exclude_placements", execution: "manual", placements_count: count, placements };
+/** Demo placements (opaque ids, site names as the sanitized directory keeps them; one without a name). */
+export function placementRefs(count: number, prefix: string): PlacementRef[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `${prefix}${String(i + 1).padStart(3, "0")}`,
+    name: i === 1 ? null : `site-${prefix}${i + 1}.example`,
+  }));
 }
+
+/** `exclude_placements` — `zero_conv_placements` at `review` (backend/app/audit/present.py). */
+export function demoPlacements(count: number, prefix: string): ExcludePlacementsAction {
+  return { type: "exclude_placements", execution: "manual", placements_count: count, placements: placementRefs(count, prefix) };
+}
+
+/** `lower_cpa` — a `decrease_bid` candidate at `review` with the strategy unknown: levers by strategy. */
+export const lowerCpa = (changePct: string): LowerCpaAction => ({
+  type: "lower_cpa",
+  strategy: "unknown",
+  execution: "manual",
+  levers: [
+    { strategy: "manual", lever: "decrease_bid", change_pct: changePct },
+    { strategy: "auto", lever: "lower_target_cpa", change_pct: null },
+    { strategy: "auto", lever: "check_conversion_goals", change_pct: null },
+  ],
+});
+
+/** Rubles as the backend's title writes them (app/audit/templates.py `_rub`): «4 588,89», «3 000». */
+const rubText = (n: number) => {
+  const [whole, frac] = dec(n).split(".");
+  return whole.replace(/\B(?=(\d{3})+(?!\d))/g, " ") + (frac === "00" ? "" : `,${frac}`);
+};
+type TitleObject = { type: string; id: string; name: string | null };
+const titleObject = (o: TitleObject) => {
+  const label = ({ campaign: "кампания", account: "кабинет", placement: "площадка" } as Record<string, string>)[o.type] ?? o.type;
+  return o.name ? `${label} «${o.name}»` : `${label} ${o.id}`;
+};
+
+/** Card title as the backend builds it (app/audit/present.py `title`): family + object + key figure, no LLM. */
+export const demoTitle = {
+  highCpa: (o: TitleObject, cpa: number, reference: number, target = true) =>
+    `CPA ${rubText(cpa)} ₽ выше ${target ? "целевого" : "обычного"} ${rubText(reference)} ₽ · ${titleObject(o)}`,
+  zeroConv: (o: TitleObject, spend: number) => `Расход ${rubText(spend)} ₽ без конверсий · ${titleObject(o)}`,
+  placements: (o: TitleObject, count: number, spend: number) => `Площадки РСЯ без конверсий (${count}): ${rubText(spend)} ₽ · ${titleObject(o)}`,
+  /** The last audit could not check the problem: no old figure. */
+  insufficient: (o: TitleObject, head: string) => `${head} · ${titleObject(o)} · недостаточно данных для проверки`,
+};
 
 // --- Raw demo week (charts use these series; screens show Values) -----------------------------------
 const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
@@ -165,16 +205,6 @@ function rec(r: RecInput): Recommendation {
 }
 const noExecution = { execution_mode: null, verification_status: null, accepted_at: null, done_at: null, before_state: null, verification_checked_at: null };
 
-/** Levers of `decrease_bid` at `review` with an unknown strategy: manual bid or the autostrategy's target. */
-const bidLevers = (cut: number): DecreaseBidAction => ({
-  type: "decrease_bid",
-  execution: "manual",
-  change_pct: dec(-cut),
-  levers: [
-    { strategy: "manual", text: "снизить ставку", change_pct: dec(-cut) },
-    { strategy: "auto", text: "снизить целевую цену конверсии в стратегии или проверить, на какие цели она оптимизируется" },
-  ],
-});
 
 const MSK_CPA = CAMPAIGNS[1].spend / CAMPAIGNS[1].conversions;
 const MSK_DEV = Math.round(((MSK_CPA - TARGET_CPA) / TARGET_CPA) * 100);
@@ -182,6 +212,8 @@ const MSK_CUT = Math.floor(MSK_DEV / 20) * 5;
 const NET_MSK = { count: 14, clicks: 1_860, spend: 12_400 };
 const NET_REG = { count: 6, clicks: 410, spend: 3_800 };
 const ZERO = { clicks: 140, threshold: 6_000 };
+
+const campaignRef = (i: number) => ({ type: "campaign", id: CAMPAIGNS[i].id, name: CAMPAIGNS[i].name });
 
 const placementFacts = (p: { count: number; clicks: number; spend: number }) => ({
   cost: actual(p.spend, "rub", DIRECT),
@@ -194,8 +226,8 @@ export const RECOMMENDATIONS: Recommendation[] = [
   rec({
     id: "rec_cpa01",
     version_id: "rv_cpa01_2",
-    title: `CPA выше цели на ${DEV}%`,
-    object: { type: "campaign", id: CAMPAIGNS[0].id, name: CAMPAIGNS[0].name },
+    title: demoTitle.highCpa(campaignRef(0), CPA_SEARCH, TARGET_CPA),
+    object: campaignRef(0),
     status: "new",
     action_level: "review",
     allowed_actions: [],
@@ -205,7 +237,7 @@ export const RECOMMENDATIONS: Recommendation[] = [
       text: `За неделю конверсия в кампании стоила ${CPA_SEARCH} ₽ при цели ${TARGET_CPA} ₽ — на ${DEV}% дороже. Стратегия кампании AdPilot неизвестна: если ставки ручные — снизьте ставку на ${CUT}%, если автостратегия — снизьте целевую цену конверсии или проверьте цели. Через 7 дней после выполнения AdPilot сравнит CPA до и после.`,
       source: "template",
     },
-    action: bidLevers(CUT),
+    action: lowerCpa(dec(-CUT)),
     evidence: {
       facts: {
         cost: actual(CAMPAIGNS[0].spend, "rub", DIRECT),
@@ -229,9 +261,9 @@ export const RECOMMENDATIONS: Recommendation[] = [
   rec({
     id: "rec_cpa02",
     version_id: "rv_cpa02_1",
-    title: `CPA выше цели на ${MSK_DEV}%`,
-    object: { type: "campaign", id: CAMPAIGNS[1].id, name: CAMPAIGNS[1].name },
-    status: "requires_decision",
+    title: demoTitle.highCpa(campaignRef(1), MSK_CPA, TARGET_CPA),
+    object: campaignRef(1),
+    status: "new",
     action_level: "review",
     allowed_actions: [],
     exposure: estimated((MSK_CPA - TARGET_CPA) * CAMPAIGNS[1].conversions, "rub", BOTH, "(cpa − target_cpa) × conversions", RULE_CPA),
@@ -240,7 +272,7 @@ export const RECOMMENDATIONS: Recommendation[] = [
       text: `CPA кампании — ${Math.round(MSK_CPA)} ₽, на ${MSK_DEV}% выше цели ${TARGET_CPA} ₽, при ${CAMPAIGNS[1].conversions} конверсиях — данных впритык, проверьте перед изменением. Если ставки ручные — снизьте ставку на ${MSK_CUT}%, если автостратегия — снизьте целевую цену конверсии. Площадки без конверсий в этой кампании — отдельная карточка; их расход уже входит в эту сумму.`,
       source: "template",
     },
-    action: bidLevers(MSK_CUT),
+    action: lowerCpa(dec(-MSK_CUT)),
     evidence: {
       facts: {
         cost: actual(CAMPAIGNS[1].spend, "rub", DIRECT),
@@ -264,8 +296,8 @@ export const RECOMMENDATIONS: Recommendation[] = [
   rec({
     id: "rec_net01",
     version_id: "rv_net01_1",
-    title: "Площадки РСЯ без конверсий",
-    object: { type: "campaign", id: CAMPAIGNS[1].id, name: CAMPAIGNS[1].name },
+    title: demoTitle.placements(campaignRef(1), NET_MSK.count, NET_MSK.spend),
+    object: campaignRef(1),
     status: "accepted",
     action_level: "review",
     allowed_actions: [],
@@ -296,8 +328,8 @@ export const RECOMMENDATIONS: Recommendation[] = [
   rec({
     id: "rec_net02",
     version_id: "rv_net02_1",
-    title: "Площадки РСЯ без конверсий",
-    object: { type: "campaign", id: CAMPAIGNS[2].id, name: CAMPAIGNS[2].name },
+    title: demoTitle.placements(campaignRef(2), NET_REG.count, NET_REG.spend),
+    object: campaignRef(2),
     status: "new",
     action_level: "inspect_only",
     allowed_actions: [],
@@ -307,7 +339,7 @@ export const RECOMMENDATIONS: Recommendation[] = [
       text: `На ${NET_REG.count} площадках были клики, но не было конверсий. Расхода пока мало для уверенного вывода: проверьте, что это за площадки и подходит ли их аудитория, прежде чем исключать.`,
       source: "template",
     },
-    action: { type: "investigate", execution: "manual", topic: "zero_conv_placements", checks: ["placements_audience", "conversion_goals"] },
+    action: { type: "investigate", execution: "manual", topic: "zero_conv_placements", checks: ["network_placements"], suggest: null, placements: placementRefs(NET_REG.count, "reg") },
     evidence: { facts: placementFacts(NET_REG), meta: { baseline_data_quality: "low" }, rule_version: RULE_PLACEMENTS },
     safety: { safety_policy: POLICY, candidate_level: "review", policy_reasons: ["data_sufficiency_low"], data_status: "complete" },
     limitations: [],
@@ -320,8 +352,9 @@ export const RECOMMENDATIONS: Recommendation[] = [
   rec({
     id: "rec_zero01",
     version_id: "rv_zero01_1",
-    title: "Расход без конверсий",
-    object: { type: "campaign", id: CAMPAIGNS[3].id, name: CAMPAIGNS[3].name },
+    // v1.0 sends `object.name = null` (no campaign names in the schema): the screen shows the id.
+    title: demoTitle.insufficient({ type: "campaign", id: CAMPAIGNS[3].id, name: null }, "Расход без конверсий"),
+    object: { type: "campaign", id: CAMPAIGNS[3].id, name: null },
     status: "new",
     action_level: "inspect_only",
     allowed_actions: [],
@@ -332,7 +365,7 @@ export const RECOMMENDATIONS: Recommendation[] = [
       text: `Кампания потратила ${CAMPAIGNS[3].spend} ₽ (${ZERO.clicks} кликов) за период без конверсий. Это ниже порога достаточного объёма ${ZERO.threshold} ₽, поэтому сумму не оцениваем и в итог не включаем — продолжаем наблюдать. Проверьте цели и учёт конверсий, стратегию, поисковые запросы и минус-фразы.`,
       source: "template",
     },
-    action: { type: "investigate", execution: "manual", topic: "zero_conv_campaign", checks: ["conversion_goals", "strategy", "search_queries_negative_keywords"] },
+    action: { type: "investigate", execution: "manual", topic: "zero_conv_campaign", checks: ["conversion_goals", "strategy", "search_queries_negative_keywords"], suggest: null, placements: null },
     evidence: {
       facts: {
         cost: actual(CAMPAIGNS[3].spend, "rub", DIRECT),

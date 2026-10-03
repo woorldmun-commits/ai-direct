@@ -72,65 +72,68 @@ export interface ObjectRef {
   name: string | null;
 }
 
-/** Name of the object for the screen; the id when the name is unknown. */
-export const objectLabel = (o: ObjectRef): string => o.name ?? `Кампания ${o.id}`;
+const OBJECT_TYPE_LABEL: Record<string, string> = { campaign: "Кампания", account: "Кабинет", placement: "Площадка" };
 
-// §5 — what the human changes in Direct by hand, `execution` is always `manual`. A discriminated union on `type`,
-// so a screen has to handle each one. The shape follows the policy level: `inspect_only` → `investigate` (only
-// what to check, no settings change); `review` of `decrease_bid` with an unknown strategy → `levers` (manual bid
-// or the autostrategy's target). A shape this client does not know arrives as `action = null`.
+/** Name of the object for the screen; «Кампания 51234567» when the name is unknown (`name` is nullable in v1.0). */
+export const objectLabel = (o: ObjectRef): string => o.name ?? `${OBJECT_TYPE_LABEL[o.type] ?? o.type} ${o.id}`;
+
+// §5 — what the human changes in Direct by hand (backend/app/audit/present.py); `execution` is always `manual`.
+// A discriminated union on `type`, so a screen has to handle each one. The shape follows the policy level:
+// `inspect_only` → `investigate` (only what to check, no settings change); a `decrease_bid` candidate at
+// `review`/`change` while the strategy is not known to be manual → `lower_cpa` (levers by strategy); a known manual
+// strategy at `change` → `decrease_bid`; `zero_conv_placements` at `review` → `exclude_placements`.
+// A shape the server cannot present arrives as `action = null`.
 export type ActionSuggestion = "set_target_cpa";
-export type ZeroConversionCheck = "conversion_goals" | "strategy" | "search_queries_negative_keywords";
-
-/** One way to make the change, depending on the campaign's strategy (unknown to AdPilot in v1.0). */
-export interface BidLever {
-  strategy: "manual" | "auto";
-  /** Ready text from the server, e.g. «снизить целевую цену конверсии или проверить цели». */
-  text: string;
-  /** Manual bids only: negative Decimal string. */
-  change_pct?: DecimalString | null;
-}
-export interface DecreaseBidAction {
-  type: "decrease_bid";
-  execution: "manual";
-  /** Negative Decimal string, e.g. `"-15.00"`. */
-  change_pct: DecimalString;
-  /** `review` with an unknown strategy: both levers, the human picks the one that fits the campaign. */
-  levers?: BidLever[];
-}
+export type InvestigateCheck = "conversion_goals" | "strategy" | "search_queries_negative_keywords" | "network_placements";
 export type InvestigateTopic = "high_cpa" | "zero_conv_campaign" | "zero_conv_placements";
+export type CampaignStrategy = "unknown" | "manual" | "auto";
+
+/** `id` is opaque; `name` is the site domain or app id after sanitizing (not personal data), `null` when unknown. */
+export interface PlacementRef {
+  id: string;
+  name: string | null;
+}
+
 /** `action_level = inspect_only`: what to check; nothing in the settings is changed. */
 export interface InvestigateAction {
   type: "investigate";
   execution: "manual";
   topic: InvestigateTopic;
-  /** Check codes; an unknown code is shown as it comes. */
-  checks: string[];
-}
-export interface InvestigateCpaGrowthAction {
-  type: "investigate_cpa_growth";
-  execution: "manual";
+  checks: InvestigateCheck[];
   suggest: ActionSuggestion | null;
+  /** The placements to look at (a `zero_conv_placements` candidate); `null` otherwise. */
+  placements: PlacementRef[] | null;
 }
-export interface InvestigateZeroConversionsAction {
-  type: "investigate_zero_conversions";
+
+/** One way to lower CPA; its text is the client's dictionary entry for `lever`. */
+export type CpaLever =
+  | { strategy: "manual"; lever: "decrease_bid"; /** Negative Decimal string, e.g. `"-15.00"`. */ change_pct: DecimalString }
+  | { strategy: "auto"; lever: "lower_target_cpa" | "check_conversion_goals"; change_pct: null };
+
+/** Levers by the campaign's strategy (unknown in v1.0): the human picks the one that fits. */
+export interface LowerCpaAction {
+  type: "lower_cpa";
   execution: "manual";
-  checks: ZeroConversionCheck[];
-  suggest: ActionSuggestion | null;
+  strategy: CampaignStrategy;
+  levers: CpaLever[];
 }
+
+/** Known manual strategy at `change` only (practically absent in v1.0: the strategy is unknown). */
+export interface DecreaseBidAction {
+  type: "decrease_bid";
+  execution: "manual";
+  /** Negative Decimal string, e.g. `"-15.00"`. */
+  change_pct: DecimalString;
+}
+
 export interface ExcludePlacementsAction {
   type: "exclude_placements";
   execution: "manual";
   placements_count: number;
-  /** `id` is opaque; `name` is the site domain or app id (not personal data), `null` when unknown. */
-  placements: { id: string; name: string | null }[];
+  placements: PlacementRef[];
 }
-export type RecommendationAction =
-  | DecreaseBidAction
-  | InvestigateCpaGrowthAction
-  | InvestigateZeroConversionsAction
-  | ExcludePlacementsAction
-  | InvestigateAction;
+
+export type RecommendationAction = InvestigateAction | LowerCpaAction | DecreaseBidAction | ExcludePlacementsAction;
 
 // §5 — list item
 export interface RecommendationListItem {
