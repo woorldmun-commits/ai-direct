@@ -184,7 +184,7 @@ def evaluate(rule: Rule, snap: SnapshotView, settings: AuditSettings) -> tuple[O
     return tuple(r for r in results if r is not None)
 
 
-# Пороги v1 — ПРЕДЛОЖЕНИЕ, утверждает владелец (PRODUCT_SPEC §10.1). Любое изменение = новая версия правила.
+# Пороги v1 утверждены владельцем 2026-10-03 (PRODUCT_SPEC §9.1). Любое изменение = новая версия правила.
 ZERO_CONV_PLACEMENTS = Rule(
     id="zero_conv_placements", version=1, family=FAMILY,
     required_sources=frozenset({"yandex_direct", DIRECT_CONVERSIONS, DIRECT_PLACEMENTS}), evaluate=evaluate,

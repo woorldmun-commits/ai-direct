@@ -146,7 +146,7 @@ def evaluate(rule: Rule, snap: SnapshotView, settings: AuditSettings) -> tuple[O
 ZERO_CONV_CAMPAIGN = Rule(
     id="zero_conv_campaign", version=1, family=FAMILY, required_sources=frozenset({"yandex_direct", DIRECT_CONVERSIONS}),
     evaluate=evaluate,
-    # v1-значения; обоснование — в docstring модуля. Пороги утверждает владелец продукта; изменение = @2.
+    # v1-значения; обоснование — в docstring модуля. Утверждены владельцем 2026-10-03 (PRODUCT_SPEC §9.1); изменение = @2.
     params=frozen({"cpa_multiple": 3, "high_cpa_multiple": 5, "min_clicks": 50, "high_clicks": 100,
                    "min_cost_rub": 1000, "absolute_min_cost_rub": 5000, "baseline_min_conversions": 10}),
 )
