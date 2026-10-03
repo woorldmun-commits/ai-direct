@@ -38,7 +38,8 @@ const MAX_ATTEMPTS = 5;
 const MAX_SENDS_PER_HOUR = 5;
 const DEMO_CODE = "123456";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const KNOWN_KEY = "adpilot-demo-phones";
+// Earlier demo builds kept entered numbers here (personal data, 152-FZ). Nothing is stored now; the key is only removed.
+const LEGACY_PHONES_KEY = "adpilot-demo-phones";
 
 /** "8 (912) 345-67-89" → "9123456789" (10 digits of a Russian mobile number) or null. */
 function normalizePhone(raw: string): string | null {
@@ -48,23 +49,6 @@ function normalizePhone(raw: string): string | null {
 }
 
 const formatPhone = (d: string) => `+7 ${d.slice(0, 3)} ${d.slice(3, 6)}-${d.slice(6, 8)}-${d.slice(8, 10)}`;
-
-// Demo stand-in for "is this number registered": numbers that finished sign-up in this browser.
-function knownPhones(): string[] {
-  try {
-    const v = JSON.parse(localStorage.getItem(KNOWN_KEY) ?? "[]");
-    return Array.isArray(v) ? v : [];
-  } catch {
-    return [];
-  }
-}
-function rememberPhone(d: string) {
-  try {
-    localStorage.setItem(KNOWN_KEY, JSON.stringify([...new Set([...knownPhones(), d])]));
-  } catch {
-    // Storage unavailable: the demo simply asks for consents again next time.
-  }
-}
 
 type Step = "phone" | "code" | "consent" | "profile";
 
@@ -88,6 +72,14 @@ export function PhoneAuth() {
   const [attempts, setAttempts] = useState(0);
   const [error, setError] = useState("");
   const now = useNow(step === "code");
+
+  useEffect(() => {
+    try {
+      localStorage.removeItem(LEGACY_PHONES_KEY);
+    } catch {
+      // Storage unavailable: nothing to remove.
+    }
+  }, []);
 
   const sentAt = sends[sends.length - 1] ?? 0;
   const wait = Math.min(RESEND_S, Math.max(0, RESEND_S - Math.floor((now - sentAt) / 1000)));
@@ -126,11 +118,11 @@ export function PhoneAuth() {
       return setError(left > 0 ? `Неверный код. Осталось попыток: ${left}.` : "Неверный код. Попытки закончились — запросите новый код.");
     }
     setError("");
-    if (knownPhones().includes(phone)) router.push("/demo");
-    else setStep("consent");
+    // Whether the number is already registered is the server's answer; the demo keeps no list and asks for consents.
+    setStep("consent");
   }
 
-  if (step === "consent") return <ConsentStep onDone={() => (rememberPhone(phone), setStep("profile"))} />;
+  if (step === "consent") return <ConsentStep onDone={() => setStep("profile")} />;
   if (step === "profile") return <ProfileStep onDone={() => router.push("/onboarding")} />;
 
   if (step === "phone")
