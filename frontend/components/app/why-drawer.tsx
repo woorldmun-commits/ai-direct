@@ -3,7 +3,7 @@
 import { ChevronDown, X } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { ValueView } from "@/components/value-view";
-import { ACTION_LEVEL_LABEL, objectLabel, REJECT_LABEL, resultLabel } from "@/lib/contract";
+import { ACTION_LEVEL_LABEL, REJECT_LABEL, resultLabel } from "@/lib/contract";
 import { CALCULATION_LABEL, formatPeriod, sourceLabel } from "@/lib/value";
 import { EXPOSURE, EXPOSURE_NOTE } from "@/lib/site";
 import { RecActions, StatusBadge } from "./rec-actions";
@@ -66,7 +66,7 @@ export function WhyDrawer() {
             {r.title}
           </h2>
           <p className="text-sm text-muted">
-            {objectLabel(r.object)} · кабинет {r.ad_account.login}
+            кабинет {r.ad_account.login}
           </p>
           <div className="mt-3 rounded-2xl bg-surface p-4">
             <p className="label">{EXPOSURE}</p>

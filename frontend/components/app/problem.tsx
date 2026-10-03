@@ -55,11 +55,9 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
         <StatusBadge r={r} />
         <LevelBadge level={r.action_level} />
       </div>
-      <h3 className="mt-3 text-lg font-bold">
-        <ActionText r={r} />
-      </h3>
+      <h3 className="mt-3 text-lg font-bold">{r.title}</h3>
       <p className="text-sm text-muted">
-        {r.title} · {objectLabel(r.object)}
+        <ActionText r={r} />
       </p>
       <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
         <div>
@@ -186,7 +184,7 @@ export function LossesList({ recs, selectable = true }: { recs: Recommendation[]
               )}
             </div>
             <p className="mt-3 font-bold">{r.title}</p>
-            <p className="text-xs text-muted">{objectLabel(r.object)}</p>
+            <p className="text-xs text-muted">кабинет {r.ad_account.login}</p>
             <div className="mt-3 flex items-center justify-between gap-3">
               <div>
                 <ValueView v={r.exposure} className="text-xl text-danger" />

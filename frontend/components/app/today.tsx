@@ -4,7 +4,7 @@ import { ArrowRight, History, ListChecks } from "lucide-react";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui";
 import { DeltaBadge, ValueView } from "@/components/value-view";
-import { objectLabel, type TodayResponse } from "@/lib/contract";
+import type { TodayResponse } from "@/lib/contract";
 import { DEMO_ERROR, DEMO_NOW, integrations, type SourcesScenario } from "@/lib/demo-backend";
 import { TODAY_DATE, USER } from "@/lib/demo";
 import { EXPOSURE, EXPOSURE_NOTE } from "@/lib/site";
@@ -89,7 +89,7 @@ function TodayData({ today }: { today: TodayResponse }) {
                     <ActionText r={r} />
                   </p>
                   <p className="text-xs text-muted">
-                    {objectLabel(r.object)} · {formatPeriod(r.period)}
+                    кабинет {r.ad_account.login} · {formatPeriod(r.period)}
                   </p>
                 </div>
                 <span className="self-start sm:self-auto">

@@ -1,19 +1,11 @@
 import { ChevronDown } from "lucide-react";
 import type { ReactNode } from "react";
-import { ParamView, ValueView } from "@/components/value-view";
-import {
-  objectLabel,
-  type BidLever,
-  type ExcludePlacementsAction,
-  type ExposureSummary,
-  type InvestigateTopic,
-  type Measurement,
-  type Recommendation,
-  type ZeroConversionCheck,
-} from "@/lib/contract";
+import { ValueView } from "@/components/value-view";
+import { objectLabel, type ExposureSummary, type Measurement, type Recommendation } from "@/lib/contract";
 import { formatMoment, formatPeriod, formatRuleVersion, isPositive, PARTIAL_NOTE, sourceLabel, type Value } from "@/lib/value";
 
-// Shared pieces of a recommendation: action text, fact labels, «Откуда это число?», measurement.
+// Shared pieces of a recommendation: action text (./action-text), fact labels, «Откуда это число?», measurement.
+export { ActionText } from "./action-text";
 
 export const FACT_LABEL: Record<string, string> = {
   cost: "Расход",
@@ -36,85 +28,6 @@ export const POLICY_REASON_LABEL: Record<string, string> = {
   data_sufficiency_low: "мало данных",
   data_sufficiency_medium: "данных впритык — проверьте вручную",
   strategy_unknown: "стратегия неизвестна",
-};
-
-const pct = (changePct: string) => <ParamView amount={changePct.replace(/^-/, "")} unit="pct" />;
-
-/** «site-1, site-2, site-3 и ещё N»: N counts from `placements_count`, not from the names we have. */
-function placementList(a: ExcludePlacementsAction): string {
-  const shown = a.placements.flatMap((p) => (p.name ? [p.name] : [])).slice(0, 3);
-  const rest = a.placements_count - shown.length;
-  if (!shown.length) return "";
-  return shown.join(", ") + (rest > 0 ? ` и ещё ${rest}` : "");
-}
-
-const TOPIC_TITLE: Record<InvestigateTopic, string> = {
-  high_cpa: "Проверить причину высокого CPA",
-  zero_conv_campaign: "Проверить, почему нет конверсий",
-  zero_conv_placements: "Проверить площадки без конверсий",
-};
-
-/**
- * What the human does by hand in Direct (`action`, API_CONTRACT §5), in line with the policy level:
- * `inspect_only` is always «Проверить …» (never a settings change, even if an older server sent one);
- * `review` with `levers` names both ways; `action = null` (an unknown shape) sends to the evidence.
- */
-export function ActionText({ r }: { r: Pick<Recommendation, "action" | "action_level"> }) {
-  const { action } = r;
-  if (!action) return <>Действие недоступно, см. доказательства</>;
-  const inspect = r.action_level === "inspect_only";
-  switch (action.type) {
-    case "investigate":
-      return (
-        <>
-          {TOPIC_TITLE[action.topic] ?? "Проверить"}
-          {action.checks.length > 0 && `: ${action.checks.map((c) => CHECK_LABEL[c] ?? c).join(", ")}`}
-        </>
-      );
-    case "decrease_bid":
-      if (inspect) return <>{TOPIC_TITLE.high_cpa} — ставку до проверки не меняйте</>;
-      return action.levers?.length ? <Levers levers={action.levers} /> : <>Снизить ставку на {pct(action.change_pct)}</>;
-    case "exclude_placements": {
-      const list = placementList(action);
-      return (
-        <>
-          {inspect ? TOPIC_TITLE.zero_conv_placements : "Проверить и исключить площадки без конверсий"} ({action.placements_count})
-          {list && `: ${list}`}
-        </>
-      );
-    }
-    case "investigate_zero_conversions":
-      return (
-        <>
-          Проверить: {action.checks.map((c) => CHECK_LABEL[c] ?? c).join(", ")}
-          {action.suggest === "set_target_cpa" && "; укажите целевой CPA"}
-        </>
-      );
-    case "investigate_cpa_growth":
-      return <>Проверить причину роста CPA{action.suggest === "set_target_cpa" && "; укажите целевой CPA"}</>;
-  }
-}
-
-/** Both levers of `decrease_bid` when the campaign's strategy is unknown: the human picks the one that fits. */
-function Levers({ levers }: { levers: BidLever[] }) {
-  const manual = levers.find((l) => l.strategy === "manual");
-  const auto = levers.find((l) => l.strategy === "auto");
-  return (
-    <>
-      {manual && (
-        <>Если ручные ставки — {manual.change_pct ? <>снизить ставку на {pct(manual.change_pct)}</> : manual.text}</>
-      )}
-      {manual && auto && "; "}
-      {auto && <>{manual ? "если" : "Если"} автостратегия — {auto.text}</>}
-    </>
-  );
-}
-
-const CHECK_LABEL: Record<ZeroConversionCheck | string, string> = {
-  conversion_goals: "цели и учёт конверсий",
-  strategy: "стратегию и цель CPA",
-  search_queries_negative_keywords: "поисковые запросы и минус-фразы",
-  placements_audience: "что это за площадки и подходит ли их аудитория",
 };
 
 /** «часть суммы уже учтена в другой карточке» — from `exposure_overlap` (> 0), with the amount. */
