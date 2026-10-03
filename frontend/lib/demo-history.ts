@@ -2,7 +2,7 @@
 // with history, execution and measurement). They feed «История решений» and «Сэкономлено ≈».
 
 import type { HistoryEvent, Measurement, Recommendation } from "./contract";
-import { AD_ACCOUNT, actual, computedAt, demoPlacements, estimated, USER } from "./demo";
+import { AD_ACCOUNT, actual, computedAt, demoPlacements, estimated, unavailable, USER } from "./demo";
 import type { Period } from "./value";
 
 const sys = "system" as const;
@@ -39,7 +39,7 @@ const base = {
   postponed_until: null,
   allowed_actions: [],
   blocked_actions: [],
-  exposure_overlap: false,
+  data_sufficiency: "sufficient" as const,
   limitations: [],
 };
 
@@ -50,9 +50,10 @@ function placements(id: string, campaign: { id: string; name: string }, count: n
     version_id: `rv_${id}_1`,
     title: "Площадки РСЯ без конверсий",
     object: { type: "campaign", id: campaign.id, name: campaign.name },
-    action_level: "change" as const,
+    // safety_policy@1: excluding placements changes the campaign's reach — `review` at most, never `change`.
+    action_level: "review" as const,
     exposure: estimated(spend, "rub", BOTH, "Σ расход площадок, где клики ≥ 50 и конверсии = 0", "zero_conv_placements@1", period),
-    can_save: estimated(spend, "rub", BOTH, "Σ расход исключаемых площадок за период", "zero_conv_placements@1", period),
+    can_save: unavailable("rub", BOTH, "no_forecast", period, "zero_conv_placements@1"),
     explanation: { text: `${count} площадок РСЯ с кликами и без конверсий за 7 дней.`, source: "template" as const },
     action: demoPlacements(count, id.replace(/^rec_/, "")),
     evidence: {
@@ -60,7 +61,7 @@ function placements(id: string, campaign: { id: string; name: string }, count: n
       meta: {},
       rule_version: "zero_conv_placements@1",
     },
-    safety: { safety_policy: "safety_policy@2", candidate_level: "change" as const, policy_reasons: [], data_status: "complete" as const },
+    safety: { safety_policy: "safety_policy@1", candidate_level: "review" as const, policy_reasons: [], data_status: "complete" as const },
     created_at: created,
   };
 }
@@ -70,7 +71,7 @@ const REG = { id: "51234569", name: "РСЯ · Регионы" };
 const SPB = { id: "51230001", name: "Поиск · Санкт-Петербург" };
 const BRAND = { id: "51230002", name: "Поиск · Москва · Бренд" };
 
-const PAST: Omit<Recommendation, "computed_at">[] = [
+const PAST: Omit<Recommendation, "computed_at" | "exposure_overlap">[] = [
   {
     ...placements("rec_h01", MSK, 9, 21_200, { from: "2026-09-08", to: "2026-09-14" }, "2026-09-15T07:02:00+03:00"),
     status: "applied",
@@ -135,40 +136,32 @@ const PAST: Omit<Recommendation, "computed_at">[] = [
     title: "Расход без конверсий",
     object: { type: "campaign", ...SPB },
     status: "applied",
-    action_level: "review",
+    // zero_conv_campaign is `inspect_only` by rule (safety_policy@1): «проверить», settings are not changed, no measurement.
+    action_level: "inspect_only",
     exposure: estimated(14_600, "rub", BOTH, "cost при conversions = 0 и достаточном объёме кликов", "zero_conv_campaign@1", { from: "2026-09-11", to: "2026-09-17" }),
-    can_save: estimated(14_600, "rub", BOTH, "cost за период", "zero_conv_campaign@1", { from: "2026-09-11", to: "2026-09-17" }),
+    can_save: unavailable("rub", BOTH, "no_forecast", { from: "2026-09-11", to: "2026-09-17" }, "zero_conv_campaign@1"),
     explanation: { text: "Кампания тратила бюджет без конверсий при достаточном числе кликов. Проверьте цель конверсии и корректность разметки.", source: "template" },
-    action: { type: "investigate_zero_conversions", execution: "manual", checks: ["conversion_goals", "strategy", "search_queries_negative_keywords"], suggest: null },
+    action: { type: "investigate", execution: "manual", topic: "zero_conv_campaign", checks: ["conversion_goals", "strategy", "search_queries_negative_keywords"] },
     evidence: {
       facts: { cost: actual(14_600, "rub", DIRECT, { from: "2026-09-11", to: "2026-09-17" }), conversions: actual(0, "count", "yandex_metrika", { from: "2026-09-11", to: "2026-09-17" }) },
       meta: {},
       rule_version: "zero_conv_campaign@1",
     },
-    safety: { safety_policy: "safety_policy@2", candidate_level: "review", policy_reasons: [], data_status: "complete" },
+    safety: { safety_policy: "safety_policy@1", candidate_level: "inspect_only", policy_reasons: [], data_status: "complete" },
     execution: {
-      execution_mode: "manual",
-      verification_status: "not_confirmed",
-      accepted_at: "2026-09-18T09:30:00+03:00",
-      done_at: "2026-09-19T12:00:00+03:00",
-      before_state: { captured_at: "accept", reliability: "normal", read_at: "2026-09-18T09:30:01+03:00", parameters: {} },
-      verification_checked_at: "2026-09-21T07:03:00+03:00",
+      execution_mode: "none",
+      verification_status: "not_required",
+      accepted_at: null,
+      done_at: "2026-09-18T12:00:00+03:00",
+      before_state: null,
+      verification_checked_at: null,
     },
-    decision: { event: "manual_claimed", at: "2026-09-19T12:00:00+03:00", actor: me },
-    measurement: measured(
-      { from: "2026-09-11", to: "2026-09-17" },
-      { from: "2026-09-20", to: "2026-09-26" },
-      { cost: 14_600, conv: 0 },
-      { cost: 13_900, conv: 0 },
-      "no_effect",
-      false,
-    ),
+    decision: { event: "recommendation_checked", at: "2026-09-18T12:00:00+03:00", actor: me },
+    measurement: null,
     history: [
       ev("created", "2026-09-18T07:02:00+03:00", sys),
-      ev("accepted", "2026-09-18T09:30:00+03:00"),
-      ev("manual_claimed", "2026-09-19T12:00:00+03:00"),
-      ev("verification_not_confirmed", "2026-09-21T07:03:00+03:00", sys),
-      ev("measured", "2026-09-27T07:08:00+03:00", sys),
+      ev("viewed", "2026-09-18T09:30:00+03:00"),
+      ev("recommendation_checked", "2026-09-18T12:00:00+03:00"),
     ],
     created_at: "2026-09-18T07:02:00+03:00",
   },
@@ -179,11 +172,19 @@ const PAST: Omit<Recommendation, "computed_at">[] = [
     title: "CPA выше цели на 40%",
     object: { type: "campaign", ...BRAND },
     status: "applied",
-    action_level: "change",
+    action_level: "review",
     exposure: estimated(8_400, "rub", BOTH, "(cpa − target_cpa) × conversions", "high_cpa_target@1", { from: "2026-09-19", to: "2026-09-25" }),
     can_save: estimated(3_150, "rub", BOTH, "cost × |change_pct| / 100", "high_cpa_target@1", { from: "2026-09-19", to: "2026-09-25" }),
-    explanation: { text: "CPA бренд-кампании на 40% выше цели при достаточном числе конверсий.", source: "template" },
-    action: { type: "decrease_bid", execution: "manual", change_pct: "-10.00" },
+    explanation: { text: "CPA бренд-кампании на 40% выше цели при достаточном числе конверсий. Если ставки ручные — снизьте ставку на 10%, если автостратегия — снизьте целевую цену конверсии.", source: "template" },
+    action: {
+      type: "decrease_bid",
+      execution: "manual",
+      change_pct: "-10.00",
+      levers: [
+        { strategy: "manual", text: "снизить ставку", change_pct: "-10.00" },
+        { strategy: "auto", text: "снизить целевую цену конверсии в стратегии или проверить, на какие цели она оптимизируется" },
+      ],
+    },
     evidence: {
       facts: {
         cpa: actual(4_200, "rub", BOTH, { from: "2026-09-19", to: "2026-09-25" }, { formula: "cost / conversions" }),
@@ -192,7 +193,8 @@ const PAST: Omit<Recommendation, "computed_at">[] = [
       meta: {},
       rule_version: "high_cpa_target@1",
     },
-    safety: { safety_policy: "safety_policy@2", candidate_level: "change", policy_reasons: [], data_status: "complete" },
+    safety: { safety_policy: "safety_policy@1", candidate_level: "change", policy_reasons: ["strategy_unknown"], data_status: "complete" },
+    limitations: ["strategy_unknown"],
     execution: {
       execution_mode: "manual",
       verification_status: "confirmed",
@@ -229,4 +231,8 @@ const PAST: Omit<Recommendation, "computed_at">[] = [
   },
 ];
 
-export const PAST_RECOMMENDATIONS: Recommendation[] = PAST.map((r) => ({ ...r, computed_at: computedAt(r.history, r.created_at) }));
+export const PAST_RECOMMENDATIONS: Recommendation[] = PAST.map((r) => ({
+  ...r,
+  exposure_overlap: estimated(0, "rub", BOTH, "сумма карточки − её вклад в итог", "exposure_total@1", r.exposure.period),
+  computed_at: computedAt(r.history, r.created_at),
+}));

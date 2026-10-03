@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { PageHeader, StateBox } from "@/components/ui";
-import { ruleName, RULE_TITLE } from "@/lib/contract";
+import { objectLabel, ruleName, RULE_TITLE } from "@/lib/contract";
 import { AUDIT_SCOPE, DEMO_ERROR } from "@/lib/demo-backend";
 import { LAST_AUDIT_AT } from "@/lib/demo";
 import { RecommendationCard } from "./problem";
@@ -28,7 +28,7 @@ export function RecommendationsScreen({
   const match = TABS.find((t) => t.key === tab)!.match;
   const shown = scoped.filter((r) => match(r.status));
   const ruleScope = rule ? { ...AUDIT_SCOPE, rules: AUDIT_SCOPE.rules.filter((rv) => rv.startsWith(rule)) } : AUDIT_SCOPE;
-  const selection = rule ? RULE_TITLE[rule] ?? rule : campaign ? active.find((r) => r.object.id === campaign)?.object.name ?? "кампания" : null;
+  const selection = rule ? RULE_TITLE[rule] ?? rule : campaign ? (() => { const o = active.find((r) => r.object.id === campaign)?.object; return o ? objectLabel(o) : "кампания"; })() : null;
 
   return (
     <>

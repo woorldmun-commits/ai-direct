@@ -2,7 +2,7 @@
 // contract objects (`Value`, `Recommendation`, lib/contract.ts), never typed into markup by hand, so totals on
 // different screens always agree. Screens only format what they get (`<ValueView>`).
 
-import type { ExcludePlacementsAction, HistoryEvent, Recommendation } from "./contract";
+import type { DecreaseBidAction, ExcludePlacementsAction, HistoryEvent, Recommendation } from "./contract";
 import type { ActualValue, DataStatus, EstimatedValue, Period, UnavailableReason, UnavailableValue, Unit } from "./value";
 
 export type Platform = "search" | "network";
@@ -87,7 +87,8 @@ const CUT = Math.floor(DEV / 20) * 5;
 export const CAMPAIGNS = [
   { id: "51234567", name: "Поиск · Москва · Услуги", platform: "search" as Platform, spend: CPA_SEARCH * CONV_SEARCH, conversions: CONV_SEARCH },
   { id: "51234568", name: "РСЯ · Москва", platform: "network" as Platform, spend: 41_300, conversions: 9 },
-  { id: "51234569", name: "РСЯ · Регионы", platform: "network" as Platform, spend: 43_150, conversions: 19 },
+  { id: "51234569", name: "РСЯ · Регионы", platform: "network" as Platform, spend: 39_250, conversions: 19 },
+  { id: "51234570", name: "Поиск · Регионы", platform: "search" as Platform, spend: 3_900, conversions: 0 },
 ];
 
 export const WEEK = {
@@ -132,19 +133,31 @@ export const WEEK_DELTAS = {
   exposure: estimated(pctChange(PREV_KPI.exposure, KPI.exposure), "pct", BOTH, deltaFormula, "exposure_total@1", P7, "partial"),
 };
 
-// --- Active recommendations (three rules of v1.0) ------------------------------------------------
+// --- Current recommendations (three rules of v1.0, levels as safety_policy@1 sets them) ----------
+// safety_policy@1 (backend/app/audit/policy.py): the strategy is unknown, so nothing is above `review`;
+// `exclude_placements` is `review` at most; little data → `inspect_only` with an `investigate` action.
 const RULE_CPA = "high_cpa_target@1";
 const RULE_PLACEMENTS = "zero_conv_placements@1";
+const RULE_ZERO = "zero_conv_campaign@1";
+const POLICY = "safety_policy@1";
 const PLACEMENTS_FORMULA = "Σ расход площадок, где клики ≥ 50 и конверсии = 0";
 const sys = "system" as const;
 
-function rec(r: Omit<Recommendation, "ad_account" | "postponed_until" | "blocked_actions" | "exposure_overlap" | "decision" | "measurement" | "computed_at">): Recommendation {
+type RecInput = Omit<
+  Recommendation,
+  "ad_account" | "postponed_until" | "blocked_actions" | "exposure_overlap" | "data_sufficiency" | "decision" | "measurement" | "computed_at"
+> &
+  Partial<Pick<Recommendation, "data_sufficiency">>;
+
+/** `exposure_overlap` is filled by the demo backend over the current set (demo-backend `withOverlap`). */
+function rec(r: RecInput): Recommendation {
   return {
     ...r,
     ad_account: AD_ACCOUNT,
     postponed_until: null,
     blocked_actions: [],
-    exposure_overlap: false,
+    exposure_overlap: estimated(0, "rub", BOTH, "сумма карточки − её вклад в итог", "exposure_total@1", r.exposure.period),
+    data_sufficiency: r.data_sufficiency ?? "sufficient",
     decision: null,
     measurement: null,
     computed_at: computedAt(r.history, r.created_at),
@@ -152,8 +165,30 @@ function rec(r: Omit<Recommendation, "ad_account" | "postponed_until" | "blocked
 }
 const noExecution = { execution_mode: null, verification_status: null, accepted_at: null, done_at: null, before_state: null, verification_checked_at: null };
 
+/** Levers of `decrease_bid` at `review` with an unknown strategy: manual bid or the autostrategy's target. */
+const bidLevers = (cut: number): DecreaseBidAction => ({
+  type: "decrease_bid",
+  execution: "manual",
+  change_pct: dec(-cut),
+  levers: [
+    { strategy: "manual", text: "снизить ставку", change_pct: dec(-cut) },
+    { strategy: "auto", text: "снизить целевую цену конверсии в стратегии или проверить, на какие цели она оптимизируется" },
+  ],
+});
+
+const MSK_CPA = CAMPAIGNS[1].spend / CAMPAIGNS[1].conversions;
+const MSK_DEV = Math.round(((MSK_CPA - TARGET_CPA) / TARGET_CPA) * 100);
+const MSK_CUT = Math.floor(MSK_DEV / 20) * 5;
 const NET_MSK = { count: 14, clicks: 1_860, spend: 12_400 };
 const NET_REG = { count: 6, clicks: 410, spend: 3_800 };
+const ZERO = { clicks: 140, threshold: 6_000 };
+
+const placementFacts = (p: { count: number; clicks: number; spend: number }) => ({
+  cost: actual(p.spend, "rub", DIRECT),
+  clicks: actual(p.clicks, "count", DIRECT),
+  conversions: actual(0, "count", "yandex_metrika"),
+  placements: actual(p.count, "count", DIRECT, P7, { rule_version: RULE_PLACEMENTS }),
+});
 
 export const RECOMMENDATIONS: Recommendation[] = [
   rec({
@@ -167,10 +202,10 @@ export const RECOMMENDATIONS: Recommendation[] = [
     exposure: estimated((CPA_SEARCH - TARGET_CPA) * CONV_SEARCH, "rub", BOTH, "(cpa − target_cpa) × conversions", RULE_CPA, P7, "partial"),
     can_save: estimated((CPA_SEARCH * CONV_SEARCH * CUT) / 100, "rub", BOTH, "cost × |change_pct| / 100", RULE_CPA, P7, "partial"),
     explanation: {
-      text: `За неделю конверсия в кампании стоила ${CPA_SEARCH} ₽ при цели ${TARGET_CPA} ₽ — на ${DEV}% дороже. Расход вырос, а конверсий стало меньше, основной вклад — эта кампания. Снижение ставки уменьшит цену клика; через 7 дней после выполнения AdPilot сравнит CPA до и после.`,
+      text: `За неделю конверсия в кампании стоила ${CPA_SEARCH} ₽ при цели ${TARGET_CPA} ₽ — на ${DEV}% дороже. Стратегия кампании AdPilot неизвестна: если ставки ручные — снизьте ставку на ${CUT}%, если автостратегия — снизьте целевую цену конверсии или проверьте цели. Через 7 дней после выполнения AdPilot сравнит CPA до и после.`,
       source: "template",
     },
-    action: { type: "decrease_bid", execution: "manual", change_pct: dec(-CUT) },
+    action: bidLevers(CUT),
     evidence: {
       facts: {
         cost: actual(CAMPAIGNS[0].spend, "rub", DIRECT),
@@ -182,7 +217,7 @@ export const RECOMMENDATIONS: Recommendation[] = [
       meta: { baseline_data_quality: "high" },
       rule_version: RULE_CPA,
     },
-    safety: { safety_policy: "safety_policy@2", candidate_level: "change", policy_reasons: ["data_partial"], data_status: "partial" },
+    safety: { safety_policy: POLICY, candidate_level: "change", policy_reasons: ["strategy_unknown"], data_status: "partial" },
     limitations: ["strategy_unknown"],
     execution: noExecution,
     history: [
@@ -192,36 +227,68 @@ export const RECOMMENDATIONS: Recommendation[] = [
     created_at: "2026-10-01T07:02:11+03:00",
   }),
   rec({
+    id: "rec_cpa02",
+    version_id: "rv_cpa02_1",
+    title: `CPA выше цели на ${MSK_DEV}%`,
+    object: { type: "campaign", id: CAMPAIGNS[1].id, name: CAMPAIGNS[1].name },
+    status: "requires_decision",
+    action_level: "review",
+    allowed_actions: [],
+    exposure: estimated((MSK_CPA - TARGET_CPA) * CAMPAIGNS[1].conversions, "rub", BOTH, "(cpa − target_cpa) × conversions", RULE_CPA),
+    can_save: estimated((CAMPAIGNS[1].spend * MSK_CUT) / 100, "rub", BOTH, "cost × |change_pct| / 100", RULE_CPA),
+    explanation: {
+      text: `CPA кампании — ${Math.round(MSK_CPA)} ₽, на ${MSK_DEV}% выше цели ${TARGET_CPA} ₽, при ${CAMPAIGNS[1].conversions} конверсиях — данных впритык, проверьте перед изменением. Если ставки ручные — снизьте ставку на ${MSK_CUT}%, если автостратегия — снизьте целевую цену конверсии. Площадки без конверсий в этой кампании — отдельная карточка; их расход уже входит в эту сумму.`,
+      source: "template",
+    },
+    action: bidLevers(MSK_CUT),
+    evidence: {
+      facts: {
+        cost: actual(CAMPAIGNS[1].spend, "rub", DIRECT),
+        conversions: actual(CAMPAIGNS[1].conversions, "count", "yandex_metrika"),
+        cpa: actual(MSK_CPA, "rub", BOTH, P7, { formula: "cost / conversions" }),
+        target_cpa: actual(TARGET_CPA, "rub", "user_input"),
+        deviation_pct: actual(MSK_DEV, "pct", BOTH, P7, { formula: "(cpa − target_cpa) / target_cpa × 100", rule_version: RULE_CPA }),
+      },
+      meta: { baseline_data_quality: "medium" },
+      rule_version: RULE_CPA,
+    },
+    safety: { safety_policy: POLICY, candidate_level: "change", policy_reasons: ["data_sufficiency_medium", "strategy_unknown"], data_status: "complete" },
+    limitations: ["strategy_unknown"],
+    execution: noExecution,
+    history: [
+      { event: "created", at: "2026-10-02T07:01:50+03:00", actor: sys },
+      { event: "viewed", at: "2026-10-02T08:40:00+03:00", actor: { user_id: "u_demo", name: USER.name } },
+    ],
+    created_at: "2026-10-02T07:01:50+03:00",
+  }),
+  rec({
     id: "rec_net01",
     version_id: "rv_net01_1",
     title: "Площадки РСЯ без конверсий",
     object: { type: "campaign", id: CAMPAIGNS[1].id, name: CAMPAIGNS[1].name },
-    status: "requires_decision",
-    action_level: "change",
+    status: "accepted",
+    action_level: "review",
     allowed_actions: [],
     exposure: estimated(NET_MSK.spend, "rub", BOTH, PLACEMENTS_FORMULA, RULE_PLACEMENTS),
-    can_save: estimated(NET_MSK.spend, "rub", BOTH, "Σ расход исключаемых площадок за период", RULE_PLACEMENTS),
+    can_save: unavailable("rub", BOTH, "no_forecast", P7, RULE_PLACEMENTS),
     explanation: {
-      text: `${NET_MSK.count} площадок РСЯ получили ${NET_MSK.clicks} кликов и ни одной конверсии за 7 дней. Исключение остановит расход на них; остальная часть РСЯ продолжит работать.`,
+      text: `${NET_MSK.count} площадок РСЯ получили ${NET_MSK.clicks} кликов и ни одной конверсии за 7 дней. Проверьте площадки и исключите лишние вручную в настройках кампании в Директе. Сколько это сэкономит, заранее не оцениваем: Директ может перераспределить бюджет на другие площадки — оценим по факту после замера.`,
       source: "template",
     },
     action: demoPlacements(NET_MSK.count, "msk"),
-    evidence: {
-      facts: {
-        cost: actual(NET_MSK.spend, "rub", DIRECT),
-        clicks: actual(NET_MSK.clicks, "count", DIRECT),
-        conversions: actual(0, "count", "yandex_metrika"),
-        placements: actual(NET_MSK.count, "count", DIRECT, P7, { rule_version: RULE_PLACEMENTS }),
-      },
-      meta: { baseline_data_quality: "high" },
-      rule_version: RULE_PLACEMENTS,
-    },
-    safety: { safety_policy: "safety_policy@2", candidate_level: "change", policy_reasons: [], data_status: "complete" },
+    evidence: { facts: placementFacts(NET_MSK), meta: { baseline_data_quality: "high" }, rule_version: RULE_PLACEMENTS },
+    safety: { safety_policy: POLICY, candidate_level: "review", policy_reasons: [], data_status: "complete" },
     limitations: [],
-    execution: noExecution,
+    execution: {
+      ...noExecution,
+      accepted_at: "2026-10-01T11:20:00+03:00",
+      before_state: { captured_at: "accept", reliability: "normal", read_at: "2026-10-01T11:20:01+03:00", parameters: {} },
+    },
     history: [
       { event: "created", at: "2026-09-30T07:03:40+03:00", actor: sys },
       { event: "delivered", at: "2026-09-30T09:00:02+03:00", actor: sys },
+      { event: "viewed", at: "2026-10-01T11:18:00+03:00", actor: { user_id: "u_demo", name: USER.name } },
+      { event: "accepted", at: "2026-10-01T11:20:00+03:00", actor: { user_id: "u_demo", name: USER.name } },
       { event: "seen_again", at: LAST_AUDIT_AT, actor: sys },
     ],
     created_at: "2026-09-30T07:03:40+03:00",
@@ -231,39 +298,55 @@ export const RECOMMENDATIONS: Recommendation[] = [
     version_id: "rv_net02_1",
     title: "Площадки РСЯ без конверсий",
     object: { type: "campaign", id: CAMPAIGNS[2].id, name: CAMPAIGNS[2].name },
-    status: "accepted",
-    action_level: "review",
+    status: "new",
+    action_level: "inspect_only",
     allowed_actions: [],
     exposure: estimated(NET_REG.spend, "rub", BOTH, PLACEMENTS_FORMULA, RULE_PLACEMENTS),
     can_save: unavailable("rub", BOTH, "no_forecast", P7, RULE_PLACEMENTS),
     explanation: {
-      text: `На ${NET_REG.count} площадках были клики, но не было конверсий. Объём по каждой площадке невелик, поэтому проверьте список перед исключением: исключение делается вручную в Директе.`,
+      text: `На ${NET_REG.count} площадках были клики, но не было конверсий. Расхода пока мало для уверенного вывода: проверьте, что это за площадки и подходит ли их аудитория, прежде чем исключать.`,
       source: "template",
     },
-    action: demoPlacements(NET_REG.count, "reg"),
+    action: { type: "investigate", execution: "manual", topic: "zero_conv_placements", checks: ["placements_audience", "conversion_goals"] },
+    evidence: { facts: placementFacts(NET_REG), meta: { baseline_data_quality: "low" }, rule_version: RULE_PLACEMENTS },
+    safety: { safety_policy: POLICY, candidate_level: "review", policy_reasons: ["data_sufficiency_low"], data_status: "complete" },
+    limitations: [],
+    execution: noExecution,
+    history: [{ event: "created", at: LAST_AUDIT_AT, actor: sys }],
+    created_at: LAST_AUDIT_AT,
+  }),
+  // A held problem: the rule saw spend without conversions, but the volume is too small for a conclusion —
+  // the card is shown, its sum is «Недостаточно данных» and it is not in the total.
+  rec({
+    id: "rec_zero01",
+    version_id: "rv_zero01_1",
+    title: "Расход без конверсий",
+    object: { type: "campaign", id: CAMPAIGNS[3].id, name: CAMPAIGNS[3].name },
+    status: "new",
+    action_level: "inspect_only",
+    allowed_actions: [],
+    data_sufficiency: "insufficient",
+    exposure: unavailable("rub", BOTH, "volume_insufficient", P7, RULE_ZERO),
+    can_save: unavailable("rub", BOTH, "volume_insufficient", P7, RULE_ZERO),
+    explanation: {
+      text: `Кампания потратила ${CAMPAIGNS[3].spend} ₽ (${ZERO.clicks} кликов) за период без конверсий. Это ниже порога достаточного объёма ${ZERO.threshold} ₽, поэтому сумму не оцениваем и в итог не включаем — продолжаем наблюдать. Проверьте цели и учёт конверсий, стратегию, поисковые запросы и минус-фразы.`,
+      source: "template",
+    },
+    action: { type: "investigate", execution: "manual", topic: "zero_conv_campaign", checks: ["conversion_goals", "strategy", "search_queries_negative_keywords"] },
     evidence: {
       facts: {
-        cost: actual(NET_REG.spend, "rub", DIRECT),
-        clicks: actual(NET_REG.clicks, "count", DIRECT),
+        cost: actual(CAMPAIGNS[3].spend, "rub", DIRECT),
+        clicks: actual(ZERO.clicks, "count", DIRECT),
         conversions: actual(0, "count", "yandex_metrika"),
-        placements: actual(NET_REG.count, "count", DIRECT, P7, { rule_version: RULE_PLACEMENTS }),
       },
-      meta: { baseline_data_quality: "medium" },
-      rule_version: RULE_PLACEMENTS,
+      meta: {},
+      rule_version: RULE_ZERO,
     },
-    safety: { safety_policy: "safety_policy@2", candidate_level: "change", policy_reasons: ["data_sufficiency_medium"], data_status: "complete" },
+    safety: { safety_policy: POLICY, candidate_level: "inspect_only", policy_reasons: [], data_status: "complete" },
     limitations: [],
-    execution: {
-      ...noExecution,
-      accepted_at: "2026-10-01T11:20:00+03:00",
-      before_state: { captured_at: "accept", reliability: "normal", read_at: "2026-10-01T11:20:01+03:00", parameters: {} },
-    },
-    history: [
-      { event: "created", at: "2026-09-30T07:03:40+03:00", actor: sys },
-      { event: "viewed", at: "2026-10-01T11:18:00+03:00", actor: { user_id: "u_demo", name: USER.name } },
-      { event: "accepted", at: "2026-10-01T11:20:00+03:00", actor: { user_id: "u_demo", name: USER.name } },
-    ],
-    created_at: "2026-09-30T07:03:40+03:00",
+    execution: noExecution,
+    history: [{ event: "created", at: LAST_AUDIT_AT, actor: sys }],
+    created_at: LAST_AUDIT_AT,
   }),
 ];
 
@@ -288,8 +371,8 @@ export const CAMPAIGN_SHARES = CAMPAIGNS.map((c) => ({
 }));
 
 export const SYSTEM_LOG = [
-  { date: "02.10 07:01", text: "Аудит: 3 правила v1.0, 3 рекомендации, снимок #4815" },
-  { date: "02.10 06:58", text: "Синхронизация Яндекс Директ: 3 кампании, 37 дней" },
+  { date: "02.10 07:01", text: "Аудит: 3 правила v1.0, 5 рекомендаций, снимок #4815" },
+  { date: "02.10 06:58", text: "Синхронизация Яндекс Директ: 4 кампании, 37 дней" },
   { date: "02.10 06:55", text: "Синхронизация Яндекс Метрика: 2 цели" },
   { date: "01.10 20:04", text: "Досинхронизация Яндекс Директ: без ошибок" },
 ];

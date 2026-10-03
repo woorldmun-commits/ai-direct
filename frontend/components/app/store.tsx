@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import type { Recommendation, UserAction } from "@/lib/contract";
 import { RECOMMENDATIONS } from "@/lib/demo";
-import { applyAction, buildToday, sortForList, withAllowed, type ActionPayload, type DemoToday, type SourcesScenario } from "@/lib/demo-backend";
+import { applyAction, buildToday, sortForList, withAllowed, withOverlap, type ActionPayload, type DemoToday, type SourcesScenario } from "@/lib/demo-backend";
 import { PAST_RECOMMENDATIONS } from "@/lib/demo-history";
 
 /**
@@ -54,7 +54,7 @@ export function DemoProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<DemoState>(() => {
-    const all = Object.values(recs).map(withAllowed);
+    const all = withOverlap(Object.values(recs)).map(withAllowed);
     const active = sortForList(all.filter((r) => ACTIVE_IDS.has(r.id)));
     return {
       active,

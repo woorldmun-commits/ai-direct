@@ -1,8 +1,17 @@
 import { ChevronDown } from "lucide-react";
 import type { ReactNode } from "react";
 import { ParamView, ValueView } from "@/components/value-view";
-import type { Measurement, Recommendation, RecommendationAction, ZeroConversionCheck } from "@/lib/contract";
-import { formatMoment, formatPeriod, formatRuleVersion, PARTIAL_NOTE, sourceLabel, type Value } from "@/lib/value";
+import {
+  objectLabel,
+  type BidLever,
+  type ExcludePlacementsAction,
+  type ExposureSummary,
+  type InvestigateTopic,
+  type Measurement,
+  type Recommendation,
+  type ZeroConversionCheck,
+} from "@/lib/contract";
+import { formatMoment, formatPeriod, formatRuleVersion, isPositive, PARTIAL_NOTE, sourceLabel, type Value } from "@/lib/value";
 
 // Shared pieces of a recommendation: action text, fact labels, «Откуда это число?», measurement.
 
@@ -29,28 +38,55 @@ export const POLICY_REASON_LABEL: Record<string, string> = {
   strategy_unknown: "стратегия неизвестна",
 };
 
-/** What the human changes by hand in Direct (`action`, API_CONTRACT §5): one text per action type. */
-export function ActionText({ action }: { action: RecommendationAction }) {
+const pct = (changePct: string) => <ParamView amount={changePct.replace(/^-/, "")} unit="pct" />;
+
+/** «site-1, site-2, site-3 и ещё N»: N counts from `placements_count`, not from the names we have. */
+function placementList(a: ExcludePlacementsAction): string {
+  const shown = a.placements.flatMap((p) => (p.name ? [p.name] : [])).slice(0, 3);
+  const rest = a.placements_count - shown.length;
+  if (!shown.length) return "";
+  return shown.join(", ") + (rest > 0 ? ` и ещё ${rest}` : "");
+}
+
+const TOPIC_TITLE: Record<InvestigateTopic, string> = {
+  high_cpa: "Проверить причину высокого CPA",
+  zero_conv_campaign: "Проверить, почему нет конверсий",
+  zero_conv_placements: "Проверить площадки без конверсий",
+};
+
+/**
+ * What the human does by hand in Direct (`action`, API_CONTRACT §5), in line with the policy level:
+ * `inspect_only` is always «Проверить …» (never a settings change, even if an older server sent one);
+ * `review` with `levers` names both ways; `action = null` (an unknown shape) sends to the evidence.
+ */
+export function ActionText({ r }: { r: Pick<Recommendation, "action" | "action_level"> }) {
+  const { action } = r;
+  if (!action) return <>Действие недоступно, см. доказательства</>;
+  const inspect = r.action_level === "inspect_only";
   switch (action.type) {
-    case "decrease_bid":
+    case "investigate":
       return (
         <>
-          Снизить ставку на <ParamView amount={action.change_pct.replace(/^-/, "")} unit="pct" />
+          {TOPIC_TITLE[action.topic] ?? "Проверить"}
+          {action.checks.length > 0 && `: ${action.checks.map((c) => CHECK_LABEL[c] ?? c).join(", ")}`}
         </>
       );
+    case "decrease_bid":
+      if (inspect) return <>{TOPIC_TITLE.high_cpa} — ставку до проверки не меняйте</>;
+      return action.levers?.length ? <Levers levers={action.levers} /> : <>Снизить ставку на {pct(action.change_pct)}</>;
     case "exclude_placements": {
-      const named = action.placements.filter((p) => p.name).map((p) => p.name);
-      const list = named.slice(0, 3).join(", ") + (named.length > 3 ? ` и ещё ${action.placements_count - 3}` : "");
+      const list = placementList(action);
       return (
         <>
-          Исключить площадки без конверсий ({action.placements_count}){list && `: ${list}`}
+          {inspect ? TOPIC_TITLE.zero_conv_placements : "Проверить и исключить площадки без конверсий"} ({action.placements_count})
+          {list && `: ${list}`}
         </>
       );
     }
     case "investigate_zero_conversions":
       return (
         <>
-          Проверить: {action.checks.map((c) => CHECK_LABEL[c]).join(", ")}
+          Проверить: {action.checks.map((c) => CHECK_LABEL[c] ?? c).join(", ")}
           {action.suggest === "set_target_cpa" && "; укажите целевой CPA"}
         </>
       );
@@ -59,11 +95,53 @@ export function ActionText({ action }: { action: RecommendationAction }) {
   }
 }
 
-const CHECK_LABEL: Record<ZeroConversionCheck, string> = {
+/** Both levers of `decrease_bid` when the campaign's strategy is unknown: the human picks the one that fits. */
+function Levers({ levers }: { levers: BidLever[] }) {
+  const manual = levers.find((l) => l.strategy === "manual");
+  const auto = levers.find((l) => l.strategy === "auto");
+  return (
+    <>
+      {manual && (
+        <>Если ручные ставки — {manual.change_pct ? <>снизить ставку на {pct(manual.change_pct)}</> : manual.text}</>
+      )}
+      {manual && auto && "; "}
+      {auto && <>{manual ? "если" : "Если"} автостратегия — {auto.text}</>}
+    </>
+  );
+}
+
+const CHECK_LABEL: Record<ZeroConversionCheck | string, string> = {
   conversion_goals: "цели и учёт конверсий",
   strategy: "стратегию и цель CPA",
   search_queries_negative_keywords: "поисковые запросы и минус-фразы",
+  placements_audience: "что это за площадки и подходит ли их аудитория",
 };
+
+/** «часть суммы уже учтена в другой карточке» — from `exposure_overlap` (> 0), with the amount. */
+export function OverlapNote({ r, className = "" }: { r: Pick<Recommendation, "exposure" | "exposure_overlap">; className?: string }) {
+  const o = r.exposure_overlap;
+  if (o.amount === null || !isPositive(o.amount)) return null;
+  const whole = r.exposure.amount !== null && o.amount === r.exposure.amount;
+  return (
+    <span className={className}>
+      {whole ? "Вся сумма уже учтена в другой карточке" : "Часть суммы уже учтена в другой карточке"}: <ValueView v={o} hint={false} />
+      {" "}— в итог входит один раз
+    </span>
+  );
+}
+
+/** Caption of the «Можно сэкономить» total (ECONOMICS §3.6): an honest sum, and how many cards have an estimate. */
+export function canSaveNote(s: Pick<ExposureSummary, "coverage">): string {
+  const { included, unavailable } = s.coverage;
+  const base = "Сумма оценок по карточкам, где оценка есть; по одной кампании — без двойного учёта.";
+  return unavailable > 0 ? `${base} Оценка есть не для всех карточек (${included} из ${included + unavailable}).` : base;
+}
+
+/** A held problem (`data_sufficiency = insufficient`): shown, but its sum is not in the total. */
+export function HeldNote({ r, className = "" }: { r: Pick<Recommendation, "data_sufficiency">; className?: string }) {
+  if (r.data_sufficiency !== "insufficient") return null;
+  return <span className={className}>Мало данных для оценки — в итог не входит, продолжаем наблюдать</span>;
+}
 
 /** Time of the calculation of the current version (`computed_at`, API_CONTRACT §5). */
 export const calculatedAt = (r: Pick<Recommendation, "computed_at">): string => r.computed_at;
@@ -73,7 +151,7 @@ export function Origin({ r, v }: { r: Recommendation; v: Value }) {
   const { cost, conversions } = r.evidence.facts;
   const rows: [string, ReactNode][] = [
     ["Период", formatPeriod(v.period)],
-    ["Кампании", r.object.name],
+    ["Кампании", objectLabel(r.object)],
     ["Кабинет", r.ad_account.login],
     ["Расход", cost ? <ValueView v={cost} /> : "не используется в расчёте"],
     ["Конверсии", conversions ? <ValueView v={conversions} /> : "не используются в расчёте"],

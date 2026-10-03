@@ -1,15 +1,16 @@
 import type { ReactNode } from "react";
-import { SAVED_NOTE } from "@/components/app/rec-parts";
+import { canSaveNote, SAVED_NOTE } from "@/components/app/rec-parts";
 import { Bars, Donut } from "@/components/charts";
 import { PageHeader } from "@/components/ui";
 import { ValueView } from "@/components/value-view";
 import { CAMPAIGN_SHARES, MONTH, MONTH_VALUES, P7, RECOMMENDATIONS } from "@/lib/demo";
+import { objectLabel } from "@/lib/contract";
 import { buildToday } from "@/lib/demo-backend";
 import { PAST_RECOMMENDATIONS } from "@/lib/demo-history";
 import { EXPOSURE, EXPOSURE_SHORT } from "@/lib/site";
 import { formatPeriod, type Value } from "@/lib/value";
 
-const COLORS = ["var(--brand)", "var(--info)", "var(--warning)"];
+const COLORS = ["var(--brand)", "var(--info)", "var(--warning)", "var(--muted)"];
 
 function Tile({ label, v, tone = "", bar, note }: { label: string; v: Value; tone?: string; bar: string; note?: ReactNode }) {
   return (
@@ -34,7 +35,7 @@ export default function Finance() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Tile label="Потрачено" v={MONTH_VALUES.spend} bar="bg-text/20" />
         <Tile label={EXPOSURE} v={MONTH_VALUES.exposure} tone="text-danger" bar="bg-danger" note="без двойного учёта" />
-        <Tile label="Можно сэкономить" v={today.can_save.total} tone="text-warning" bar="bg-warning" note="по открытым рекомендациям" />
+        <Tile label="Можно сэкономить" v={today.can_save.total} tone="text-warning" bar="bg-warning" note={`По открытым рекомендациям. ${canSaveNote(today.can_save)}`} />
         <Tile label="Сэкономлено" v={today.saved} tone="text-success" bar="bg-success" note={SAVED_NOTE} />
       </div>
       <div className="mt-4">
@@ -99,7 +100,7 @@ export default function Finance() {
                 <div>
                   <p className="font-semibold">{r.title}</p>
                   <p className="text-xs text-muted">
-                    {r.object.name} · замер {formatPeriod(r.measurement!.windows.after)}
+                    {objectLabel(r.object)} · замер {formatPeriod(r.measurement!.windows.after)}
                     {!r.measurement!.counts_in_saved_total && " · не входит в итог"}
                   </p>
                 </div>

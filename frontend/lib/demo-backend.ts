@@ -20,7 +20,9 @@ import { ruleName } from "./contract";
 import { DEMO_NOW, LAST_AUDIT_AT, P7, TODAY_DATE, USER, WEEK, WEEK_VALUES, actual, estimated, pctChange, unavailable } from "./demo";
 import type { Value } from "./value";
 
-const ACTIVE = new Set(["new", "requires_decision", "accepted", "postponed"]);
+/** Open and not put off: what «Сегодня» counts and sums. `postponed` is out until it comes back (as the backend). */
+const ACTIVE = new Set(["new", "requires_decision", "accepted"]);
+export const isActive = (r: Pick<Recommendation, "status">) => ACTIVE.has(r.status);
 
 // BigInt() calls instead of literals: tsconfig targets ES2017.
 const B0 = BigInt(0);
@@ -126,6 +128,7 @@ export function toListItem(r: Recommendation): RecommendationListItem {
     exposure_overlap: r.exposure_overlap,
     can_save: r.can_save,
     data_status: r.safety.data_status,
+    data_sufficiency: r.data_sufficiency,
     period: r.exposure.period,
     computed_at: r.computed_at,
     created_at: r.created_at,
@@ -149,20 +152,73 @@ export function sortForList(items: Recommendation[]): Recommendation[] {
 
 const BOTH = "yandex_direct+yandex_metrika";
 
-function summary(values: Value[], formula: string, version: string) {
-  const included = values.filter((v) => v.amount !== null);
-  const total = included.reduce((s, v) => s + kop(v.amount as string), B0);
-  const totalValue: Value = included.length
-    ? { ...estimated(0, "rub", BOTH, formula, version), amount: fromKop(total) }
-    : unavailable("rub", BOTH, "no_data", P7, version);
+const VERSION = "exposure_total@1";
+const OVERLAP_FORMULA = "сумма карточки − её вклад в итог";
+/** Object-level rules: their sums add up; the others are campaign-level blocks (ECONOMICS §3.2). */
+const OBJECT_LEVEL = new Set(["zero_conv_placements"]);
+
+/** A card's sum goes into a total only if the card is active, has enough data and has a number. */
+const inTotal = (r: Recommendation, v: Value) => isActive(r) && r.data_sufficiency === "sufficient" && v.amount !== null;
+const rubles = (k: bigint, formula: string, period = P7): Value => ({ ...estimated(0, "rub", BOTH, formula, VERSION, period), amount: fromKop(k) });
+
+/**
+ * exposure_total@1 as the demo plays it (ECONOMICS §3.3), per ad account · campaign: campaign-level cards by max
+ * (they describe the same spend), object-level cards add up, the pair takes max(campaign, objects).
+ * Returns the total and, per card, the part of its sum already counted by another card.
+ */
+function dedup(cards: Recommendation[], pick: (r: Recommendation) => Value): { total: bigint; overlap: Map<string, bigint> } {
+  const groups = new Map<string, Recommendation[]>();
+  for (const r of cards) {
+    const key = `${r.ad_account.id}:${r.object.id}`;
+    groups.set(key, [...(groups.get(key) ?? []), r]);
+  }
+  const amount = (r: Recommendation) => kop(pick(r).amount as string);
+  let total = B0;
+  const overlap = new Map<string, bigint>();
+  for (const group of groups.values()) {
+    const objects = group.filter((r) => OBJECT_LEVEL.has(ruleName(r.evidence.rule_version)));
+    const top = group
+      .filter((r) => !objects.includes(r))
+      .reduce<Recommendation | null>((m, r) => (m === null || amount(r) > amount(m) ? r : m), null);
+    const objectSum = objects.reduce((s, r) => s + amount(r), B0);
+    const campaignWins = top !== null && amount(top) >= objectSum;
+    total += campaignWins ? amount(top) : objectSum;
+    for (const r of group) overlap.set(r.id, (campaignWins ? r === top : objects.includes(r)) ? B0 : amount(r));
+  }
+  return { total, overlap };
+}
+
+/** `exposure_overlap` of each card over the current active set; a card without a number gets `unavailable`. */
+export function withOverlap(recs: Recommendation[]): Recommendation[] {
+  const { overlap } = dedup(recs.filter((r) => inTotal(r, r.exposure)), (r) => r.exposure);
+  return recs.map((r) => ({
+    ...r,
+    exposure_overlap:
+      r.exposure.calculation_type === "unavailable"
+        ? unavailable("rub", BOTH, r.exposure.unavailable_reason, r.exposure.period, VERSION)
+        : rubles(overlap.get(r.id) ?? B0, OVERLAP_FORMULA, r.exposure.period),
+  }));
+}
+
+/**
+ * A total over the active cards: deduplicated like `exposure` (`can_save` too, ECONOMICS §3.6). Held cards
+ * (`insufficient`) and cards without a number stay out and are counted in `coverage`; no number → `overlap` too.
+ */
+function summary(recs: Recommendation[], pick: (r: Recommendation) => Value, formula: string) {
+  const cards = recs.filter(isActive);
+  const counted = cards.filter((r) => inTotal(r, pick(r)));
+  const { total } = dedup(counted, pick);
+  const byRule = new Map<string, bigint>();
+  for (const r of counted) byRule.set(ruleName(r.evidence.rule_version), (byRule.get(ruleName(r.evidence.rule_version)) ?? B0) + kop(pick(r).amount as string));
+  const sumCards = [...byRule.values()].reduce((s, k) => s + k, B0);
+  const none = unavailable("rub", BOTH, "no_data", P7, VERSION);
   return {
-    total: totalValue,
-    // One finding per campaign in the demo, so nothing overlaps; the field is still shown.
-    overlap: { ...estimated(0, "rub", BOTH, "Σ карточек − итог", version) },
-    version,
+    total: counted.length ? rubles(total, formula) : none,
+    overlap: counted.length ? rubles(sumCards - total, "Σ карточек − итог") : none,
+    version: VERSION,
     formula,
-    components: [] as { issue_type: string; amount: Value }[],
-    coverage: { included: included.length, unavailable: values.length - included.length },
+    components: [...byRule].map(([rule, k]) => ({ issue_type: rule, amount: rubles(k, "Σ карточек правила") })),
+    coverage: { included: counted.length, unavailable: cards.length - counted.length },
   };
 }
 
@@ -174,12 +230,11 @@ export type DemoToday = TodayResponse & Required<Pick<TodayResponse, "access" | 
   counts: { active: number } & StatusCounts;
 };
 
-export function buildToday(recs: Recommendation[], sources: SourcesScenario = "fresh"): DemoToday {
-  const active = recs.filter((r) => ACTIVE.has(r.status));
-  const exposure = summary(active.map((r) => r.exposure), "Σ по кабинетам max(...) — без двойного учёта", "exposure_total@1");
-  const byRule = new Map<string, Value[]>();
-  for (const r of active) byRule.set(ruleName(r.evidence.rule_version), [...(byRule.get(ruleName(r.evidence.rule_version)) ?? []), r.exposure]);
-  exposure.components = [...byRule].map(([rule, vs]) => ({ issue_type: rule, amount: summary(vs, "Σ по правилу", "exposure_total@1").total }));
+export function buildToday(input: Recommendation[], sources: SourcesScenario = "fresh"): DemoToday {
+  const recs = withOverlap(input);
+  const active = recs.filter(isActive);
+  const exposure = summary(recs, (r) => r.exposure, "Σ по кабинетам max(...) — без двойного учёта");
+  const canSave = summary(recs, (r) => r.can_save, "Σ по кампаниям max(...) по карточкам, где оценка есть");
 
   const measured = recs.filter((r) => r.measurement?.counts_in_saved_total && r.measurement.saved);
   const savedKop = measured.reduce((s, r) => s + kop(r.measurement!.saved!.amount as string), B0);
@@ -205,7 +260,7 @@ export function buildToday(recs: Recommendation[], sources: SourcesScenario = "f
     audit_scope: AUDIT_SCOPE,
     spent: WEEK_VALUES.spend,
     exposure,
-    can_save: summary(active.map((r) => r.can_save), "Σ «можно сэкономить» без двойного учёта", "exposure_total@1"),
+    can_save: canSave,
     saved,
     conversions: WEEK_VALUES.conversions,
     counts: { active: active.length, new: count("new"), requires_decision: count("requires_decision"), accepted: count("accepted"), postponed: count("postponed") },
@@ -264,7 +319,7 @@ export const AUDIT_SCOPE: AuditScope = {
   rules: ["high_cpa_target@1", "zero_conv_campaign@1", "zero_conv_placements@1"],
   period: P7,
   ad_accounts: { checked: 1, excluded: 0 },
-  campaigns: 3,
+  campaigns: 4,
 };
 
 export const DEMO_ERROR: ApiError = {
