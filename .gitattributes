@@ -1,0 +1,2 @@
+# Released migrations are checksummed byte-for-byte; keep LF on every OS.
+backend/migrations/** text eol=lf
