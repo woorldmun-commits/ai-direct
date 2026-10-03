@@ -89,7 +89,7 @@ export function CookieBanner() {
 
   return (
     <div role="dialog" aria-label="Настройки cookie" className="fixed inset-x-4 bottom-20 z-[60] mx-auto max-w-[720px] md:bottom-6">
-      <div className="glass anim-fade rounded-2xl p-5 text-sm text-text">
+      <div className="glass anim-fade p-5 text-sm text-text">
         <p>
           Мы используем cookie. Необходимые нужны для работы сайта. Аналитические (Яндекс Метрика) помогают улучшать сервис, и мы
           включим их только с вашего согласия. Подробнее в{" "}
@@ -103,7 +103,7 @@ export function CookieBanner() {
           .
         </p>
         {custom && (
-          <div className="mt-4 space-y-2 rounded-xl border border-line bg-surface p-3">
+          <div className="mt-4 space-y-2 border border-line bg-surface p-3">
             <label className="flex items-center gap-3 opacity-70">
               <input type="checkbox" checked disabled className="size-4 accent-[var(--brand)]" />
               Необходимые — всегда включены

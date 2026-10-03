@@ -1,129 +1,177 @@
 "use client";
 
-import { ArrowRight, Bot, CheckCircle2, PiggyBank } from "lucide-react";
 import Link from "next/link";
-import { Sparkline } from "@/components/charts";
-import { MainFocus, MetricCard, StatusBadge } from "@/components/app/problem";
+import { EntryTable } from "@/components/app/rec";
 import { useDemo } from "@/components/app/store";
-import { Approx, Delta, PageHeader, PriorityIcon } from "@/components/ui";
-import { KPI, PREV_KPI, SAVED, SYNC, USER, WEEK } from "@/lib/demo";
+import { Amount, Delta, LedgerLine, Section, StateBox } from "@/components/ui";
+import { isOpen, KPI, MEASURES, PERIOD, PREV_KPI, PREV_PERIOD, SAVED, SNAPSHOT, SYNC, SYSTEM_LOG, USER } from "@/lib/demo";
 import { pctChange, rub } from "@/lib/site";
 
-export default function Overview() {
-  const { problems, openWhy } = useDemo();
-  const [main, ...others] = problems;
+const CHANGES = [
+  { name: "Расход", prev: rub(PREV_KPI.spend), cur: rub(KPI.spend), d: pctChange(PREV_KPI.spend, KPI.spend), down: true },
+  { name: "Конверсии", prev: String(PREV_KPI.conversions), cur: String(KPI.conversions), d: pctChange(PREV_KPI.conversions, KPI.conversions), down: false },
+  { name: "CPA", prev: rub(PREV_KPI.cpa), cur: rub(KPI.cpa), d: pctChange(PREV_KPI.cpa, KPI.cpa), down: true },
+  { name: "Потери ≈", prev: rub(PREV_KPI.losses), cur: rub(KPI.losses), d: pctChange(PREV_KPI.losses, KPI.losses), down: true },
+];
+
+function ActHeader() {
+  return (
+    <header className="mb-8 grid gap-4 border-b-2 border-text pb-4 md:grid-cols-[1fr_auto] md:items-end">
+      <div>
+        <h1 className="text-[34px] leading-none font-bold tracking-[-0.025em] md:text-[44px]">Сегодня</h1>
+        <p className="mt-2 text-muted">
+          Сверка рекламы <b className="font-semibold text-text">{USER.workspace}</b> с Яндекс Директом за {PERIOD}
+        </p>
+      </div>
+      <dl className="reqs grid grid-cols-[auto_auto] gap-x-4 gap-y-0.5 md:text-right">
+        <dt>Снимок</dt>
+        <dd className="text-text">
+          #{SNAPSHOT.id} · {SYNC.date}
+        </dd>
+        <dt>Директ</dt>
+        <dd className="text-text">● обновлён {SYNC.direct}</dd>
+        <dt>Метрика</dt>
+        <dd className="text-text">● обновлена {SYNC.metrika}</dd>
+      </dl>
+    </header>
+  );
+}
+
+export default function Today() {
+  const { problems, actions } = useDemo();
+  const open = problems.filter((p) => isOpen(p.status));
+  const openLoss = open.reduce((s, p) => s + p.loss, 0);
+  const saveable = open.reduce((s, p) => s + p.saveable, 0);
 
   return (
     <>
-      <PageHeader title={`Доброе утро, ${USER.name}`} sub="Вот что происходит с вашей рекламой за последние 7 дней." />
+      <ActHeader />
 
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <MetricCard label="Потрачено" value={rub(KPI.spend)} extra={<Delta value={pctChange(PREV_KPI.spend, KPI.spend)} goodWhenDown />} />
-        <MetricCard
-          label="Потери"
-          value={rub(KPI.losses)}
-          approx
-          tone="text-danger"
-          extra={<Delta value={pctChange(PREV_KPI.losses, KPI.losses)} goodWhenDown />}
-        />
-        <MetricCard label="CPA" value={rub(KPI.cpa)} extra={<Delta value={pctChange(PREV_KPI.cpa, KPI.cpa)} goodWhenDown />} />
-        <MetricCard label="Конверсии" value={String(KPI.conversions)} extra={<Delta value={pctChange(PREV_KPI.conversions, KPI.conversions)} />} />
-      </div>
-
-      <div className="mt-4 grid gap-4 xl:grid-cols-[2fr_1fr]">
-        <MainFocus p={main} />
-        <Link href="/demo/ai" className="card group flex flex-col justify-between bg-premium p-6 text-white">
-          <div>
-            <p className="flex items-center gap-2 text-sm font-semibold text-white/80">
-              <Bot size={18} className="text-[#39BFA0]" /> AI-Директор
-            </p>
-            <p className="mt-4 text-xl font-bold">Сегодня я нашёл {problems.length} проблемы.</p>
-            <p className="mt-2 text-sm text-white/70">
-              Главная — CPA выше цели. Начните с неё: это {Math.round((main.loss / KPI.losses) * 100)}% всех потерь.
-            </p>
+      <div className="grid gap-10 lg:grid-cols-[1fr_1.05fr] lg:gap-14">
+        <Section title="Сальдо за 7 дней" aside={<span className="caption">к {PREV_PERIOD}</span>}>
+          <div className="divide-y divide-line">
+            <LedgerLine size="lg" label="Потрачено" note={<>факт · Яндекс Директ · <Delta value={pctChange(PREV_KPI.spend, KPI.spend)} goodWhenDown /></>}>
+              <Amount value={KPI.spend} kind="fact" />
+            </LedgerLine>
+            <LedgerLine size="lg" label="Потери ≈" note={<>оценка неэффективного расхода по правилам · <Delta value={pctChange(PREV_KPI.losses, KPI.losses)} goodWhenDown /></>}>
+              <Amount value={KPI.losses} kind="loss" bare />
+            </LedgerLine>
+            <LedgerLine size="lg" label="Можно сэкономить ≈" note="прогноз по открытым рекомендациям, которые можно применить">
+              {saveable ? <Amount value={saveable} kind="saveable" bare /> : <span className="text-[17px] text-muted">открытых нет</span>}
+            </LedgerLine>
+            <LedgerLine size="lg" label="Сэкономлено ≈" note={`измерено через 7 дней после ${MEASURES.length} решений в сентябре`}>
+              <Amount value={SAVED} kind="saved" bare />
+            </LedgerLine>
+            <LedgerLine label="Конверсии" note={<>Яндекс Метрика · CPA {rub(KPI.cpa)}</>}>
+              <span className="money">{KPI.conversions}</span>
+            </LedgerLine>
           </div>
-          <span className="mt-6 inline-flex items-center gap-1 text-sm font-semibold text-[#39BFA0]">
-            Спросить AI <ArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" />
-          </span>
-        </Link>
-      </div>
+        </Section>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
-        <section className="card p-5 xl:col-span-2" aria-labelledby="others">
-          <div className="flex items-center justify-between">
-            <h2 id="others" className="font-bold">
-              Другие проблемы
-            </h2>
-            <Link href="/demo/losses" className="text-sm font-semibold text-brand">
-              Все потери
+        <Section
+          title={open.length ? `Требуют решения: ${open.length}` : "Все проводки закрыты"}
+          aside={
+            <Link href="/demo/recommendations" className="font-semibold text-brand hover:underline">
+              Все рекомендации
             </Link>
-          </div>
-          <ul className="mt-3 divide-y divide-line">
-            {others.map((p) => (
-              <li key={p.id}>
-                <button onClick={() => openWhy(p.id)} className="flex w-full items-center gap-3 py-3 text-left">
-                  <PriorityIcon priority={p.priority} size={32} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-semibold">{p.title}</span>
-                    <span className="block truncate text-xs text-muted">{p.campaign}</span>
-                  </span>
-                  <span className="hidden sm:inline">
-                    <StatusBadge status={p.status} />
-                  </span>
-                  <Approx className="whitespace-nowrap text-danger">{rub(p.loss)}</Approx>
-                </button>
+          }
+        >
+          {open.length ? (
+            <>
+              <EntryTable problems={open} />
+              <p className="mt-4 flex flex-wrap items-baseline justify-between gap-2 text-sm">
+                <span className="text-muted">Расхождение по открытым проводкам</span>
+                <Amount value={openLoss} kind="loss" className="text-[20px]" />
+              </p>
+            </>
+          ) : (
+            <div className="mt-4">
+              <StateBox kind="empty" title="Решения приняты" text="Новые проблемы появятся после следующей сверки. Эффект решений замерим через 7 дней." />
+            </div>
+          )}
+        </Section>
+      </div>
+
+      <div className="mt-14 grid gap-10 lg:grid-cols-3 lg:gap-12">
+        <Section title="Что изменилось" aside={<span className="caption">неделя к неделе</span>}>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="caption border-b border-line text-right">
+                <th className="py-1.5 text-left font-normal">Показатель</th>
+                <th className="py-1.5 font-normal">Было</th>
+                <th className="py-1.5 font-normal">Стало</th>
+                <th className="py-1.5 font-normal">
+                  <span className="sr-only">Изменение</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {CHANGES.map((c) => (
+                <tr key={c.name} className="border-b border-line text-right">
+                  <td className="py-2 text-left">{c.name}</td>
+                  <td className="money py-2 font-normal text-muted">{c.prev}</td>
+                  <td className="money py-2">{c.cur}</td>
+                  <td className="py-2 pl-2">
+                    <Delta value={c.d} goodWhenDown={c.down} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <Link href="/demo/analytics" className="mt-3 inline-block text-sm font-semibold text-brand hover:underline">
+            Разбор в аналитике
+          </Link>
+        </Section>
+
+        <Section title="Последние действия">
+          <ul className="text-sm">
+            {actions.map((a) => (
+              <li key={a.id + a.at + a.status} className="anim-fade grid grid-cols-[3.5rem_1fr] gap-2 border-b border-line py-2">
+                <span className="reqs">{a.at}</span>
+                <span className="font-semibold">{a.title}</span>
+              </li>
+            ))}
+            {SYSTEM_LOG.slice(0, 4 - Math.min(actions.length, 2)).map((l) => (
+              <li key={l.date + l.text} className="grid grid-cols-[3.5rem_1fr] gap-2 border-b border-line py-2">
+                <span className="reqs">{l.date.slice(6)}</span>
+                <span className="text-muted">{l.text}</span>
               </li>
             ))}
           </ul>
-        </section>
+        </Section>
 
-        <section className="card p-5" aria-labelledby="changed">
-          <h2 id="changed" className="font-bold">
-            Что изменилось
-          </h2>
-          <p className="text-xs text-muted">к прошлой неделе</p>
-          <div className="mt-3 space-y-3">
-            {[
-              { l: "CPA", v: pctChange(PREV_KPI.cpa, KPI.cpa), s: KPI.cpaDaily },
-              { l: "Расход", v: pctChange(PREV_KPI.spend, KPI.spend), s: WEEK.spend },
-            ].map((m) => (
-              <div key={m.l} className="flex items-center gap-3">
-                <span className="w-14 text-sm">{m.l}</span>
-                <div className="flex-1">
-                  <Sparkline values={m.s} color={m.v > 0 ? "var(--danger)" : "var(--success)"} height={28} />
-                </div>
-                <Delta value={m.v} goodWhenDown />
-              </div>
+        <Section title="Результат решений" aside={<Amount value={SAVED} kind="saved" className="text-[15px]" />}>
+          <ul className="text-sm">
+            {MEASURES.map((m) => (
+              <li key={m.id} className="flex items-baseline justify-between gap-3 border-b border-line py-2">
+                <span>
+                  <span className="block font-semibold">{m.title}</span>
+                  <span className="caption">
+                    {m.campaign} · замер {m.window}
+                  </span>
+                </span>
+                <Amount value={m.value} kind="saved" />
+              </li>
             ))}
-          </div>
-          <Link href="/demo/changes" className="mt-3 inline-block text-sm font-semibold text-brand">
-            Подробнее
-          </Link>
-        </section>
-
-        <div className="grid gap-4">
-          <section className="card p-5" aria-labelledby="saved">
-            <h2 id="saved" className="flex items-center gap-2 text-sm text-muted">
-              <PiggyBank size={16} className="text-success" /> Сэкономлено
-            </h2>
-            <Approx className="mt-1 block text-[28px] text-success">{rub(SAVED)}</Approx>
-            <p className="text-xs text-muted">расчётная оценка по 2 решениям в сентябре</p>
-          </section>
-          <section className="card p-5" aria-labelledby="data">
-            <h2 id="data" className="text-sm text-muted">
-              Состояние данных
-            </h2>
-            <ul className="mt-2 space-y-1.5 text-sm">
-              <li className="flex items-center gap-2">
-                <CheckCircle2 size={15} className="text-success" /> Яндекс Директ • {SYNC.direct}
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle2 size={15} className="text-success" /> Яндекс Метрика • {SYNC.metrika}
-              </li>
-            </ul>
-          </section>
-        </div>
+          </ul>
+        </Section>
       </div>
+
+      <footer className="mt-14 grid gap-6 border-t-2 border-text pt-4 text-sm sm:grid-cols-2">
+        <div>
+          <p className="caption">Сверку провёл</p>
+          <p className="font-semibold">AdPilot · правила {SNAPSHOT.engine}</p>
+          <p className="reqs">Цифры считает код, AI только объясняет</p>
+        </div>
+        <div>
+          <p className="caption">Решения принимает</p>
+          <p className="flex items-end gap-3 font-semibold">
+            {USER.name}
+            <span className="mb-1 h-px w-28 bg-rule" aria-hidden />
+          </p>
+          <p className="reqs">Без вашего одобрения в кабинете ничего не меняется</p>
+        </div>
+      </footer>
     </>
   );
 }

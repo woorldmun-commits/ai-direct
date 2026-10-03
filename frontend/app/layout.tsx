@@ -1,25 +1,18 @@
 import type { Metadata, Viewport } from "next";
-import { IBM_Plex_Mono, Manrope } from "next/font/google";
+import { Inter } from "next/font/google";
 import { CookieBanner } from "@/components/cookie-banner";
 import { SITE_URL } from "@/lib/site";
 import "./globals.css";
 
-const manrope = Manrope({
-  variable: "--font-manrope",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin", "cyrillic"],
   display: "swap",
 });
 
-const plexMono = IBM_Plex_Mono({
-  variable: "--font-plex-mono",
-  subsets: ["latin", "cyrillic"],
-  weight: ["400", "500"],
-  display: "swap",
-});
-
-const TITLE = "AdPilot — аудит Яндекс Директ: где вы теряете бюджет";
+const TITLE = "AdPilot — находим, где реклама теряет деньги";
 const DESCRIPTION =
-  "AdPilot ежедневно анализирует Яндекс Директ и Метрику, находит потери бюджета в рублях и показывает, что исправить. Первый аудит бесплатно, без карты.";
+  "AdPilot анализирует рекламные кампании, находит проблемы, показывает причины и предлагает конкретные действия на основе данных. Изменения — только после вашего подтверждения.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -40,25 +33,12 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f7f8f6" },
-    { media: "(prefers-color-scheme: dark)", color: "#07110f" },
-  ],
+  themeColor: "#07111f",
 };
-
-// Runs before paint so a saved dark theme doesn't flash light.
-const themeScript = `try{var t=localStorage.getItem("adpilot-theme");if(t==="dark")document.documentElement.dataset.theme="dark"}catch(e){}`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
-      lang="ru"
-      className={`${manrope.variable} ${plexMono.variable} h-full`}
-      suppressHydrationWarning
-    >
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-      </head>
+    <html lang="ru" className={`${inter.variable} h-full`}>
       <body className="min-h-full">
         {children}
         <CookieBanner />

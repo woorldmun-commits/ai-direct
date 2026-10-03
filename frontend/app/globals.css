@@ -1,59 +1,33 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
-
+/* AdPilot design tokens. One product, two surfaces:
+   marketing on deep navy, the working app on a cool light background. */
 :root {
-  --bg: #f7f8f6;
+  --bg: #f7f9fc;
   --surface: #ffffff;
-  --surface-2: #f2f5f3;
-  --text: #111817;
-  --muted: #66716e;
-  --border: #e2e8e5;
-  --brand: #0d6b5b;
-  --brand-hover: #095448;
-  --brand-soft: #e3f1ed;
-  --on-brand: #ffffff;
-  --success: #0b7a5a;
-  --success-bg: #e7f6f0;
-  --danger: #b3261e;
-  --danger-bg: #fdecea;
-  --warning: #8f4a00;
-  --warning-bg: #fff3dd;
-  --info: #2563eb;
-  --info-bg: #eaf2ff;
-  --glass: rgba(255, 255, 255, 0.58);
-  --glass-border: rgba(255, 255, 255, 0.72);
-  --shadow-sm: 0 1px 2px rgba(17, 24, 23, 0.04);
-  --shadow-md: 0 8px 24px -12px rgba(17, 24, 23, 0.14), 0 2px 6px rgba(17, 24, 23, 0.04);
-  --shadow-lg: 0 24px 60px -24px rgba(6, 46, 42, 0.35);
+  --surface-2: #f2f4f8;
+  --text: #111827;
+  --muted: #667085;
+  --subtle: #98a2b3;
+  --border: #e6eaf0;
+  --brand: #5b5bf7;
+  --brand-hover: #4b4bea;
+  --brand-soft: #eef0ff;
+  --violet: #7c5cff;
+  --sky: #3b82f6;
+  --success: #12b76a;
+  --success-ink: #027a48;
+  --success-soft: #ecfdf3;
+  --warning: #f79009;
+  --warning-ink: #b54708;
+  --warning-soft: #fffaeb;
+  --danger: #f04438;
+  --danger-ink: #b42318;
+  --danger-soft: #fef3f2;
+  --navy: #07111f;
+  --navy-2: #0b1630;
+  --navy-line: rgba(148, 163, 214, 0.16);
   color-scheme: light;
-}
-
-[data-theme="dark"] {
-  --bg: #07110f;
-  --surface: #0c1916;
-  --surface-2: #11231f;
-  --text: #f3f7f5;
-  --muted: #93a39e;
-  --border: #1c312c;
-  --brand: #39bfa0;
-  --brand-hover: #52cfb2;
-  --brand-soft: rgba(57, 191, 160, 0.12);
-  --on-brand: #04130f;
-  --success: #39bfa0;
-  --success-bg: rgba(57, 191, 160, 0.12);
-  --danger: #ff6b63;
-  --danger-bg: rgba(255, 107, 99, 0.12);
-  --warning: #f2b45a;
-  --warning-bg: rgba(242, 180, 90, 0.12);
-  --info: #6aa1ff;
-  --info-bg: rgba(106, 161, 255, 0.12);
-  --glass: rgba(12, 25, 22, 0.66);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --shadow-sm: none;
-  --shadow-md: 0 8px 24px -12px rgba(0, 0, 0, 0.6);
-  --shadow-lg: 0 24px 60px -24px rgba(0, 0, 0, 0.8);
-  color-scheme: dark;
 }
 
 @theme inline {
@@ -62,24 +36,32 @@
   --color-surface-2: var(--surface-2);
   --color-text: var(--text);
   --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
   --color-line: var(--border);
   --color-brand: var(--brand);
   --color-brand-hover: var(--brand-hover);
   --color-brand-soft: var(--brand-soft);
-  --color-on-brand: var(--on-brand);
+  --color-violet: var(--violet);
+  --color-sky: var(--sky);
   --color-success: var(--success);
-  --color-success-bg: var(--success-bg);
-  --color-danger: var(--danger);
-  --color-danger-bg: var(--danger-bg);
+  --color-success-ink: var(--success-ink);
+  --color-success-soft: var(--success-soft);
   --color-warning: var(--warning);
-  --color-warning-bg: var(--warning-bg);
-  --color-info: var(--info);
-  --color-info-bg: var(--info-bg);
-  --color-hero: #071613;
-  --color-premium: #062e2a;
-  --font-sans: var(--font-manrope), system-ui, sans-serif;
-  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
-  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --color-warning-ink: var(--warning-ink);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-ink: var(--danger-ink);
+  --color-danger-soft: var(--danger-soft);
+  --color-navy: var(--navy);
+  --color-navy-2: var(--navy-2);
+  --color-navy-line: var(--navy-line);
+  --font-sans: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius-ctl: 10px;
+  --radius-card: 16px;
+  --radius-hero: 24px;
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 30px rgba(15, 23, 42, 0.05);
+  --shadow-pop: 0 12px 40px rgba(15, 23, 42, 0.14);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 html,
@@ -90,29 +72,45 @@ body {
 body {
   color: var(--text);
   font-family: var(--font-sans);
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.5;
+  font-feature-settings: "cv11" 1, "ss01" 1;
   -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--brand);
+  color: #fff;
 }
 
 :focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
+  border-radius: 6px;
+}
+
+* {
+  scrollbar-color: #d0d5dd transparent;
+  scrollbar-width: thin;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
 @layer components {
   .card {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 18px;
-    box-shadow: var(--shadow-sm);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
   }
   .glass {
-    background: var(--glass);
-    border: 1px solid var(--glass-border);
-    backdrop-filter: blur(24px) saturate(140%);
-    -webkit-backdrop-filter: blur(24px) saturate(140%);
-    box-shadow: var(--shadow-lg);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: var(--shadow-pop);
   }
   .btn {
     display: inline-flex;
@@ -121,36 +119,37 @@ body {
     gap: 8px;
     height: 40px;
     padding: 0 16px;
-    border-radius: 12px;
+    border-radius: var(--radius-ctl);
     font-weight: 600;
     font-size: 14px;
     white-space: nowrap;
     cursor: pointer;
-    transition: background-color 180ms var(--ease-out), border-color 180ms var(--ease-out),
-      color 180ms var(--ease-out), transform 150ms var(--ease-out);
+    transition: background-color 150ms, border-color 150ms, color 150ms, box-shadow 150ms;
   }
-  .btn:active {
-    transform: scale(0.98);
-  }
-  .btn:disabled {
-    opacity: 0.45;
+  .btn:disabled,
+  .btn[aria-disabled="true"] {
+    opacity: 0.5;
     pointer-events: none;
   }
   .btn-primary {
     background: var(--brand);
-    color: var(--on-brand);
+    color: #fff;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.12);
   }
   .btn-primary:hover {
     background: var(--brand-hover);
+  }
+  .btn-primary:active {
+    background: #3f3fd6;
   }
   .btn-secondary {
     background: var(--surface);
     border: 1px solid var(--border);
     color: var(--text);
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
   }
   .btn-secondary:hover {
-    border-color: var(--brand);
-    color: var(--brand);
+    background: var(--surface-2);
   }
   .btn-ghost {
     color: var(--muted);
@@ -159,98 +158,116 @@ body {
     background: var(--surface-2);
     color: var(--text);
   }
+  .btn-danger {
+    background: var(--surface);
+    border: 1px solid #fecdca;
+    color: var(--danger-ink);
+  }
+  .btn-danger:hover {
+    background: var(--danger-soft);
+  }
+  /* On navy surfaces. */
+  .btn-outline-dark {
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    color: #fff;
+  }
+  .btn-outline-dark:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
   .btn-sm {
     height: 32px;
     padding: 0 12px;
-    border-radius: 10px;
     font-size: 13px;
+    border-radius: 8px;
   }
-  .chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: 32px;
-    padding: 0 12px;
-    border-radius: 10px;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--muted);
+  .btn-lg {
+    height: 48px;
+    padding: 0 24px;
+    font-size: 15px;
+    border-radius: 12px;
+  }
+  .input {
+    height: 40px;
+    width: 100%;
     border: 1px solid var(--border);
+    border-radius: var(--radius-ctl);
     background: var(--surface);
-    cursor: pointer;
-    transition: all 150ms var(--ease-out);
+    padding: 0 12px;
+    outline: none;
+    transition: border-color 150ms, box-shadow 150ms;
   }
-  .chip:hover {
-    color: var(--text);
+  .input::placeholder {
+    color: var(--subtle);
   }
-  .chip[aria-pressed="true"] {
-    background: var(--brand);
+  .input:hover {
+    border-color: #d0d5dd;
+  }
+  .input:focus {
     border-color: var(--brand);
-    color: var(--on-brand);
+    box-shadow: 0 0 0 4px rgba(91, 91, 247, 0.12);
   }
-  .badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    height: 22px;
-    padding: 0 8px;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 600;
-    white-space: nowrap;
+  .input[aria-invalid="true"] {
+    border-color: var(--danger);
+  }
+  .input[aria-invalid="true"]:focus {
+    box-shadow: 0 0 0 4px rgba(240, 68, 56, 0.12);
+  }
+  .input:disabled {
+    background: var(--surface-2);
+    color: var(--subtle);
   }
   .label {
     font-size: 12px;
     line-height: 16px;
     color: var(--muted);
   }
-  .money {
-    font-variant-numeric: tabular-nums;
-    letter-spacing: -0.02em;
-    font-weight: 700;
-  }
   .skeleton {
-    background: linear-gradient(90deg, var(--surface-2), var(--border), var(--surface-2));
+    background: linear-gradient(90deg, var(--surface-2) 0%, #e9edf3 50%, var(--surface-2) 100%);
     background-size: 200% 100%;
-    animation: shimmer 1.4s linear infinite;
     border-radius: 8px;
+    animation: shimmer 1.4s ease-in-out infinite;
   }
 }
 
 @keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
   to {
     background-position: -200% 0;
   }
 }
-@keyframes fade-up {
+@keyframes fade-in {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(4px);
   }
 }
 @keyframes slide-in {
   from {
-    transform: translateX(24px);
     opacity: 0;
+    transform: translateX(24px);
   }
 }
-@keyframes pulse-dot {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(11, 122, 90, 0.45);
-  }
-  50% {
-    box-shadow: 0 0 0 5px rgba(11, 122, 90, 0);
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(6px);
   }
 }
 .anim-fade {
-  animation: fade-up 220ms var(--ease-out) both;
+  animation: fade-in 200ms var(--ease-out) both;
 }
 .anim-slide {
-  animation: slide-in 220ms var(--ease-out) both;
+  animation: slide-in 260ms var(--ease-out) both;
 }
-.pulse-dot {
-  animation: pulse-dot 2s ease-out 3;
+.anim-pop {
+  animation: pop-in 220ms var(--ease-out) both;
+}
+
+dialog::backdrop {
+  background: rgba(7, 17, 31, 0.42);
+  backdrop-filter: blur(2px);
 }
 
 @media (prefers-reduced-motion: reduce) {

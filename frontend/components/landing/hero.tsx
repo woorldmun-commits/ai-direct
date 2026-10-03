@@ -1,40 +1,38 @@
-import { ArrowRight, Bot, CreditCard, Plug, Sparkles, UserPlus } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
-import { Sparkline } from "@/components/charts";
-import { Logo } from "@/components/ui";
-import { KPI, PROBLEMS, RECOVERABLE, SAVED, TOTAL_LOSS, WEEK } from "@/lib/demo";
-import { rub } from "@/lib/site";
+import { Amount, Logo, Stamp } from "@/components/ui";
+import { KPI, PERIOD, PROBLEMS, SAVEABLE, SAVED, SNAPSHOT } from "@/lib/demo";
 
 const NAV = [
-  { href: "#features", label: "Возможности" },
+  { href: "#check", label: "Что проверяем" },
   { href: "#how", label: "Как это работает" },
   { href: "#pricing", label: "Тарифы" },
-  { href: "#faq", label: "FAQ" },
+  { href: "#faq", label: "Вопросы" },
 ];
 
 export function Header() {
   return (
-    <header className="sticky top-3 z-50 mx-auto max-w-[1360px] px-4">
-      <div className="flex h-16 items-center gap-6 rounded-2xl border border-white/10 bg-[#071613]/70 px-4 backdrop-blur-xl md:px-6">
+    <header className="sticky top-0 z-50 border-b border-rule bg-bg">
+      <div className="mx-auto flex h-16 max-w-[1280px] items-center gap-8 px-4 md:px-8">
         <Link href="/" aria-label="AdPilot — на главную">
-          <Logo light />
+          <Logo />
         </Link>
-        <nav className="hidden flex-1 items-center gap-7 text-sm text-white/70 lg:flex" aria-label="Основное меню">
+        <nav className="hidden flex-1 items-center gap-7 text-sm font-semibold text-muted lg:flex" aria-label="Основное меню">
           {NAV.map((n) => (
-            <a key={n.href} href={n.href} className="transition-colors hover:text-white">
+            <a key={n.href} href={n.href} className="hover:text-text">
               {n.label}
             </a>
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-2">
-          <Link href="/login" className="hidden px-3 text-sm text-white/70 hover:text-white sm:inline">
+          <Link href="/login" className="hidden px-3 text-sm font-semibold text-muted hover:text-text sm:inline">
             Войти
           </Link>
-          <Link href="/demo" className="btn btn-sm hidden border border-white/25 text-white hover:border-white/60 sm:inline-flex">
-            Попробовать демо
+          <Link href="/demo" className="btn btn-sm btn-secondary hidden sm:inline-flex">
+            Демо-кабинет
           </Link>
-          <Link href="/signup" className="btn btn-sm bg-[#39BFA0] text-[#04130f] hover:bg-[#52cfb2]">
-            Создать аккаунт
+          <Link href="/signup" className="btn btn-sm btn-ink">
+            Запустить аудит
           </Link>
         </div>
       </div>
@@ -42,115 +40,98 @@ export function Header() {
   );
 }
 
+const LINES: [string, number, "fact" | "loss" | "saveable" | "saved"][] = [
+  ["Потрачено", KPI.spend, "fact"],
+  ["Потери ≈", KPI.losses, "loss"],
+  ["Можно сэкономить ≈", SAVEABLE, "saveable"],
+  ["Сэкономлено ≈", SAVED, "saved"],
+];
+
+/** The product's own artifact at life size: the reconciliation statement. Demo data, stamped as a sample. */
+function Statement() {
+  return (
+    <figure className="relative min-w-0" aria-label="Пример акта сверки AdPilot на демонстрационных данных">
+      <div aria-hidden className="absolute inset-0 translate-x-3 translate-y-3 border border-rule bg-surface" />
+      <div className="relative border border-rule bg-surface p-5 shadow-[var(--shadow-md)] md:p-7">
+        <div className="flex items-start justify-between gap-4 border-b-2 border-text pb-3">
+          <div>
+            <p className="text-[19px] leading-tight font-bold">Акт сверки рекламных расходов</p>
+            <p className="caption mt-1">ООО «Пример» ↔ Яндекс Директ · {PERIOD}</p>
+          </div>
+          <p className="reqs text-right">
+            снимок
+            <br />#{SNAPSHOT.id}
+          </p>
+        </div>
+        <dl className="divide-y divide-line">
+          {LINES.map(([k, v, kind]) => (
+            <div key={k} className="flex items-baseline py-2.5">
+              <dt className="font-medium">{k}</dt>
+              <span className="leader" aria-hidden />
+              <dd className="text-[19px] md:text-[22px]">
+                <Amount value={v} kind={kind} bare />
+              </dd>
+            </div>
+          ))}
+        </dl>
+        <p className="mt-4 text-sm font-bold">Требуют решения: {PROBLEMS.length}</p>
+        <ol className="mt-1 text-sm">
+          {PROBLEMS.map((p, i) => (
+            <li key={p.id} className="flex items-baseline gap-2 border-b border-line py-1.5">
+              <span className="reqs w-4">{i + 1}</span>
+              <span className="min-w-0 flex-1 truncate">{p.recommendation}</span>
+              <Amount value={p.loss} kind="loss" />
+            </li>
+          ))}
+        </ol>
+        <div className="mt-5 grid grid-cols-2 gap-6 text-[12px]">
+          <p>
+            <span className="caption block">Сверку провёл</span>
+            <b>AdPilot</b>
+          </p>
+          <p>
+            <span className="caption block">Решение принимает</span>
+            <span className="mt-3 block h-px bg-rule" aria-hidden />
+          </p>
+        </div>
+        <div className="absolute right-6 bottom-12 md:right-10">
+          <Stamp text="Образец" sub="демо-данные" tone="muted" />
+        </div>
+      </div>
+    </figure>
+  );
+}
+
 export function Hero() {
   return (
-    <section className="relative -mt-[76px] overflow-hidden bg-hero pt-[76px] text-white">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(60% 60% at 75% 40%, rgba(57,191,160,.22), transparent 70%), radial-gradient(40% 50% at 10% 90%, rgba(13,107,91,.35), transparent 70%)",
-        }}
-      />
-      <div className="relative mx-auto grid max-w-[1360px] items-center gap-12 px-4 pt-16 pb-24 md:px-8 lg:grid-cols-[1.1fr_1fr] lg:pt-20 lg:pb-32">
-        <div>
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs text-white/80">
-            <Sparkles size={14} className="text-[#39BFA0]" /> AI-директор по рекламе для Яндекс Директ
-          </span>
-          <h1 className="mt-6 text-[38px] leading-[1.06] font-bold tracking-[-0.03em] md:text-[52px] xl:text-[60px]">
-            Мы не показываем отчёты. Мы показываем, где <span className="text-[#39BFA0]">вы теряете деньги</span> и как это{" "}
-            <span className="text-[#39BFA0]">исправить</span>.
+    <section className="border-b border-rule">
+      <div className="mx-auto grid max-w-[1280px] items-center gap-12 px-4 pt-12 pb-16 md:px-8 lg:grid-cols-[1.05fr_1fr] lg:gap-16 lg:pt-20 lg:pb-24">
+        <div className="min-w-0">
+          <h1 className="text-[40px] leading-[1.02] font-bold tracking-[-0.035em] text-balance md:text-[56px] xl:text-[64px]">
+            Сверим вашу рекламу с&nbsp;результатом — до&nbsp;рубля
           </h1>
-          <p className="mt-6 max-w-[540px] text-lg text-white/70">
-            AdPilot ежедневно анализирует рекламу, находит потери бюджета и показывает конкретные действия для снижения расходов.
+          <p className="mt-6 max-w-[54ch] text-[18px] text-muted">
+            Подключите Яндекс Директ за 2 минуты и узнайте, где теряются деньги в рекламе: сколько, почему и что сделать. Каждая сумма — с источником, периодом и
+            формулой.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <Link href="/signup" className="btn h-12 bg-[#39BFA0] px-6 text-[15px] text-[#04130f] hover:bg-[#52cfb2]">
+            <Link href="/signup" className="btn btn-primary h-12 px-6 text-[15px]">
               Запустить бесплатный аудит <ArrowRight size={18} />
             </Link>
-            <Link href="/demo" className="btn h-12 border border-white/25 px-6 text-[15px] text-white hover:border-white/60">
-              Попробовать демо
+            <Link href="/demo" className="btn btn-secondary h-12 px-6 text-[15px]">
+              Открыть демо-кабинет
             </Link>
           </div>
-          <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-white/60">
-            <li className="flex items-center gap-2">
-              <CreditCard size={16} /> Без карты
-            </li>
-            <li className="flex items-center gap-2">
-              <UserPlus size={16} /> Регистрация по email
-            </li>
-            <li className="flex items-center gap-2">
-              <Plug size={16} /> Подключение в пару кликов
-            </li>
+          <ul className="mt-8 grid max-w-[560px] gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
+            {["Без карты", "Изменения — только с вашего одобрения", "Цифры считает код, AI объясняет"].map((t) => (
+              <li key={t} className="border-t border-rule pt-2 text-muted">
+                {t}
+              </li>
+            ))}
           </ul>
         </div>
-        <ProductPreview />
+        <Statement />
       </div>
     </section>
-  );
-}
-
-function MiniMetric({ label, value, tone }: { label: string; value: string; tone: string }) {
-  return (
-    <div className="rounded-xl border border-line bg-surface p-3">
-      <p className="text-[10px] text-muted">{label}</p>
-      <p className={`money mt-1 text-[15px] whitespace-nowrap xl:text-[17px] ${tone}`}>≈ {value}</p>
-    </div>
-  );
-}
-
-function ProductPreview() {
-  const main = PROBLEMS[0];
-  return (
-    <figure className="relative" aria-label="Интерфейс AdPilot с демонстрационными данными">
-      <div className="relative rounded-[22px] border border-white/10 bg-white/5 p-2 shadow-[0_40px_120px_-30px_rgba(57,191,160,.45)] lg:[transform:perspective(1600px)_rotateY(-8deg)_rotateX(3deg)]">
-        <div className="flex overflow-hidden rounded-2xl bg-bg text-text">
-          <aside className="hidden w-[132px] shrink-0 border-r border-line bg-surface p-3 sm:block" aria-hidden>
-            <Logo size={18} />
-            <ul className="mt-4 space-y-1 text-[10px] text-muted">
-              {["Обзор", "Потери", "Рекомендации", "Что изменилось", "Финансы", "История", "AI-Директор"].map((x, i) => (
-                <li key={x} className={`rounded-md px-2 py-1.5 ${i === 0 ? "bg-brand-soft font-semibold text-brand" : ""}`}>
-                  {x}
-                </li>
-              ))}
-            </ul>
-          </aside>
-          <div className="min-w-0 flex-1 p-4">
-            <div className="flex items-center justify-between">
-              <p className="text-[13px] font-bold">Доброе утро, Алексей</p>
-              <span className="badge bg-warning-bg text-[9px] text-warning">ДЕМО-ДАННЫЕ</span>
-            </div>
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              <MiniMetric label="Потери" value={rub(TOTAL_LOSS)} tone="text-danger" />
-              <MiniMetric label="Можно вернуть" value={rub(RECOVERABLE)} tone="text-warning" />
-              <MiniMetric label="Сэкономлено" value={rub(SAVED)} tone="text-success" />
-            </div>
-            <div className="mt-2 grid grid-cols-[1.4fr_1fr] gap-2">
-              <div className="rounded-xl border border-line bg-surface p-3">
-                <span className="badge bg-danger-bg text-[9px] text-danger">Сегодня важнее всего</span>
-                <p className="mt-2 text-[12px] font-bold">{main.title}</p>
-                <p className="money text-[15px] text-danger">≈ {rub(main.loss)}</p>
-                <p className="mt-1 text-[10px] text-muted">{main.recommendation}</p>
-              </div>
-              <div className="rounded-xl border border-line bg-surface p-3">
-                <p className="text-[10px] text-muted">Расход, 7 дней</p>
-                <p className="money text-[13px]">{rub(KPI.spend)}</p>
-                <div className="mt-2">
-                  <Sparkline values={WEEK.spend} height={40} />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="absolute -right-2 -bottom-10 hidden w-[260px] rounded-2xl border border-white/15 bg-[#0c1916]/80 p-4 text-white shadow-[0_20px_50px_-20px_rgba(0,0,0,.7)] backdrop-blur-xl sm:block lg:-right-6">
-        <p className="flex items-center gap-2 text-xs font-bold">
-          <Bot size={15} className="text-[#39BFA0]" /> AI-Директор
-        </p>
-        <p className="mt-1.5 text-xs text-white/70">Сегодня я нашёл 3 проблемы. Главная — CPA выше цели на 75%.</p>
-      </div>
-      <figcaption className="mt-6 text-xs text-white/45 sm:mt-14">Интерфейс с демонстрационными данными</figcaption>
-    </figure>
   );
 }
