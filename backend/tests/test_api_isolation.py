@@ -215,9 +215,11 @@ def test_pool_discards_connection_with_leaked_session_context(api, world):
     assert pooled_workspace_setting(api.app_) == ""
 
 
-def test_api_refuses_role_that_bypasses_rls(db):
-    """Суперпользователь (или BYPASSRLS) отключил бы RLS — API с такой ролью не стартует."""
-    app = create_app(settings(db, "postgres", pool_timeout=1.0))
+@pytest.mark.parametrize("role", ["postgres", "app_migrator", "app_system", "app_token"])
+def test_api_refuses_role_other_than_app_rw(db, role):
+    """Суперпользователь, владелец таблиц (вне RLS без FORCE), app_system (USING true) и app_token (токены любого
+    workspace) отключили бы изоляцию — API с такой ролью не стартует."""
+    app = create_app(settings(db, role, pool_timeout=1.0))
     with pytest.raises(PoolTimeout):
         with client_for(app):
             pass

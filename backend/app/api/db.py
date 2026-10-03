@@ -22,10 +22,12 @@ class UnsafeDatabaseRole(RuntimeError):
 
 
 def _configure(conn: psycopg.Connection) -> None:
+    # Проверяется имя роли, а не только флаги: владелец таблиц (app_migrator) не попадает под RLS без FORCE,
+    # у app_system политика USING (true), app_token читает OAuth-токены любого workspace.
     with conn.transaction():
-        row = conn.execute("""SELECT r.rolsuper OR r.rolbypassrls FROM pg_roles r
+        row = conn.execute("""SELECT current_user = 'app_rw' AND NOT (r.rolsuper OR r.rolbypassrls) FROM pg_roles r
                               WHERE r.rolname = current_user""").fetchone()
-    if row is None or row[0]:
+    if row is None or not row[0]:
         raise UnsafeDatabaseRole("API connects only as a role under RLS (app_rw), not superuser / BYPASSRLS")
 
 
