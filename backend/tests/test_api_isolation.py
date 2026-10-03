@@ -146,7 +146,14 @@ def test_recommendation_item_shape(api, rw, world):
     # can_save записан до 0004 без причины — API отдаёт её как no_data, а не выдумывает конкретную
     assert item["can_save"]["unavailable_reason"] == "no_data" and item["exposure"]["unavailable_reason"] is None
     assert item["action_level"] == "review" and item["object"]["type"] == "campaign"
-    assert item["action"] == {"type": "decrease_bid", "execution": "manual", "change_pct": "-15.00"}
+    assert item["object"]["name"] is None  # названий кампаний в схеме нет — null, а не выдуманное
+    # review, стратегия неизвестна: не «только ставка», а рычаги по стратегии (API_CONTRACT §5)
+    assert item["action"]["type"] == "lower_cpa" and item["action"]["strategy"] == "unknown"
+    assert {lv["lever"] for lv in item["action"]["levers"]} == {"decrease_bid", "lower_target_cpa",
+                                                                 "check_conversion_goals"}
+    assert item["title"] and item["status"] == "new"
+    assert item["execution_mode"] is None and item["verification_status"] is None
+    assert item["exposure_overlap"]["amount"] == "0.00" and item["data_sufficiency"] == "sufficient"
     assert item["computed_at"] is not None
 
 

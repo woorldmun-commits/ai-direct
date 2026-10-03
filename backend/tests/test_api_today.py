@@ -16,7 +16,7 @@ from app.sync.parse import placement_id
 from app.worker.sync import PLACEMENTS_REPORT_ENV
 from app.worker import audit as audit_module
 from test_api_headers import assert_secure
-from test_api_support import api, cookie, session, user, world  # noqa: F401 — фикстуры
+from test_api_support import api, cookie, recommendation, session, user, world  # noqa: F401 — фикстуры
 from test_direct_sync import CID, TO, root  # noqa: F401 — root: фикстура
 from test_metrika_sync import metrika  # noqa: F401 — фикстура
 from test_schema import chain, new_workspace, one  # noqa: F401 — chain: фикстура
@@ -180,11 +180,12 @@ def test_top_items_carry_computed_at_and_action(api, rw, audited, monkeypatch):
     for item in body["top"]:
         assert item["computed_at"] == created[int(item["version_id"].removeprefix("rv_"))].isoformat()
         actions[item["action"]["type"]] = item["action"]
-    bid = actions["decrease_bid"]
-    assert set(bid) == {"type", "execution", "change_pct"} and bid["execution"] == "manual"
+    levers = actions["lower_cpa"]  # кандидат decrease_bid на review без известной стратегии
+    assert levers["execution"] == "manual" and levers["strategy"] == "unknown"
+    [bid] = [lv for lv in levers["levers"] if lv["lever"] == "decrease_bid"]
     assert re.fullmatch(r"-[0-9]+\.[0-9]{2}", bid["change_pct"])
-    assert actions["investigate_zero_conversions"] == {"type": "investigate_zero_conversions", "execution": "manual",
-                                                       "checks": list(CHECKS), "suggest": None}
+    assert actions["investigate"] == {"type": "investigate", "topic": "spend_block", "execution": "manual",
+                                      "checks": list(CHECKS), "suggest": None, "placements": None}
 
 
 def test_single_card_total_equals_card_and_overlap_is_zero(api, rw, audited):
@@ -237,9 +238,12 @@ def test_empty_workspace_is_unavailable_with_empty_top(api, rw):
     assert body["exposure"]["total"]["unavailable_reason"] == "no_data"
 
 
-def test_cards_without_audited_snapshot_do_not_count(api, rw, world):
+def test_cards_without_audited_snapshot_do_not_count(api, rw):
     """Вывод вне последнего аудита кабинета (нет состава аудита) — не «активная рекомендация последнего аудита»."""
-    body = get_today(api, rw, world["owner"], world["a1"]).json()
+    owner = user(rw)
+    ws_id = new_workspace(rw, "not-audited", user=owner)
+    recommendation(rw, ws_id, f"na-{ws_id}", "500.00", audited=False)
+    body = get_today(api, rw, owner, ws_id).json()
     assert body["counts"] == {"active": 0} and body["exposure"]["total"]["amount"] is None
     assert body["last_audit_at"] is not None  # аудит был — но без снимка этого кабинета
     assert body["audit_scope"]["ad_accounts"]["checked"] == 0 and body["audit_scope"]["campaigns"] == 0
@@ -313,6 +317,11 @@ def test_placements_pipeline_sync_audit_today(api, rw, ws, monkeypatch):
     assert {c["issue_type"]: c["amount"]["amount"] for c in e["components"]} == {
         "zero_conv_placements": "30000.00", "high_cpa": "18000.00"}
     assert (e["total"]["amount"], e["overlap"]["amount"]) == ("30000.00", "18000.00")
-    [placements] = [i["action"] for i in body["top"] if i["action"]["type"] == "exclude_placements"]
-    assert placements == {"type": "exclude_placements", "execution": "manual", "placements_count": 1,
-                          "placements": [{"id": str(bad), "name": "bad-site.ru"}]}
+    [card] = [i for i in body["top"] if i["action"]["type"] == "exclude_placements"]
+    assert card["action"] == {"type": "exclude_placements", "execution": "manual", "placements_count": 1,
+                              "placements": [{"id": str(bad), "name": "bad-site.ru"}]}
+    # карточка площадок — бо́льшая: учтена целиком; высокий CPA той же кампании целиком учтён в ней
+    overlaps = {i["action"]["type"]: i["exposure_overlap"]["amount"] for i in body["top"]}
+    assert overlaps == {"exclude_placements": "0.00", "lower_cpa": "18000.00"}
+    assert card["can_save"]["calculation_type"] == "unavailable" and card["can_save"]["unavailable_reason"] == \
+        "no_forecast"

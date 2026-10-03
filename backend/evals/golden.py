@@ -40,6 +40,8 @@
   level_raised     — уровень действия выше ожидаемого;
   false_positive   — вывод, которого нет в ожидаемых (на «чистом» кейсе — любой вывод);
   invariant        — данные partial → уровень не выше review; не ручная стратегия → ставка/бюджет не на change;
+                     действие для человека (app/audit/present.py, как его отдаёт API; стратегия в продукте неизвестна)
+                     на неизвестной / не ручной стратегии — не «только ставка», и форма есть в контракте;
   not_enough_data  — ожидаемое «недостаточно данных» не выдано;
   exposure         — итог exposure_total@1 по выводам кейса (строки уровней campaign и placement из снимка) вне
                      границ max(карточка) ≤ total ≤ Σ карточек (ECONOMICS §3.5) или не равен ожидаемому exposure_total.
@@ -54,6 +56,7 @@ from typing import Callable
 
 from app.audit.exposure import ExposureFinding, StatUnit, exposure_total
 from app.audit.policy import LEVELS, decide
+from app.audit.present import present_action
 from app.audit.values import to_value
 from app.rules import RULES
 from app.rules.domain import (BID_OR_BUDGET_ACTIONS, AuditSettings, CampaignDay, Finding, NotEnoughData, PlacementDay,
@@ -196,6 +199,7 @@ class Outcome:
     exposure: Decimal
     can_save: str  # recoverable: сумма строкой или "unavailable"
     partial: bool  # хотя бы одно число вывода — за дни, которые ещё досчитываются
+    shown: dict | str  # действие, которое увидит человек (форма API §5), или текст ошибки формы
     card: ExposureFinding  # вход exposure_total@1: lost как Value и декларированная основа
 
     @property
@@ -219,10 +223,15 @@ def evaluate(case: Case) -> tuple[list[Outcome], list[NotEnoughData]]:
                       for f in (out.lost, *out.evidence.values())]
             card = ExposureFinding(ACCOUNT_ID, out.issue_type, out.object_type, out.object_id, values[0],
                                    out.exposure_basis)
+            try:
+                shown = present_action(_json(dict(out.action)), d.level, out.issue_type,
+                                       {k: str(v) for k, v in out.evidence_meta.items()})
+            except (ValueError, KeyError) as e:
+                shown = f"{type(e).__name__}: {e}"
             findings.append(Outcome(out.rule_version, out.object_type, out.object_id, d.candidate_level, d.level,
                                     _json(dict(out.action)), values[0].amount,
                                     "unavailable" if out.recoverable.amount is None else str(out.recoverable.amount),
-                                    any(v.data_status == "partial" for v in values), card))
+                                    any(v.data_status == "partial" for v in values), shown, card))
     return findings, skipped
 
 
@@ -261,6 +270,10 @@ def gate(case: Case) -> list[tuple[str, str]]:
         if (strategies.get(o.object_id, "unknown") != "manual" and o.action["type"] in BID_OR_BUDGET_ACTIONS
                 and o.action_level == "change"):
             violations.append(("invariant", f"{o.key}: ставка/бюджет на change без ручной стратегии"))
+        if isinstance(o.shown, str):
+            violations.append(("invariant", f"{o.key}: действие не в форме контракта: {o.shown}"))
+        elif strategies.get(o.object_id, "unknown") != "manual" and o.shown["type"] in BID_OR_BUDGET_ACTIONS:
+            violations.append(("invariant", f"{o.key}: человеку — только ставка без ручной стратегии"))
     violations += _exposure_violations(case, findings)
     got_skipped = {(s.rule_version, s.reason.value, s.object_type, s.object_id) for s in skipped}
     for e in case.data.get("expected_not_enough_data", []):

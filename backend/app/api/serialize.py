@@ -1,15 +1,15 @@
 """Представление для клиента (API_CONTRACT.md §1–2, §5): идентификаторы — строки с префиксом, деньги — строки-числа,
 Value — без snapshot_id и с period вместо period_from/period_to. Числа не пересчитываются: как сохранил аудит."""
 
+import logging
 from datetime import datetime
 from decimal import Decimal
 
+from app.api.active import Card
+from app.audit.present import present_action, title
 from app.contract import Value
-from app.rules.zero_conv_campaign import CHECKS
 
-CENT = Decimal("0.01")
-# Действия трёх правил v1.0 (API_CONTRACT.md §5). Что человек делает в кабинете сам: execution всегда manual.
-SUGGESTIONS = ("set_target_cpa",)
+log = logging.getLogger("app.api")
 
 
 def ext(prefix: str, value: int) -> str:
@@ -35,50 +35,33 @@ def value_of(v: Value) -> dict:
             "formula": v.formula, "rule_version": v.rule_version, "unavailable_reason": v.unavailable_reason}
 
 
-def _suggest(raw: dict) -> str | None:
-    s = raw.get("suggest")
-    if s is not None and s not in SUGGESTIONS:
-        raise ValueError(f"action.suggest: {s!r} вне контракта")
-    return s
+def action(raw: dict, meta: dict, level: str, topic: str) -> dict | None:
+    """Действие для человека, согласованное с уровнем политики (app/audit/present.py, API_CONTRACT §5). Сохранённая
+    форма, которую код больше не понимает (старая версия правила, повреждённая запись), не роняет весь список:
+    у карточки action = null, в лог — предупреждение с id вывода вызывающего."""
+    try:
+        return present_action(raw, level, topic, meta)
+    except (ValueError, KeyError, TypeError, ArithmeticError) as e:
+        log.warning("action outside contract: %s (%s)", type(e).__name__, e)
+        return None
 
 
-def action(raw: dict, meta: dict) -> dict:
-    """findings.action (+ evidence_meta для имён площадок) → ровно одна из четырёх форм §5. Тип или параметры вне
-    контракта — ошибка сервера, а не молча отданная клиенту незнакомая форма."""
-    kind = raw.get("type")
-    if kind == "decrease_bid":
-        pct = Decimal(str(raw["change_pct"]))
-        if not pct < 0:
-            raise ValueError("decrease_bid: change_pct < 0")
-        return {"type": kind, "execution": "manual", "change_pct": format(pct.quantize(CENT), "f")}
-    if kind == "investigate_zero_conversions":
-        checks = list(raw["check"])
-        if not checks or any(c not in CHECKS for c in checks):
-            raise ValueError(f"investigate_zero_conversions: checks вне контракта: {checks!r}")
-        return {"type": kind, "execution": "manual", "checks": checks, "suggest": _suggest(raw)}
-    if kind == "investigate_cpa_growth":
-        return {"type": kind, "execution": "manual", "suggest": _suggest(raw)}
-    if kind == "exclude_placements":
-        ids = [int(pid) for pid in raw["placement_ids"]]
-        if not ids or raw.get("execution", "manual") != "manual":
-            raise ValueError("exclude_placements: нужны площадки, исполнение только ручное")
-        # Имя — нормализованный домен или id приложения (sync/sanitize.py), не ПД: человек исключает площадку по
-        # нему в Директе. Нет имени (маска «***», нет справочника) — null, UI пишет «имя недоступно».
-        return {"type": kind, "execution": "manual", "placements_count": len(ids),
-                "placements": [{"id": str(pid), "name": meta.get(f"placement_{pid}_name")} for pid in ids]}
-    raise ValueError(f"action.type {kind!r} вне контракта v1.0")
-
-
-def recommendation_item(rec: int, finding: int, account_id: int, login: str | None, object_type: str, object_id: int,
-                        action_level: str, lost: dict, recoverable: dict, created_at: datetime,
-                        updated_at: datetime, *, computed_at: datetime, action_raw: dict, meta: dict) -> dict:
-    """RecommendationListItem (API_CONTRACT.md §5) — только поля, которые уже есть в схеме. computed_at — когда
-    посчитана текущая версия (findings.created_at)."""
-    return {"id": ext("rec", rec), "version_id": ext("rv", finding),
-            "ad_account": {"id": ext("acc", account_id), "login": login},
-            "object": {"type": object_type, "id": str(object_id)},
-            "action_level": action_level, "action": action(action_raw, meta),
-            "exposure": value(lost), "can_save": value(recoverable),
-            "data_status": lost["data_status"],
-            "period": {"from": lost["period_from"], "to": lost["period_to"]},
-            "computed_at": moment(computed_at), "created_at": moment(created_at), "updated_at": moment(updated_at)}
+def recommendation_item(card: Card, overlap: Value) -> dict:
+    """RecommendationListItem (API_CONTRACT.md §5). computed_at — когда посчитана текущая версия (findings.created_at);
+    exposure_overlap — часть exposure, уже учтённая другой карточкой (exposure_total@1, разложение по карточкам)."""
+    act = action(card.action_raw, card.meta, card.action_level, card.issue_type)
+    if act is None:
+        log.warning("recommendation %s, finding %s: action = null", card.rec_id, card.finding_id)
+    return {"id": ext("rec", card.rec_id), "version_id": ext("rv", card.finding_id),
+            "title": title(card.issue_type, card.object_type, card.object_id, card.meta,
+                           insufficient=card.insufficient),
+            "ad_account": {"id": ext("acc", card.account_id), "login": card.login},
+            "object": {"type": card.object_type, "id": str(card.object_id), "name": None},
+            "status": card.status, "execution_mode": None, "verification_status": None,
+            "action_level": card.action_level, "action": act,
+            "exposure": value_of(card.lost), "exposure_overlap": value_of(overlap),
+            "can_save": value_of(card.recoverable),
+            "data_status": card.lost.data_status, "data_sufficiency": card.lost.data_sufficiency,
+            "period": {"from": card.lost.period_from.isoformat(), "to": card.lost.period_to.isoformat()},
+            "computed_at": moment(card.computed_at), "created_at": moment(card.created_at),
+            "updated_at": moment(card.updated_at)}
