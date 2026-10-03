@@ -24,6 +24,10 @@ spend_threshold = max(cpa_multiple × CPA-ориентир, min_cost_rub). CPA-�
 знает стратегию кампании (в мире автостратегий ставку вручную не меняют), поэтому рычаги — проверка учёта целей и
 конверсий, стратегии / цели CPA, поисковых запросов и минус-фраз. Ставку и бюджет правило не предлагает никогда.
 
+Досчёт конверсий (partial): дни date ≥ partial_from — не настоящие нули, конверсии за них ещё приходят. Если порог
+объёма достигается только с учётом этих дней (или partial_from неизвестен) — вывод остаётся, но достаточность данных
+не выше medium и evidence_meta.level_reason = conversions_partial (lost за окно с такими днями — data_status partial).
+
 Недостаточно данных: расход > 0 и 0 конверсий, но объём ниже порога → NotEnoughData(VOLUME_INSUFFICIENT) — открытая
 проблема не «исчезает» от того, что расход упал ниже порога. Конверсии неизвестны (None) хотя бы за один день окна →
 NotEnoughData(SOURCE_MISSING): ноль конверсий не выводится из их отсутствия. Расход 0 или есть конверсии → ничего.
@@ -99,7 +103,10 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings, 
     if cost < threshold or clicks < p["min_clicks"]:
         return NotEnoughData(rule.rule_version, Reason.VOLUME_INSUFFICIENT, "campaign", campaign_id)
 
-    high = (ref_cpa is not None and cost >= p["high_cpa_multiple"] * ref_cpa and clicks >= p["high_clicks"])
+    complete = [d for d in days if d.date in evaluation and snap.partial_from is not None and d.date < snap.partial_from]
+    solid = (sum((d.cost for d in complete), Decimal(0)) >= threshold
+             and sum(d.clicks for d in complete) >= p["min_clicks"])
+    high = (solid and ref_cpa is not None and cost >= p["high_cpa_multiple"] * ref_cpa and clicks >= p["high_clicks"])
     evidence = {
         "cost": Fact(cost, "rub", "yandex_direct", evaluation),
         "clicks": Fact(Decimal(clicks), "count", "yandex_direct", evaluation),
@@ -121,7 +128,9 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings, 
         delta_pct=((cost - threshold) / threshold * 100).quantize(Decimal("0.1"), ROUND_HALF_UP),
         lost=lost, recoverable=Fact.unavailable("rub", DM, evaluation, reason="no_forecast"),
         current_data_quality="high" if high else "medium",
-        evidence=frozen(evidence), evidence_meta=frozen({"reference_source": ref_source}), action=frozen(action),
+        evidence=frozen(evidence), action=frozen(action),
+        evidence_meta=frozen({"reference_source": ref_source,
+                              **({} if solid else {"level_reason": "conversions_partial"})}),
         exposure_basis=SPEND_CAMPAIGN,
     )
 

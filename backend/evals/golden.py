@@ -29,7 +29,8 @@
   "expected": [{                                          // ровно эти выводы, не больше и не меньше
     "rule_version": "zero_conv_campaign@1", "object_type": "campaign", "object_id": 101,
     "candidate_level": "inspect_only", "action_level": "inspect_only",
-    "action": {"type": "investigate_zero_conversions", ...}, "exposure": "42000.00"
+    "action": {"type": "investigate_zero_conversions", ...}, "exposure": "42000.00",
+    "can_save": "unavailable"                             // необязательно: «Можно сэкономить» — сумма или unavailable
   }],
   "expected_not_enough_data": [{"rule_version": "...", "reason": "...", "object_type": "campaign", "object_id": 101}]
 }                                                         // необязательно: эти «недостаточно данных» должны быть
@@ -39,6 +40,8 @@
   level_raised     — уровень действия выше ожидаемого;
   false_positive   — вывод, которого нет в ожидаемых (на «чистом» кейсе — любой вывод);
   invariant        — данные partial → уровень не выше review; не ручная стратегия → ставка/бюджет не на change;
+                     действие для человека (app/audit/present.py, как его отдаёт API; стратегия в продукте неизвестна)
+                     на неизвестной / не ручной стратегии — не «только ставка», и форма есть в контракте;
   not_enough_data  — ожидаемое «недостаточно данных» не выдано;
   exposure         — итог exposure_total@1 по выводам кейса (строки уровней campaign и placement из снимка) вне
                      границ max(карточка) ≤ total ≤ Σ карточек (ECONOMICS §3.5) или не равен ожидаемому exposure_total.
@@ -53,6 +56,7 @@ from typing import Callable
 
 from app.audit.exposure import ExposureFinding, StatUnit, exposure_total
 from app.audit.policy import LEVELS, decide
+from app.audit.present import present_action
 from app.audit.values import to_value
 from app.rules import RULES
 from app.rules.domain import (BID_OR_BUDGET_ACTIONS, AuditSettings, CampaignDay, Finding, NotEnoughData, PlacementDay,
@@ -69,7 +73,9 @@ _SNAPSHOT_KEYS = {"period_to", "history_days", "partial_from", "sources"}
 _CAMPAIGN_KEYS = {"id", "strategy", "history_days", "days"}
 _DAY_KEYS = {"date", "cost", "clicks", "conversions"}
 _PLACEMENT_KEYS = {"campaign_id", "id", "masked", "days"}
-_EXPECTED_KEYS = {"rule_version", "object_type", "object_id", "candidate_level", "action_level", "action", "exposure"}
+_REQUIRED_EXPECTED = {"rule_version", "object_type", "object_id", "candidate_level", "action_level", "action",
+                      "exposure"}
+_EXPECTED_KEYS = _REQUIRED_EXPECTED | {"can_save"}
 _NED_KEYS = {"rule_version", "reason", "object_type", "object_id"}
 TAGS = {"problem", "clean", "boundary", "partial", "autostrategy", "not_enough_data"}
 
@@ -168,7 +174,7 @@ def load_cases(root: Path = CASES_DIR) -> list[Case]:
         if "clean" in data.get("tags", ()) and data["expected"]:
             raise ValueError(f"{name}: у «чистого» кейса не может быть ожидаемых выводов")
         for e in data["expected"]:
-            _keys(e, _EXPECTED_KEYS, f"{name}: expected", _EXPECTED_KEYS)
+            _keys(e, _EXPECTED_KEYS, f"{name}: expected", _REQUIRED_EXPECTED)
         for e in data.get("expected_not_enough_data", []):
             _keys(e, _NED_KEYS, f"{name}: expected_not_enough_data", {"rule_version", "reason"})
         cases.append(Case(name, data))
@@ -191,7 +197,9 @@ class Outcome:
     action_level: str
     action: dict
     exposure: Decimal
+    can_save: str  # recoverable: сумма строкой или "unavailable"
     partial: bool  # хотя бы одно число вывода — за дни, которые ещё досчитываются
+    shown: dict | str  # действие, которое увидит человек (форма API §5), или текст ошибки формы
     card: ExposureFinding  # вход exposure_total@1: lost как Value и декларированная основа
 
     @property
@@ -215,9 +223,15 @@ def evaluate(case: Case) -> tuple[list[Outcome], list[NotEnoughData]]:
                       for f in (out.lost, *out.evidence.values())]
             card = ExposureFinding(ACCOUNT_ID, out.issue_type, out.object_type, out.object_id, values[0],
                                    out.exposure_basis)
+            try:
+                shown = present_action(_json(dict(out.action)), d.level, out.issue_type,
+                                       {k: str(v) for k, v in out.evidence_meta.items()})
+            except (ValueError, KeyError) as e:
+                shown = f"{type(e).__name__}: {e}"
             findings.append(Outcome(out.rule_version, out.object_type, out.object_id, d.candidate_level, d.level,
                                     _json(dict(out.action)), values[0].amount,
-                                    any(v.data_status == "partial" for v in values), card))
+                                    "unavailable" if out.recoverable.amount is None else str(out.recoverable.amount),
+                                    any(v.data_status == "partial" for v in values), shown, card))
     return findings, skipped
 
 
@@ -244,6 +258,8 @@ def gate(case: Case) -> list[tuple[str, str]]:
                                 ("exposure", o.exposure, Decimal(e["exposure"]))):
             if got != want:
                 violations.append(("regression", f"{key}: {name} {want!r} → {got!r}"))
+        if "can_save" in e and o.can_save != e["can_save"]:
+            violations.append(("regression", f"{key}: can_save {e['can_save']!r} → {o.can_save!r}"))
     for key in actual.keys() - expected.keys():
         violations.append(("false_positive", f"{key}: лишний вывод" + (" на чистом кейсе" if "clean" in case.tags
                                                                          else "")))
@@ -254,6 +270,10 @@ def gate(case: Case) -> list[tuple[str, str]]:
         if (strategies.get(o.object_id, "unknown") != "manual" and o.action["type"] in BID_OR_BUDGET_ACTIONS
                 and o.action_level == "change"):
             violations.append(("invariant", f"{o.key}: ставка/бюджет на change без ручной стратегии"))
+        if isinstance(o.shown, str):
+            violations.append(("invariant", f"{o.key}: действие не в форме контракта: {o.shown}"))
+        elif strategies.get(o.object_id, "unknown") != "manual" and o.shown["type"] in BID_OR_BUDGET_ACTIONS:
+            violations.append(("invariant", f"{o.key}: человеку — только ставка без ручной стратегии"))
     violations += _exposure_violations(case, findings)
     got_skipped = {(s.rule_version, s.reason.value, s.object_type, s.object_id) for s in skipped}
     for e in case.data.get("expected_not_enough_data", []):

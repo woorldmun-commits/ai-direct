@@ -20,7 +20,7 @@ from app.sync.metrika_parse import GoalRow, parse_bytime
 from app.sync.parse import FormatError, ReportFormatError
 from app.sync.snapshot import Snapshot, SyncFailure, sync_account, sync_metrika, to_view, with_metrika
 from app.sync.store import load_view, write_snapshot
-from test_direct_sync import FROM, GOALS, TO, campaign_tsv, root  # noqa: F401 — root: фикстура
+from test_direct_sync import CAMPAIGN_RULES, FROM, GOALS, TO, campaign_tsv, root  # noqa: F401 — root: фикстура
 from test_schema import chain, one  # noqa: F401 — chain: фикстура
 from test_snapshot_store import DATA_UNTIL, sync_run
 
@@ -174,7 +174,7 @@ def direct_and_metrika(root, metrika, **counter) -> Snapshot:
 
 
 def audit(view):
-    return tuple(out for rule in RULES for out in run(rule, view, AuditSettings()))
+    return tuple(out for rule in CAMPAIGN_RULES for out in run(rule, view, AuditSettings()))
 
 
 METRIKA_RULE = Rule("site_goal_health", 1, "site_goal_health", frozenset({"yandex_metrika"}), {},

@@ -14,7 +14,7 @@ from app.audit.policy import decide
 from app.audit.templates import explain
 from app.audit.values import to_value
 from app.contract import Value
-from app.rules.domain import (DIRECT_CONVERSIONS, AuditSettings, CampaignDay, ExposureBasis, NotEnoughData,
+from app.rules.domain import (DIRECT_CONVERSIONS, DIRECT_PLACEMENTS, AuditSettings, CampaignDay, ExposureBasis, NotEnoughData,
                               PlacementDay, Reason, SnapshotView, run)
 from app.rules.zero_conv_placements import ZERO_CONV_PLACEMENTS as RULE
 from app.sync.parse import placement_id
@@ -23,7 +23,7 @@ TO = date(2026, 9, 30)
 PARTIAL = TO - timedelta(2)
 DONE = TO - timedelta(4)  # завершённый день внутри окна оценки (24–30.09)
 CID = 101
-SOURCES = frozenset({"yandex_direct", DIRECT_CONVERSIONS})
+SOURCES = frozenset({"yandex_direct", DIRECT_CONVERSIONS, DIRECT_PLACEMENTS})
 
 
 def cday(cid, day, cost, clicks, conv) -> CampaignDay:
@@ -48,6 +48,11 @@ def evaluate(placements, settings=AuditSettings(), campaign=CAMPAIGN, **kw):
     return run(RULE, view(campaign, placements, **kw), settings)
 
 
+def ned(reason=Reason.VOLUME_INSUFFICIENT, cid=CID):
+    """«Недостаточно данных» по кампании: площадки без конверсий есть, но вывода по ним сделать нельзя."""
+    return (NotEnoughData("zero_conv_placements@1", reason, "campaign", cid),)
+
+
 # --- Пороги на границах ---------------------------------------------------------------------------------
 
 @pytest.mark.parametrize("cost, clicks, flagged", [
@@ -57,16 +62,17 @@ def evaluate(placements, settings=AuditSettings(), campaign=CAMPAIGN, **kw):
 ])
 def test_thresholds_are_inclusive(cost, clicks, flagged):
     out = evaluate([pday(CID, "a.ru", DONE, cost, clicks, "0")])
-    assert bool(out) is flagged
-    if flagged:
-        (f,) = out
-        assert f.lost.amount == Decimal(cost) and f.reference == Decimal("1500.00")
+    if not flagged:
+        assert out == ned()  # ниже порога — не «проблема ушла», а «недостаточно данных»
+        return
+    (f,) = out
+    assert f.lost.amount == Decimal(cost) and f.reference == Decimal("1500.00")
 
 
 def test_thresholds_sum_days_inside_window_only():
     """Расход до окна оценки в порог не входит; конверсия до окна — входит (площадка уже конвертировала)."""
     before = TO - timedelta(10)
-    assert evaluate([pday(CID, "a.ru", before, "5000.00", 100, "0"), pday(CID, "a.ru", DONE, "10.00", 1, "0")]) == ()
+    assert evaluate([pday(CID, "a.ru", before, "5000.00", 100, "0"), pday(CID, "a.ru", DONE, "10.00", 1, "0")]) == ned()
     two_days = [pday(CID, "a.ru", DONE, "800.00", 10, "0"), pday(CID, "a.ru", DONE - timedelta(1), "700.00", 10, "0")]
     (f,) = evaluate(two_days)
     assert f.lost.amount == Decimal("1500.00")
@@ -93,7 +99,7 @@ def test_target_cpa_is_reference_when_set():
     assert (f.reference, f.reference_type, f.evidence_meta["reference_mode"]) == (Decimal(1000), "target", "target")
     assert f.evidence["reference_cpa"].source == "user_input" and f.lost.source.endswith("+user_input")
     # без цели тот же расход ниже CPA кампании (1500) — вывода нет
-    assert evaluate([pday(CID, "a.ru", DONE, "1000.00", 30, "0")]) == ()
+    assert evaluate([pday(CID, "a.ru", DONE, "1000.00", 30, "0")]) == ned()
 
 
 @pytest.mark.parametrize("conversions, reason", [
@@ -110,6 +116,19 @@ def test_without_conversion_source_rule_is_not_computed():
     out = run(RULE, view(CAMPAIGN, [pday(CID, "a.ru", DONE, "9000.00", 100, None)], sources={"yandex_direct"}),
               AuditSettings())
     assert out == (NotEnoughData("zero_conv_placements@1", Reason.SOURCE_MISSING),)
+
+
+def test_without_placements_report_rule_is_not_computed():
+    """Отчёта площадок в снимке нет: площадок «нет» не потому, что их проверили, — правило не вычисляется."""
+    out = run(RULE, view(CAMPAIGN, [], sources={"yandex_direct", DIRECT_CONVERSIONS}), AuditSettings())
+    assert out == (NotEnoughData("zero_conv_placements@1", Reason.SOURCE_MISSING),)
+
+
+def test_unknown_placement_conversions_are_source_missing():
+    assert evaluate([pday(CID, "a.ru", DONE, "9000.00", 100, None)]) == ned(Reason.SOURCE_MISSING)
+    # проходящая площадка всё равно в выводе, неизвестная — нет
+    (f,) = evaluate([pday(CID, "a.ru", DONE, "9000.00", 100, None), pday(CID, "b.ru", DONE, "9000.00", 100, "0")])
+    assert f.action["placement_ids"] == (placement_id("b.ru"),)
 
 
 # --- Досчёт конверсий -----------------------------------------------------------------------------------
@@ -159,8 +178,8 @@ def test_one_finding_per_campaign_with_placements_in_evidence():
     assert sum(x.amount for x in per_placement) == f1.lost.amount == f1.evidence["cost"].amount == Decimal("4600.00")
     assert {(x.period.date_from, x.period.date_to) for x in per_placement} == {(TO - timedelta(6), TO)}
     assert f1.evidence["placements"].amount == 2 and f1.evidence["conversions"].amount == 0
-    assert (f1.lost.calculation_type, f1.recoverable.calculation_type) == ("estimated", "estimated")
-    assert f1.lost.formula and f1.recoverable.formula and f1.lost.formula != f1.recoverable.formula
+    assert (f1.lost.calculation_type, f1.recoverable.calculation_type) == ("estimated", "unavailable")
+    assert f1.lost.formula
 
 
 def test_issue_key_is_campaign_level_and_stable_across_placement_sets():
@@ -198,10 +217,12 @@ def test_exposure_basis_is_declared_placement_spend():
     assert set(ids) == set(f.action["placement_ids"])
 
 
-def test_recoverable_is_marked_as_upper_bound():
+def test_recoverable_is_unavailable_not_a_copy_of_exposure():
+    """Модели перераспределения бюджета после исключения площадок в v1.0 нет: «Можно сэкономить» — unavailable."""
     (f,) = evaluate([pday(CID, "a.ru", DONE, "1600.00", 30, "0")])
-    assert f.recoverable.amount == f.lost.amount and f.recoverable.calculation_type == "estimated"
-    assert f.recoverable.formula.startswith("upper bound") and "not reallocated" in f.recoverable.formula
+    assert (f.recoverable.amount, f.recoverable.calculation_type, f.recoverable.reason) == (
+        None, "unavailable", "no_forecast")
+    assert f.recoverable.unit == "rub" and f.recoverable.period == f.lost.period
 
 
 # --- Объяснение (шаблон, без LLM) -----------------------------------------------------------------------
@@ -212,7 +233,7 @@ def test_template_uses_only_finding_numbers_and_names():
     assert "площадок РСЯ без конверсий: 2" in text and "4 600 ₽" in text and "150 кликов" in text
     assert "1 500 ₽" in text and "CPA кампании" in text and "a.ru, f.ru" in text
     assert "отклонение" not in text and "0%" not in text and "%" not in text
-    assert "исключите" in text and "верхняя оценка" in text  # review: исключить вручную
+    assert "исключите" in text and "верхняя оценка" not in text  # review: исключить вручную; прогноза нет
     numbers = {n.strip() for n in re.findall(r"[0-9][0-9 ]*", text)}
     assert numbers <= {str(CID), "2", "4 600", "150", "1 500"}  # объект, число площадок, расход, клики, ориентир
 

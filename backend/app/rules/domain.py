@@ -23,6 +23,9 @@ HISTORY_DAYS = EVALUATION_DAYS + BASELINE_DAYS  # 37: столько грузи�
 # Не API-источник, а возможность: в отчёте Директа есть конверсии Метрики по кампаниям. Её требуют CPA-правила —
 # отказ отдельного API Метрики не выключает CPA, если Директ конверсии отдал.
 DIRECT_CONVERSIONS = "direct_conversions"
+# Возможность «в снимке есть отчёт площадок РСЯ» (синхронизация запросила его и он пришёл). Без неё площадок в
+# снимке нет не потому, что нет расхода в сетях, а потому, что их не смотрели: правило площадок не вычисляется.
+DIRECT_PLACEMENTS = "direct_placements"
 
 BID_OR_BUDGET_ACTIONS = frozenset({"decrease_bid", "increase_bid", "change_budget", "pause"})
 

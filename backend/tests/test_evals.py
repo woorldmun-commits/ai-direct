@@ -82,6 +82,32 @@ def test_gate_detects_missing_finding():
     assert _categories(case) == {"regression"}
 
 
+def test_gate_detects_changed_can_save():
+    """«Можно сэкономить» площадок — unavailable (нет модели перераспределения бюджета); копия exposure — регрессия."""
+    case = _mutated("zero_conv_placements/overlap_zero_conv_campaign",
+                    lambda d: [e.update(can_save="8000.00") for e in d["expected"] if "can_save" in e])
+    assert _categories(case) == {"regression"}
+
+
+def test_gate_detects_bid_only_action_without_manual_strategy(monkeypatch):
+    """Гейт: если показ действия выдал бы «только ставку» при неизвестной стратегии — нарушение инварианта."""
+    def bid_only(raw, level, topic, meta, strategy="unknown"):
+        return {"type": "decrease_bid", "change_pct": "-15.00", "execution": "manual"}
+    monkeypatch.setattr(golden, "present_action", bid_only)
+    assert "invariant" in _categories(BY_NAME["high_cpa/target_autostrategy"])
+
+
+def test_every_shown_action_is_policy_consistent():
+    """На всём наборе: inspect_only — только «проверить»; decrease_bid без ручной стратегии — рычаги, не ставка."""
+    for case in CASES:
+        for o in golden.evaluate(case)[0]:
+            assert isinstance(o.shown, dict), (case.name, o.shown)
+            if o.action_level == "inspect_only":
+                assert o.shown["type"] == "investigate", case.name
+            if o.action["type"] == "decrease_bid" and o.action_level != "inspect_only":
+                assert o.shown["type"] == "lower_cpa", case.name
+
+
 def test_gate_detects_false_positive_on_clean_case():
     case = _mutated("zero_conv_campaign/clean_account",
                     lambda d: d["snapshot"]["campaigns"][1]["days"][0].update(conversions="0", cost="20000", clicks=60))

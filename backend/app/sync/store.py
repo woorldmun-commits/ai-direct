@@ -53,15 +53,17 @@ def _store_queries(conn: psycopg.Connection, workspace_id: int, last_seen: dict[
     return ids
 
 
-def _store_placement_names(conn: psycopg.Connection, rows) -> None:
-    """Справочник имён площадок (placement_names, глобальный): id = хэш имени, имя — нормализованный домен/приложение,
-    не ПД. Только добавление: ON CONFLICT DO NOTHING — имя по id не меняется. Порядок вставки — по id, как у
-    запросов: параллельные синхронизации не упираются в deadlock. Маска «***» не пишется."""
+def _store_placement_names(conn: psycopg.Connection, workspace_id: int, rows) -> None:
+    """Справочник имён площадок своего workspace (placement_names, под RLS): id = хэш имени, имя — нормализованный
+    домен/приложение, не ПД. Только добавление: ON CONFLICT DO NOTHING — имя по id не меняется. Порядок вставки —
+    по id, как у запросов: параллельные синхронизации не упираются в deadlock. Маска «***» не пишется."""
     names = sorted({placement_id(r.placement): r.placement for r in rows
                     if isinstance(r, PlacementRow) and r.placement != MASK}.items())
     if names:
         with conn.cursor() as cur:
-            cur.executemany("INSERT INTO placement_names (id, name) VALUES (%s, %s) ON CONFLICT (id) DO NOTHING", names)
+            cur.executemany("""INSERT INTO placement_names (workspace_id, id, name) VALUES (%s, %s, %s)
+                               ON CONFLICT (workspace_id, id) DO NOTHING""",
+                            [(workspace_id, i, n) for i, n in names])
 
 
 def write_snapshot(conn: psycopg.Connection, *, sync_run_id: int, workspace_id: int, release_id: int,
@@ -90,7 +92,7 @@ def write_snapshot(conn: psycopg.Connection, *, sync_run_id: int, workspace_id: 
                 if r.query is not None:
                     last_seen[r.query] = max(r.date, last_seen.get(r.query, r.date))
             query_ids = _store_queries(conn, workspace_id, last_seen)
-            _store_placement_names(conn, snapshot.rows)
+            _store_placement_names(conn, workspace_id, snapshot.rows)
             # COPY прямо в таблицу под RLS PostgreSQL не умеет: быстрый COPY во временную таблицу транзакции,
             # затем INSERT … SELECT — он проходит политику RLS (строки только своего снимка) и триггеры stat_rows.
             conn.execute("DROP TABLE IF EXISTS pg_temp.stat_rows_load")  # второй снимок в той же внешней транзакции
@@ -150,13 +152,13 @@ def load_view(conn: psycopg.Connection, snapshot_id: int) -> SnapshotView:
     days = conn.execute("""SELECT campaign_id, date, cost, clicks, conversions FROM stat_rows
                            WHERE snapshot_id = %s AND level = 'campaign' ORDER BY campaign_id, date""",
                         (snapshot_id,)).fetchall()
-    # Имя площадки — из справочника placement_names (LEFT JOIN: нет строки — имя неизвестно, None; правило всё равно
-    # видит площадку по id). Безымянная (MASK) в справочник не пишется — её узнаём по id, чтобы правило не
-    # предложило исключить площадку, которую человек не найдёт.
+    # Имя площадки — из справочника placement_names своего workspace (LEFT JOIN: нет строки — имя неизвестно, None;
+    # правило всё равно видит площадку по id). Безымянная (MASK) в справочник не пишется — её узнаём по id, чтобы не
+    # предложить исключить площадку, которую человек не найдёт.
     placements = conn.execute("""SELECT r.campaign_id, r.object_id, r.date, r.cost, r.clicks, r.conversions, n.name
-                                 FROM stat_rows r LEFT JOIN placement_names n ON n.id = r.object_id
+                                 FROM stat_rows r LEFT JOIN placement_names n ON n.workspace_id = %s AND n.id = r.object_id
                                  WHERE r.snapshot_id = %s AND r.source = 'yandex_direct' AND r.level = 'placement'
-                                 ORDER BY r.campaign_id, r.date, r.object_id""", (snapshot_id,)).fetchall()
+                                 ORDER BY r.campaign_id, r.date, r.object_id""", (ws, snapshot_id)).fetchall()
     placement_days = tuple(PlacementDay(*p[:6], MASK if p[6] is None and p[1] == MASK_PLACEMENT_ID else p[6])
                            for p in placements)
     return SnapshotView(snapshot_id, ws, account, period_from, period_to,

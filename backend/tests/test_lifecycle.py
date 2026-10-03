@@ -129,6 +129,7 @@ def test_workspace_lifecycle(db):
     query = one(rw, """INSERT INTO search_query_texts (workspace_id, text_hash, text_sanitized)
                        VALUES (%s, %s, 'купить квартиру ***') RETURNING id""", ws, hashlib.sha256(b"q").digest())
     rw.execute("INSERT INTO search_query_sightings (query_id, seen_on) VALUES (%s, %s)", (query, D0))
+    rw.execute("INSERT INTO placement_names (workspace_id, id, name) VALUES (%s, 1, 'lifecycle-site.ru')", (ws,))
     with pytest.raises(psycopg.errors.IntegrityConstraintViolation):  # снимок complete — запечатан
         rw.execute("""INSERT INTO stat_rows (snapshot_id, source, level, object_id, campaign_id, date, clicks, cost, conversions)
                       VALUES (%s, 'yandex_direct', 'query', %s, 12345, %s, 12, 900, 0)""", (snap1, query, D0))
@@ -214,10 +215,11 @@ def test_workspace_lifecycle(db):
     rw.close()
     rw = db("app_system")  # проверка «ничего не осталось» — по всем строкам, без фильтра RLS
     assert counts["digests"] == 1 and counts["notifications"] == 1 and counts["search_query_texts"] == 1
+    assert counts["placement_names"] == 1  # имена площадок клиента удаляются вместе с его данными
     assert counts["payments_anonymized"] == 1
     # проверка: по workspace не осталось ничего, кроме обезличенного платежа и отметки бесплатного аудита
     leftovers = {t: one(rw, f"SELECT count(*) FROM {t} WHERE workspace_id = %s", ws)
-                 for t in ("snapshots", "audit_runs", "issues", "subscriptions", "search_query_texts",
+                 for t in ("snapshots", "audit_runs", "issues", "subscriptions", "search_query_texts", "placement_names",
                            "direct_connections", "metrika_connections", "sync_runs", "digests", "notifications")}
     assert leftovers == {t: 0 for t in leftovers}
     assert one(rw, "SELECT count(*) FROM workspaces WHERE id = %s", ws) == 0

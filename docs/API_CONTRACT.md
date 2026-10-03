@@ -197,66 +197,70 @@ CPA (`high_cpa`: `high_cpa_target@N` / `high_cpa_baseline@N`), площадки 
 ### `RecommendationListItem` — `GET /workspaces/{ws}/recommendations`
 
 ```json
-{"id": "rec_8f2c1", "version_id": "rv_77a01", "title": "CPA выше целевого", "ad_account": {"id": "acc_2", "login": "client-login"},
- "object": {"type": "campaign", "id": "51234567", "name": "Поиск — Москва"},
- "action_level": "change", "action": {"type": "decrease_bid", "execution": "manual", "change_pct": "-15.00"},
- "status": "requires_decision", "execution_mode": null, "verification_status": null,
- "exposure": "Value", "exposure_overlap": false, "can_save": "Value", "data_status": "complete",
- "period": {"from": "2026-09-22", "to": "2026-09-28"}, "computed_at": "2026-10-01T07:01:54+03:00",
- "created_at": "2026-09-29T07:02:11+03:00", "updated_at": "2026-10-01T07:01:54+03:00"}
+{"id": "rec_8f2c1", "version_id": "rv_77a01", "title": "CPA 4 820 ₽ выше целевого 3 000 ₽ · кампания 51234567",
+ "ad_account": {"id": "acc_2", "login": "client-login"}, "object": {"type": "campaign", "id": "51234567", "name": null},
+ "status": "new", "execution_mode": null, "verification_status": null, "action_level": "review",
+ "action": {"type": "lower_cpa", "strategy": "unknown", "execution": "manual", "levers": [
+   {"strategy": "manual", "lever": "decrease_bid", "change_pct": "-15.00"},
+   {"strategy": "auto", "lever": "lower_target_cpa", "change_pct": null},
+   {"strategy": "auto", "lever": "check_conversion_goals", "change_pct": null}]},
+ "exposure": "Value", "exposure_overlap": "Value", "can_save": "Value", "data_status": "complete",
+ "data_sufficiency": "sufficient", "period": {"from": "2026-09-22", "to": "2026-09-28"},
+ "computed_at": "2026-10-01T07:01:54+03:00", "created_at": "2026-09-29T07:02:11+03:00", "updated_at": "…"}
 ```
 
-`filter`: `all` · `new` · `requires_decision` · `accepted` · `done` (`applied`) · `postponed` · `rejected`; по
-умолчанию `requires_decision` + `new` + `accepted`. Плюс `ad_account` (id кабинета), `limit` (1–100, по умолчанию 50),
-`cursor`. Ответ: `{"items": [...], "next_cursor": "…" | null}`. Порядок задаёт бэкенд: активные сначала, внутри — по
-`exposure.amount` по убыванию, `unavailable` — в конце. Поля `severity` нет. `computed_at` — когда посчитана
-текущая версия (`version_id`): «данные на …» карточки.
+**v1.0 отдаёт только активные** (`app/api/active.py`, то же определение у «Сегодня»): проблема открыта; кабинет выбран и
+вошёл в **последний** аудит (исключённый из него — ни в списке, ни в итоге, ни в счётчиках); текущий вывод — из этого
+аудита или аудит удержал проблему «недостаточно данных» (`data_sufficiency = insufficient`; `exposure`, `can_save`,
+`exposure_overlap` — `unavailable` с причиной; `action_level = inspect_only`; в итог не входит — `coverage.unavailable`);
+нет решения человека (`postponed` — до `until`). `filter` по статусам — неделя 4. Параметры: `ad_account`, `limit`
+(1–100, по умолчанию 50), `cursor`. Ответ: `{"items": [...], "next_cursor": "…" | null}`. Порядок — по `exposure.amount` по убыванию, `unavailable` — в конце. `computed_at` — когда посчитана текущая версия.
 
 ### `Recommendation` (паспорт) — `GET /workspaces/{ws}/recommendations/{id}`
 
 ```json
-{
-  "id": "rec_8f2c1", "version_id": "rv_77a01", "title": "CPA выше целевого", "ad_account": {"id": "acc_2", "login": "client-login"},
-  "object": {"type": "campaign", "id": "51234567", "name": "Поиск — Москва"},
-  "status": "requires_decision", "postponed_until": null, "action_level": "change",
-  "allowed_actions": ["accept", "mark_done_manually", "postpone", "reject"], "blocked_actions": [],
-  "exposure": "Value", "exposure_overlap": false, "can_save": "Value",
-  "explanation": {"text": "CPA кампании — 2 500 ₽, это на 25% выше целевого…", "source": "template"},
-  "action": {"type": "decrease_bid", "execution": "manual", "change_pct": "-15.00"},
-  "evidence": {"facts": {"cost": "Value", "conversions": "Value", "cpa": "Value", "cpc": "Value", "cvr": "Value"},
-               "meta": {"baseline_data_quality": "high"}, "rule_version": "high_cpa_target@1"},
-  "safety": {"safety_policy": "safety_policy@2", "candidate_level": "change", "policy_reasons": [], "data_status": "complete"},
-  "limitations": ["strategy_unknown"],
-  "execution": {"execution_mode": null, "verification_status": null, "accepted_at": null, "done_at": null,
-                "before_state": null, "verification_checked_at": null},
-  "decision": null,
-  "measurement": null, "history": [{"event": "created", "at": "2026-09-29T07:02:11+03:00", "actor": "system"}],
-  "computed_at": "2026-10-01T07:01:54+03:00", "created_at": "2026-09-29T07:02:11+03:00"
-}
+{"id": "rec_8f2c1", "version_id": "rv_77a01", "title": "…", "ad_account": {…}, "object": {…}, "status": "new",
+ "postponed_until": null, "action_level": "review", "allowed_actions": ["accept", "mark_done_manually", "postpone",
+ "reject"], "blocked_actions": [], "exposure": "Value", "exposure_overlap": "Value", "can_save": "Value",
+ "explanation": {"text": "CPA кампании — 2 500 ₽, это на 25% выше целевого…", "source": "template"},
+ "action": "как в списке", "candidate_action": {"type": "decrease_bid", "change_pct": -15},
+ "evidence": {"facts": {"cost": "Value", "conversions": "Value", "cpa": "Value"}, "meta": {}, "rule_version": "…"},
+ "safety": {"safety_policy": "safety_policy@1", "candidate_level": "change", "policy_reasons": ["strategy_unknown"],
+            "data_status": "complete"}, "limitations": ["strategy_unknown"],
+ "execution": {"execution_mode": null, "verification_status": null, "accepted_at": null, "done_at": null,
+               "before_state": null, "verification_checked_at": null}, "decision": null, "measurement": null,
+ "history": [{"event": "created", "at": "…", "actor": "system"}], "computed_at": "…", "created_at": "…"}
 ```
 
+- `candidate_action` — кандидат правила как есть (только для «Откуда это число?»); человеку показывается `action`.
 - **Паспорт** (PRD §5, «Почему AdPilot так решил»): проблема — `title`, `ad_account`, `object`; данные —
   `evidence.facts`; период и источник — в каждом `Value`; расчёт — `formula`; причина — `explanation`; что изменить
   вручную — `action`; эффект — `can_save`; ограничения — `limitations`; безопасность — `safety`; решение и результат —
   `decision`, `history`, `execution`, `measurement`.
-- `exposure` (UI «Расход с признаками неэффективности ≈») — всегда `estimated`; в БД это `findings.lost`.
-  `exposure_overlap = true` — часть суммы уже учтена в другой карточке, в итог «Сегодня» она входит один раз
-  (ECONOMICS.md). `can_save` («Можно сэкономить ≈») — прогноз эффекта **своей формулой**; нет обоснованной формулы
-  (например, «проверить») — `unavailable`, а не копия `exposure`.
+- `title` — код из вывода (семейство + объект + ключевая цифра), не LLM. `object.name` — **nullable**: названий
+  кампаний в схеме нет — `null` (UI показывает id); в LLM имена не уходят никогда.
+- `status` v1.0 — из существующих событий: `new` · `postponed` · `rejected` · `applied`; `requires_decision` /
+  `accepted` — неделя 4. `execution_mode`, `verification_status` — **nullable**, в v1.0 всегда `null` (неделя 4).
+- `exposure` (UI «Расход с признаками неэффективности ≈») — `estimated` (или `unavailable` у удержанной); в БД —
+  `findings.lost`. `exposure_overlap` — `Value`: часть суммы карточки, уже учтённая другой карточкой (разложение
+  `exposure_total@1`), Σ (`exposure` − `exposure_overlap`) по активным = `exposure.total` «Сегодня»; `> 0` — отметка
+  «частично учтено в другой карточке». `can_save` («Можно сэкономить ≈») — своей формулой; нет обоснованной (проверить,
+  площадки РСЯ — нет модели перераспределения бюджета) — `unavailable` (`no_forecast`), не копия `exposure`.
 - `explanation.text` — готовый текст (`llm` или `template`); все числа в нём — из `evidence`, каждое утверждение
   опирается на факт (AI_GOVERNANCE.md §2). Это единственная AI-функция v1.0; общего чата нет.
-- `action` — **что человек меняет в кабинете сам** (как именно — в `explanation` и подсказке UI; кнопки «Применить»
-  нет); `execution` в v1.0 всегда `manual`. Ровно четыре формы, дискриминатор `type`:
+- `action` — **что человек делает в кабинете сам**, согласованное с `action_level` (`app/audit/present.py`), а не
+  кандидат правила (он остаётся в БД); `execution` всегда `manual`. Неизвестная/старая форма → `action: null` (лог
+  сервера), список не падает. Четыре формы, дискриминатор `type`:
 
-  | `type` | Правило | Параметры |
+  | `type` | Когда | Параметры |
   |---|---|---|
-  | `decrease_bid` | `high_cpa_target` | `change_pct` — строка-число < 0 (`"-15.00"`) |
-  | `investigate_cpa_growth` | `high_cpa_baseline` | `suggest`: `set_target_cpa` · `null` |
-  | `investigate_zero_conversions` | `zero_conv_campaign` | `checks[]`: `conversion_goals` · `strategy` · `search_queries_negative_keywords`; `suggest`: `set_target_cpa` · `null` |
-  | `exclude_placements` | `zero_conv_placements` | `placements_count`; `placements[]`: `{id, name}` |
+  | `investigate` | любой кандидат на `inspect_only` | `topic` (семейство); `checks[]`: `conversion_goals` · `strategy` · `search_queries_negative_keywords` · `network_placements`; `suggest`: `set_target_cpa` · `null`; `placements`: `[{id, name}]` (у `zero_conv_placements`) · `null` |
+  | `lower_cpa` | `decrease_bid` на `review`/`change`, стратегия не известна как ручная | `strategy`: `unknown` · `manual` · `auto`; `levers[]`: `{strategy, lever, change_pct}` — `decrease_bid` (ручные ставки, `change_pct` < 0) · `lower_target_cpa` · `check_conversion_goals` (автостратегия, `change_pct: null`) |
+  | `decrease_bid` | только известная ручная стратегия и `change` (в v1.0 не бывает: стратегия неизвестна) | `change_pct` — строка-число < 0 |
+  | `exclude_placements` | `zero_conv_placements` на `review` | `placements_count`; `placements[]`: `{id, name}` |
 
-  `placements[].id` — непрозрачный id площадки; `name` — домен сайта или id приложения после санитизации (не ПД,
-  ARCHITECTURE.md §2.4; человек исключает площадку по нему в Директе; в LLM не уходит), `null` — имя недоступно.
+  `placements[].id` — непрозрачный id площадки; `name` — домен или id приложения после санитизации (не ПД, в LLM не
+  уходит), `null` — имя недоступно.
 - `execution.before_state` — исходное состояние объекта для сверки (§6.1): `{"captured_at": "accept",
   "reliability": "normal", "read_at": "…", "parameters": {"bid": "Value"}}`. `captured_at`: `accept` · 
   `mark_done_manually`; `reliability`: `normal` · `reduced` (снято при отметке без `accept`). Не прочитано — `null`.
@@ -268,7 +272,6 @@ CPA (`high_cpa`: `high_cpa_target@N` / `high_cpa_baseline@N`), площадки 
   `postponed`, `rejected`, `recommendation_checked`, `manual_claimed`, `verification_confirmed`,
   `verification_not_confirmed`, `measured`, `measurement_skipped`). `actor`: `system` или
   `{"user_id": "u_…", "name": "…"}` — имя только участникам той же организации.
-- `object.name` — название кампании для пользователя. В LLM оно не уходит (AI_GOVERNANCE.md).
 
 ## 6. Решение — `POST /workspaces/{ws}/recommendations/{id}/actions`
 
@@ -352,8 +355,8 @@ CPA (`high_cpa`: `high_cpa_target@N` / `high_cpa_baseline@N`), площадки 
 }
 ```
 
-- `exposure` — «Расход с признаками неэффективности ≈ N ₽» по активным рекомендациям последних аудитов всех кабинетов
-  workspace, включённых в анализ. **Не сумма карточек:** `total` считает `audit/exposure.py` по объединению
+- `exposure` — «Расход с признаками неэффективности ≈ N ₽» по активным рекомендациям (§5, то же определение, что у
+  списка). **Не сумма карточек:** `total` считает `audit/exposure.py` по объединению
   затронутого расхода (ECONOMICS.md); `components` — по типам проблем, `overlap` — сколько вычтено как пересечение,
   `version` и `formula` — как посчитано. Пояснение в UI: «Оценка расходов, по которым система обнаружила признаки
   неэффективности. Одна и та же сумма учитывается в итоге только один раз». `coverage` — карточки без числа вне итога.
@@ -364,7 +367,8 @@ CPA (`high_cpa`: `high_cpa_target@N` / `high_cpa_baseline@N`), площадки 
 - `counts.active` — активные рекомендации; `top` — до 3: по уровню действия, затем exposure и уверенности.
 - `data_freshness.*`: `status` — DATA_MODEL.md §8.1 (`null` — источник не подключён), `data_to` — последний день в
   снимках, `last_success_at` — последний успешный запрос к API источника.
-- `last_audit_at = null` → аудита ещё не было: экран «Подключите Директ», без нулей и демо-цифр.
+- `last_audit_at = null` → аудита ещё не было: экран «Подключите Директ», без нулей и демо-цифр (период — сегодня МСК).
+- `data_status = partial`, если `partial` у `spent` или у exposure хоть одной активной карточки.
 
 **Появится на неделе 4 вместе с событиями v1.0** (решения §6, сверка, замер), сейчас не отдаётся: `counts` по статусам
 (`new`, `requires_decision`, `accepted`, `postponed`), `recent_actions` (`[{recommendation_id, title, event, at}]`),
@@ -408,7 +412,7 @@ CPA (`high_cpa`: `high_cpa_target@N` / `high_cpa_baseline@N`), площадки 
 ## 9. Объяснение — без общего чата
 
 AI в v1.0 — только `explanation` рекомендации (§5): утверждения → доказательства, непрозрачные ссылки вместо ID
-Яндекса (AI_GOVERNANCE.md §2). Эндпоинта вопросов к AI нет; «Спросить AI» — v1.1 (API_CONTRACT_EXECUTION.md §8).
+Яндекса (AI_GOVERNANCE.md §2). Эндпоинта вопросов к AI нет; «Спросить AI» — v1.1.
 
 ## 10. Организация, команда, роли
 
@@ -484,17 +488,13 @@ AI в v1.0 — только `explanation` рекомендации (§5): утв
 
 ## 13. Биллинг (кратко)
 
-`GET /organizations/{org}/billing` — тариф, статус подписки, дата следующего списания, лимиты и использование
-(`{"limits": {"max_workspaces": 10, "max_members": 5, …}, "usage": {…}}` — PRD §7).
-`POST …/billing/checkout`, `POST …/billing/cancel`, `POST …/billing/payment-method/refuse` — с `Idempotency-Key`.
-Отказ от способа оплаты — отдельно от отмены подписки: подписка может продолжиться с ручной оплатой, списаний с
-отозванного способа больше нет (LEGAL.md, 376-ФЗ).
+`GET /organizations/{org}/billing` — тариф, статус подписки, дата следующего списания, лимиты и использование (PRD §7).
+`POST …/billing/checkout`, `…/billing/cancel`, `…/billing/payment-method/refuse` — с `Idempotency-Key`. Отказ от способа
+оплаты — отдельно от отмены подписки: списаний с отозванного способа больше нет (LEGAL.md, 376-ФЗ).
 
 ## 14. Чего нет в v1.0
 
-- **Записи в кабинеты через API** → v1.1 ([API_CONTRACT_EXECUTION.md](API_CONTRACT_EXECUTION.md)): предпросмотр
-  «было → станет», `approve`, `apply`, `approve_and_apply`, `cancel`, `rollback`, кворум по риску (`risk_level`,
-  `required_approvals`, `approvals`, `approval_policy`), `execution_mode = api`, `execution_status`, `rollback_status`,
-  `write_access`, статусы `approved` / `failed` / `cancelled`, «Применить одним кликом».
-- **AI-чата** «Спросить AI» → v1.1 (только чтение); автономных агентов нет. Автоматизации по одобренным правилам,
-  Outcome Graph, CRM, VK Реклама → v2.0 ([VERSION_SCOPE.md](VERSION_SCOPE.md)).
+- **Записи в кабинеты через API** → v1.1 ([API_CONTRACT_EXECUTION.md](API_CONTRACT_EXECUTION.md)): предпросмотр,
+  `approve`, `apply`, `cancel`, `rollback`, кворум по риску, `execution_mode = api`, `execution_status`,
+  `rollback_status`, `write_access`, статусы `approved` / `failed` / `cancelled`, «Применить одним кликом».
+- **AI-чата** → v1.1 (только чтение); автономных агентов нет. Автоматизации, Outcome Graph, CRM, VK Реклама → v2.0.

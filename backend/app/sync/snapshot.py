@@ -8,7 +8,7 @@ from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from typing import Mapping
 
-from app.rules.domain import DIRECT_CONVERSIONS, HISTORY_DAYS, CampaignDay, PlacementDay, SnapshotView, frozen
+from app.rules.domain import DIRECT_CONVERSIONS, DIRECT_PLACEMENTS, HISTORY_DAYS, CampaignDay, PlacementDay, SnapshotView, frozen
 from app.sources.conversion import ConversionDefinition
 from app.sources.direct import (CAMPAIGN_REPORT, PLACEMENT_REPORT, QUERY_REPORT, AccountUnavailable,
                                 ConnectionUnavailable, DirectApiError, DirectSource)
@@ -26,7 +26,9 @@ class Snapshot:
     period_from: date
     period_to: date
     partial_from: date  # даты >= partial_from → data_status = partial
-    sources: frozenset[str]  # API-источники, данные которых в снимке: yandex_direct [, yandex_metrika]
+    # API-источники, данные которых в снимке: yandex_direct [, yandex_metrika]; direct_placements — отчёт площадок
+    # был запрошен и пришёл (без него правило площадок «не проверено», а не «площадок нет»)
+    sources: frozenset[str]
     rows: tuple[StatRow, ...]
     conversion_definition: ConversionDefinition | None = None  # None: цели не выбраны, конверсий нет
     goal_rows: tuple[GoalRow, ...] = ()
@@ -78,8 +80,9 @@ def sync_account(source: DirectSource, login: str, conversions: ConversionDefini
         return SyncFailure(login, "invalid_report_format", e.code.value)
     except DirectApiError as e:  # запрос отклонён, повтор не поможет: наша ошибка запроса или ограничение отчёта
         return SyncFailure(login, "invalid_request", request_id=e.request_id)
-    return Snapshot(login, period_from, period_to, period_to - timedelta(PARTIAL_DAYS - 1),
-                    frozenset({"yandex_direct"}), _merge(rows), conversions)
+    sources = frozenset({"yandex_direct"} | ({DIRECT_PLACEMENTS} if placements else set()))
+    return Snapshot(login, period_from, period_to, period_to - timedelta(PARTIAL_DAYS - 1), sources, _merge(rows),
+                    conversions)
 
 
 def sync_accounts(source: DirectSource, logins: tuple[str, ...], conversions: ConversionDefinition | None,

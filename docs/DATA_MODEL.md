@@ -143,7 +143,7 @@ PK (`user_id`, `workspace_id`), `ws_role`: `approver` (смотреть, decide;
 | period_from, period_to | date | загруженный диапазон |
 | data_until | timestamptz | данные включительно до |
 | partial_from | date | даты ≥ этой → `data_status = partial` |
-| sources | text[] | какие источники реально загружены (`yandex_direct`, `yandex_metrika`) |
+| sources | text[] | какие источники реально загружены (`yandex_direct`, `yandex_metrika`); `direct_placements` — отчёт площадок РСЯ был в синхронизации и пришёл (без него правило площадок не вычисляется) |
 | release_id | → releases | каким кодом загружено и разобрано |
 
 ### `stat_rows` [A]
@@ -174,6 +174,9 @@ PK (`user_id`, `workspace_id`), `ws_role`: `approver` (смотреть, decide;
 `id`, `workspace_id`, `text_sanitized`, `text_hash` (sha256 исходного текста — чтобы один запрос в разных снимках был одной строкой), `first_seen_at`. UNIQUE(`workspace_id`, `text_hash`).
 Появления — в `search_query_sightings` (`query_id`, `seen_at`), чтобы обе таблицы оставались append-only. Текст удаляется, когда последнее появление старше 60 дней.
 После удаления текста агрегаты в `stat_rows` остаются, UI показывает «текст запроса удалён по сроку хранения».
+
+### `placement_names` [A, данные workspace]
+Имена площадок РСЯ для `stat_rows.object_id` уровня `placement` (хэш имени): `workspace_id`, `id`, `name` — PK (`workspace_id`, `id`), RLS, удаляется в `delete_workspace_data` (миграция 0005; до неё справочник был глобальным). Имя — домен/приложение после `sanitize_placement`, CHECK повторяет allowlist.
 
 ### `audit_runs` [A]
 `id`, `workspace_id`, `snapshot_id`, `release_id`, `kind` (`free` · `scheduled`), UNIQUE(`snapshot_id`, `kind`), `settings` jsonb (замороженная копия `workspace_settings` + пороги уведомлений), `rules_run` text[] (какие `rule_version` запускались), `rules_skipped` jsonb (правило → причина: «нет Метрики»), `created_at`.

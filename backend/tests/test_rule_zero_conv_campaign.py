@@ -10,6 +10,7 @@ import pytest
 
 from app.audit.policy import decide
 from app.audit.templates import explain
+from app.audit.values import to_value
 from app.rules import RULES
 from app.rules.domain import (BID_OR_BUDGET_ACTIONS, SPEND_CAMPAIGN, AuditSettings, CampaignDay, Finding, NotEnoughData,
                               Reason, SnapshotView, run, windows)
@@ -23,20 +24,25 @@ NO_TARGET = AuditSettings()
 RULE = "zero_conv_campaign@1"
 
 
-def rows(cid, *, eval_cost=0, eval_clicks=0, eval_conv=0, base_cost=0, base_conv=0, history_days=37):
-    """Итоги периода — в последний день, baseline — в его последний день, остальные дни нулевые (глубина истории)."""
+PARTIAL = D - timedelta(2)   # последние 3 дня досчитываются
+SOLID_DAY = D - timedelta(3)  # завершённый день внутри окна оценки
+
+
+def rows(cid, *, eval_cost=0, eval_clicks=0, eval_conv=0, base_cost=0, base_conv=0, history_days=37, eval_day=SOLID_DAY):
+    """Итоги периода — в eval_day (по умолчанию завершённый день окна), baseline — в его последний день, остальные дни
+    нулевые (глубина истории)."""
     first = D - timedelta(history_days - 1)
     days = {first + timedelta(i): (Decimal(0), 0, Decimal(0)) for i in range(history_days)}
-    days[D] = (Decimal(eval_cost), eval_clicks, None if eval_conv is None else Decimal(eval_conv))
+    days[eval_day] = (Decimal(eval_cost), eval_clicks, None if eval_conv is None else Decimal(eval_conv))
     if D - timedelta(7) in days:
         days[D - timedelta(7)] = (Decimal(base_cost), 0, Decimal(base_conv))
     return tuple(CampaignDay(cid, d, cost, clicks, conv) for d, (cost, clicks, conv) in sorted(days.items()))
 
 
-def snap(*campaign_rows, sources=BOTH, eval_cost=42000, eval_clicks=70, eval_conv=0, **kw):
+def snap(*campaign_rows, sources=BOTH, eval_cost=42000, eval_clicks=70, eval_conv=0, partial_from=PARTIAL, **kw):
     days = sum(campaign_rows, ()) or rows(CID, eval_cost=eval_cost, eval_clicks=eval_clicks, eval_conv=eval_conv, **kw)
     return SnapshotView(snapshot_id=84721, workspace_id=7, direct_account_id=3, period_from=D - timedelta(36),
-                        period_to=D, sources=sources, campaign_days=days)
+                        period_to=D, sources=sources, campaign_days=days, partial_from=partial_from)
 
 
 def audit(s, settings):
@@ -101,6 +107,22 @@ def test_cheap_target_uses_cost_floor():
         is Reason.VOLUME_INSUFFICIENT
     assert only(audit(snap(eval_cost=1000, eval_clicks=60), AuditSettings(target_cpa=Decimal(100)))).reference \
         == Decimal(1000)
+
+
+# --- Досчёт конверсий (partial) -----------------------------------------------------------------
+
+@pytest.mark.parametrize("eval_day, partial_from", [(D, PARTIAL), (SOLID_DAY, None)])
+def test_threshold_reached_only_with_partial_days_is_marked(eval_day, partial_from):
+    """Расход за дни досчёта — не настоящий ноль конверсий: вывод остаётся, но не выше medium и с level_reason.
+    partial_from неизвестен — всё partial."""
+    f = only(audit(snap(eval_cost=15000, eval_clicks=100, eval_day=eval_day, partial_from=partial_from), TARGET))
+    assert f.current_data_quality == "medium" and f.evidence_meta["level_reason"] == "conversions_partial"
+    assert to_value(f.lost, 1, partial_from).data_status == "partial"
+
+
+def test_threshold_reached_on_complete_days_is_not_marked():
+    f = only(audit(snap(eval_cost=15000, eval_clicks=100), TARGET))  # весь расход — в завершённый день окна
+    assert f.current_data_quality == "high" and "level_reason" not in f.evidence_meta
 
 
 # --- Baseline и абсолютный минимум --------------------------------------------------------------

@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.deps import Conn, CurrentActor, CurrentWorkspace, require_manager
 from app.api.errors import not_found
+from app.api.active import active_cards, today_msk, with_exposure
 from app.api.serialize import ext, recommendation_item
 from app.tenancy import set_local_workspace
 
@@ -73,40 +74,28 @@ class RecommendationsQuery(Strict):
     cursor: Annotated[str | None, Field(pattern=r"^o[0-9]{1,9}$")] = None
 
 
-_RECOMMENDATIONS = """
-WITH cur AS (
-  SELECT r.id, r.created_at, i.direct_account_id, i.object_type, i.object_id,
-         coalesce((SELECT e.finding_id FROM recommendation_events e
-                   WHERE e.recommendation_id = r.id AND e.type = 'seen_again' ORDER BY e.id DESC LIMIT 1),
-                  r.finding_id) AS finding_id,
-         (SELECT max(e.created_at) FROM recommendation_events e WHERE e.recommendation_id = r.id) AS last_event_at
-  FROM recommendations r JOIN issues i ON i.id = r.issue_id
-  WHERE i.workspace_id = %(ws)s AND (%(account)s::bigint IS NULL OR i.direct_account_id = %(account)s::bigint)
-)
-SELECT cur.id, cur.finding_id, cur.direct_account_id, coalesce(da.client_login, dc.yandex_login),
-       cur.object_type, cur.object_id, f.action_level, f.lost, f.recoverable, cur.created_at,
-       greatest(cur.created_at, f.created_at, cur.last_event_at), f.created_at, f.action, f.evidence_meta
-FROM cur
-JOIN findings f ON f.id = cur.finding_id
-JOIN direct_accounts da ON da.id = cur.direct_account_id
-JOIN direct_connections dc ON dc.id = da.direct_connection_id
-ORDER BY (f.lost->>'amount') IS NULL, (f.lost->>'amount')::numeric DESC, cur.id
-LIMIT %(limit)s OFFSET %(offset)s
-"""
+def _order(card) -> tuple:
+    """Порядок списка: по exposure.amount по убыванию, unavailable (в т. ч. «недостаточно данных») — в конце."""
+    amount = card.lost.amount
+    return (amount is None, -amount if amount is not None else 0, card.rec_id)
 
 
 @router.get("/workspaces/{workspace_id}/recommendations")
 def recommendations(conn: Conn, ws: CurrentWorkspace, q: Annotated[RecommendationsQuery, Query()]):
-    """Список рекомендаций (API_CONTRACT.md §5, минимальный): только поля, которые уже есть в схеме.
-    Порядок — по exposure.amount по убыванию, unavailable — в конце. Фильтра по статусу пока нет (см. отчёт)."""
+    """Активные рекомендации (API_CONTRACT.md §5) — то же определение, что у «Сегодня» (app/api/active.py).
+    exposure_overlap карточки — из exposure_total@1 по всем активным workspace (не только по странице и не только
+    по фильтру кабинета): «уже учтено в другой карточке» не зависит от того, что показано рядом."""
     offset = int(q.cursor[1:]) if q.cursor else 0
     account = int(q.ad_account.removeprefix("acc_")) if q.ad_account else None
-    rows = conn.execute(_RECOMMENDATIONS, {"ws": ws.id, "account": account, "limit": q.limit + 1,
-                                           "offset": offset}).fetchall()
-    more = len(rows) > q.limit
-    items = [recommendation_item(*row[:11], computed_at=row[11], action_raw=row[12], meta=row[13])
-             for row in rows[:q.limit]]
-    return {"items": items, "next_cursor": f"o{offset + q.limit}" if more else None}
+    cards = active_cards(conn, ws.id)
+    last_cutoff = conn.execute("SELECT max(data_cutoff) FROM audit_runs WHERE workspace_id = %s",
+                               (ws.id,)).fetchone()[0]
+    _, overlaps = with_exposure(conn, cards, last_cutoff or today_msk())
+    shown = sorted((c for c in cards if account is None or c.account_id == account), key=_order)
+    page = shown[offset:offset + q.limit]
+    more = len(shown) > offset + q.limit
+    return {"items": [recommendation_item(c, overlaps[c.rec_id]) for c in page],
+            "next_cursor": f"o{offset + q.limit}" if more else None}
 
 
 @router.get("/workspaces/{workspace_id}/members")

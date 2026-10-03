@@ -32,7 +32,12 @@
 - карточки с `lost = unavailable` в итог не входят и считаются в `coverage.unavailable`; нет ни одной карточки с
   суммой → `total` и `overlap` — `unavailable` (не 0);
 - `Value.snapshot_id` итога — самый новый снимок среди выводов (полный список — `snapshot_ids`); `data_status` —
-  `partial`, если `partial` хоть у одного вывода; `coverage` — счётчики (целые, API_CONTRACT §1), а не `Value`."""
+  `partial`, если `partial` хоть у одного вывода; `coverage` — счётчики (целые, API_CONTRACT §1), а не `Value`.
+
+Разложение по карточкам (`cards`, API: `exposure_overlap` карточки): итог каждой пары кабинет · кампания делится
+между её карточками жадно — сначала самая большая (по своей части в паре), затем следующие, пока не исчерпан вклад
+пары; итог кабинета — карточкам кабинета (если его вывод больше суммы кампаний) или кампаниям. Доля карточки ≤ её
+суммы, overlap карточки = сумма − доля ≥ 0, и Σ (сумма − overlap) = total. Карточка без суммы — overlap unavailable."""
 
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -48,6 +53,7 @@ FORMULA = ("Σ по кабинетам max(вывод кабинета, Σ по 
            "max(вывод кампании, объекты в его дни) + объекты в остальные дни))")
 COMPONENT_FORMULA = "Σ сумм карточек типа (до вычета пересечений)"
 OVERLAP_FORMULA = "Σ components - total"
+CARD_OVERLAP_FORMULA = "сумма карточки - её доля в total (часть, уже учтённая другой карточкой)"
 
 ACCOUNT_LEVEL = "account"
 CAMPAIGN_LEVEL = "campaign"
@@ -66,6 +72,7 @@ class ExposureFinding:
     object_id: int
     lost: Value
     basis: ExposureBasis | None = None  # None — вывод записан до декларации основы: считается как formula
+    ref: object = None  # идентификатор карточки у вызывающего (id рекомендации) — ключ разложения `cards`
 
 
 def basis_meta(basis: ExposureBasis) -> dict[str, str]:
@@ -113,12 +120,20 @@ class Coverage:
 
 
 @dataclass(frozen=True)
+class CardOverlap:
+    """Часть суммы карточки, уже учтённая другой карточкой (в итог не вошла второй раз)."""
+    ref: object
+    overlap: Value
+
+
+@dataclass(frozen=True)
 class ExposureTotal:
     total: Value
     overlap: Value
     components: tuple[Component, ...]
     coverage: Coverage
     snapshot_ids: tuple[int, ...]
+    cards: tuple[CardOverlap, ...] = ()
     version: str = VERSION
     formula: str = FORMULA
 
@@ -126,7 +141,7 @@ class ExposureTotal:
 @dataclass
 class _Pair:
     """Кабинет · кампания: блоки уровня кампании, покрытые ими дни, объектные единицы."""
-    blocks: list[Decimal] = field(default_factory=list)
+    blocks: dict[int, Decimal] = field(default_factory=dict)  # карточка → её сумма блоком
     covered: set[date] = field(default_factory=set)
     units: dict[tuple[str, int, date], Decimal] = field(default_factory=dict)
     parts: dict[int, Decimal] = field(default_factory=lambda: defaultdict(Decimal))  # карточка → её часть в паре
@@ -147,17 +162,26 @@ def _pair_contribution(pair: _Pair, spend: dict[date, Decimal] | None) -> Decima
     day_value = {day: max(groups.values()) for day, groups in by_day.items()}
     inside = sum((v for d, v in day_value.items() if d in pair.covered), Decimal(0))
     outside = sum((v for d, v in day_value.items() if d not in pair.covered), Decimal(0))
-    block = max(pair.blocks) if pair.blocks else None
+    block = max(pair.blocks.values()) if pair.blocks else None
     contribution = (max(block, inside) if block is not None else inside) + outside
     if spend is not None:  # шаг 4: не больше расхода кампании за эти дни — но не меньше самой большой карточки
         days = pair.covered | set(day_value)
         cap = sum((c for d, c in spend.items() if d in days), Decimal(0))
-        floor = max([*pair.blocks, *pair.parts.values(), Decimal(0)])
+        floor = max([*pair.blocks.values(), *pair.parts.values(), Decimal(0)])
         contribution = min(contribution, max(cap, floor))
     return contribution
 
 
-def _account_total(findings: list[tuple[int, ExposureFinding]], units: list[StatUnit]) -> Decimal:
+def _allocate(amount: Decimal, shares: dict[int, Decimal], out: dict[int, Decimal]) -> None:
+    """amount между карточками: самая большая доля — первой, каждая — не больше своей доли."""
+    for card, share in sorted(shares.items(), key=lambda x: (-x[1], x[0])):
+        take = min(share, amount)
+        out[card] += take
+        amount -= take
+
+
+def _account_total(findings: list[tuple[int, ExposureFinding]], units: list[StatUnit],
+                   shares: dict[int, Decimal]) -> Decimal:
     objects: dict[tuple[str, int], list[StatUnit]] = defaultdict(list)
     spend: dict[int, dict[date, Decimal]] = defaultdict(lambda: defaultdict(Decimal))
     for u in units:
@@ -165,13 +189,14 @@ def _account_total(findings: list[tuple[int, ExposureFinding]], units: list[Stat
             spend[u.campaign_id][u.date] += u.cost
         else:
             objects[(u.level, u.object_id)].append(u)
-    account_blocks: list[Decimal] = []
+    account_blocks: dict[int, Decimal] = {}
     unattributed = Decimal(0)
+    unattributed_cards: dict[int, Decimal] = {}
     pairs: dict[int, _Pair] = defaultdict(_Pair)
     for card, f in findings:
         amount, days, basis = f.lost.amount, _days(f.lost), f.basis
         if f.object_type == ACCOUNT_LEVEL:
-            account_blocks.append(amount)
+            account_blocks[card] = amount
             continue
         if basis is not None and basis.kind == "spend" and basis.level != CAMPAIGN_LEVEL:
             rows = [u for oid in sorted(set(basis.object_ids)) for u in objects[(basis.level, oid)]
@@ -183,20 +208,36 @@ def _account_total(findings: list[tuple[int, ExposureFinding]], units: list[Stat
                     pair.parts[card] += u.cost
                 continue
         if f.object_type == CAMPAIGN_LEVEL:  # spend по кампании, formula, без декларации, нераскладываемый spend
-            pairs[f.object_id].blocks.append(amount)
+            pairs[f.object_id].blocks[card] = amount
             pairs[f.object_id].covered |= days
             continue
         rows = [u for u in objects[(f.object_type, f.object_id)] if u.date in days]
         campaigns = {u.campaign_id for u in rows}
         if len(campaigns) == 1:  # формульный (или не декларированный) объектный вывод — блоком «кампания × окно»
             pair = pairs[campaigns.pop()]
-            pair.blocks.append(amount)
+            pair.blocks[card] = amount
             pair.covered |= days
         else:
             unattributed += amount
-    campaigns_total = sum((_pair_contribution(p, spend.get(cid)) for cid, p in sorted(pairs.items())), Decimal(0))
+            unattributed_cards[card] = amount
+    campaign_shares: dict[int, Decimal] = defaultdict(Decimal)
+    campaigns_total = Decimal(0)
+    for cid, p in sorted(pairs.items()):
+        contribution = _pair_contribution(p, spend.get(cid))
+        in_pair: dict[int, Decimal] = defaultdict(Decimal)
+        for card, amount in [*p.blocks.items(), *p.parts.items()]:
+            in_pair[card] += amount
+        _allocate(contribution, in_pair, campaign_shares)
+        campaigns_total += contribution
+    for card, amount in unattributed_cards.items():
+        campaign_shares[card] += amount
     campaigns_total += unattributed
-    return max(max(account_blocks), campaigns_total) if account_blocks else campaigns_total
+    if account_blocks and max(account_blocks.values()) >= campaigns_total:  # вывод кабинета покрывает всё
+        _allocate(max(account_blocks.values()), account_blocks, shares)
+        return max(account_blocks.values())
+    for card, amount in campaign_shares.items():
+        shares[card] += amount
+    return campaigns_total
 
 
 def _source(values: list[Value]) -> str:
@@ -227,7 +268,8 @@ def _unavailable(values: list[Value], as_of: date, formula: str) -> Value:
 
 
 def _key(f: ExposureFinding) -> tuple:
-    return (f.account_id, f.object_type, f.object_id, f.issue_type, f.lost.model_dump_json(), repr(f.basis))
+    return (f.account_id, f.object_type, f.object_id, f.issue_type, f.lost.model_dump_json(), repr(f.basis),
+            repr(f.ref))
 
 
 def exposure_total(findings: Iterable[ExposureFinding], units: Iterable[StatUnit], *, as_of: date) -> ExposureTotal:
@@ -241,8 +283,10 @@ def exposure_total(findings: Iterable[ExposureFinding], units: Iterable[StatUnit
     snapshot_ids = tuple(sorted({f.lost.snapshot_id for f in ordered}))
     if not counted:
         values = [f.lost for f in ordered]
+        cards = tuple(CardOverlap(f.ref, _unavailable([f.lost], as_of, CARD_OVERLAP_FORMULA)) for f in ordered)
         return ExposureTotal(total=_unavailable(values, as_of, FORMULA), overlap=_unavailable(values, as_of,
-                             OVERLAP_FORMULA), components=(), coverage=coverage, snapshot_ids=snapshot_ids)
+                             OVERLAP_FORMULA), components=(), coverage=coverage, snapshot_ids=snapshot_ids,
+                             cards=cards)
 
     by_account: dict[int, list[tuple[int, ExposureFinding]]] = defaultdict(list)
     for card, f in enumerate(counted):
@@ -250,7 +294,8 @@ def exposure_total(findings: Iterable[ExposureFinding], units: Iterable[StatUnit
     units_by_account: dict[int, list[StatUnit]] = defaultdict(list)
     for u in units:
         units_by_account[u.account_id].append(u)
-    total = sum((_account_total(fs, units_by_account[a]) for a, fs in sorted(by_account.items())), Decimal(0))
+    shares: dict[int, Decimal] = defaultdict(Decimal)
+    total = sum((_account_total(fs, units_by_account[a], shares) for a, fs in sorted(by_account.items())), Decimal(0))
 
     by_type: dict[str, list[Value]] = defaultdict(list)
     for f in counted:
@@ -259,6 +304,10 @@ def exposure_total(findings: Iterable[ExposureFinding], units: Iterable[StatUnit
     components = tuple(Component(t, _estimated(sums[t], by_type[t], COMPONENT_FORMULA))
                        for t in sorted(sums, key=lambda t: (-sums[t], t)))
     values = [f.lost for f in counted]
+    cards = tuple(CardOverlap(f.ref, _estimated(f.lost.amount - shares[card], [f.lost], CARD_OVERLAP_FORMULA))
+                  for card, f in enumerate(counted))
+    cards += tuple(CardOverlap(f.ref, _unavailable([f.lost], as_of, CARD_OVERLAP_FORMULA))
+                   for f in ordered if f.lost.amount is None)
     return ExposureTotal(total=_estimated(total, values, FORMULA),
                          overlap=_estimated(sum(sums.values(), Decimal(0)) - total, values, OVERLAP_FORMULA),
-                         components=components, coverage=coverage, snapshot_ids=snapshot_ids)
+                         components=components, coverage=coverage, snapshot_ids=snapshot_ids, cards=cards)

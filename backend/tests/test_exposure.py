@@ -1,5 +1,6 @@
 """exposure_total@1 (docs/ECONOMICS.md §3–4): итог без двойного счёта и его инварианты (§3.5) — без БД."""
 
+import dataclasses
 import random
 from datetime import date, timedelta
 from decimal import Decimal
@@ -66,13 +67,28 @@ def amounts(fs) -> list[Decimal]:
 
 
 def check_invariants(fs, units):
+    fs = [dataclasses.replace(f, ref=i) for i, f in enumerate(fs)]
     out = exposure_total(fs, units, as_of=AS_OF)
     cards = amounts(fs)
     total, overlap = out.total.amount, out.overlap.amount
     assert max(cards) <= total <= sum(cards)
     assert overlap == sum(cards) - total and overlap >= 0
     assert sum(c.amount.amount for c in out.components) == sum(cards)
+    check_card_overlaps(fs, out)
     return out
+
+
+def check_card_overlaps(fs, out):
+    """Разложение по карточкам: у каждой карточки свой overlap, 0 ≤ overlap ≤ сумма, Σ (сумма − overlap) = total."""
+    by_ref = {c.ref: c.overlap for c in out.cards}
+    assert set(by_ref) == {f.ref for f in fs}
+    for f in fs:
+        o = by_ref[f.ref]
+        if f.lost.amount is None:
+            assert o.calculation_type == "unavailable"
+        else:
+            assert o.calculation_type == "estimated" and o.formula and Decimal(0) <= o.amount <= f.lost.amount
+    assert sum(f.lost.amount - by_ref[f.ref].amount for f in fs if f.lost.amount is not None) == out.total.amount
 
 
 # --- Пример ECONOMICS.md §4 ------------------------------------------------------------------------
@@ -117,6 +133,18 @@ def test_economics_example_gives_its_numbers():
     assert sum(c.amount.amount for c in out.components) == Decimal("73980.00")
     assert [c.issue_type for c in out.components][0] == "high_cpa"  # по убыванию суммы
     assert (out.coverage.included, out.coverage.unavailable) == (9, 0)
+
+
+def test_economics_example_card_overlaps():
+    """Карточки 2 и 3 целиком учтены в другой карточке; из пересекающихся часа и региона D первой учитывается
+    бо́льшая (регион 1 300), у часа учтено в другой карточке 700 (= пересечение)."""
+    findings, units = economics_example()
+    findings = [dataclasses.replace(f, ref=(f.issue_type, f.object_id)) for f in findings]
+    out = exposure_total(findings, units, as_of=AS_OF)
+    overlaps = {c.ref: c.overlap.amount for c in out.cards}
+    assert overlaps[("zero_conv_campaign", A)] == overlaps[("high_cpa", B)] == Decimal(0)
+    assert overlaps[("zero_conv_regions", 213)] == Decimal(0) and overlaps[("zero_conv_hours", 10)] == Decimal("700.00")
+    assert sum(overlaps.values()) == out.overlap.amount
 
 
 def test_result_values_are_estimated_with_formula_and_version():
@@ -280,6 +308,7 @@ def test_invariants_on_random_cards(seed):
                                      account=account, formula="f"))
     if not amounts(findings):
         findings.append(card("high_cpa", "campaign", 1, "10.00", formula="f"))
+    findings = [dataclasses.replace(f, ref=i) for i, f in enumerate(findings)]  # те же ref, что ставит check_invariants
     out = check_invariants(findings, units)
     shuffled = findings[::-1]
     assert exposure_total(shuffled, units[::-1], as_of=AS_OF) == out

@@ -15,7 +15,7 @@ from app.worker.guard import RULES as GUARD_RULES
 from app.worker.guard import Allow, Skip, State, Task, guard, load_state
 from app.worker.locks import workspace_exclusive, workspace_shared
 from app.worker.sync import PLACEMENTS_REPORT_ENV, Done, Failed, RetryAt, Skipped, run_sync
-from test_direct_sync import TO, root  # noqa: F401 — root: фикстура
+from test_direct_sync import CAMPAIGN_RULES, TO, root  # noqa: F401 — root: фикстура
 from test_metrika_sync import metrika  # noqa: F401 — metrika: фикстура
 from test_schema import connected, chain, one  # noqa: F401 — chain: фикстура
 
@@ -284,7 +284,7 @@ def test_metrika_unavailable_keeps_cpa(rw, ws, tmp_path):
     assert isinstance(out, Done)
     assert one(rw, "SELECT source_failures FROM snapshots WHERE id = %s", out.snapshot_id) == \
         {"yandex_metrika": "counter_not_found"}
-    findings = [f for r in RULES for f in run(r, load_view(rw, out.snapshot_id), AuditSettings())]
+    findings = [f for r in CAMPAIGN_RULES for f in run(r, load_view(rw, out.snapshot_id), AuditSettings())]
     assert len(findings) == 1 and isinstance(findings[0], Finding)
 
 

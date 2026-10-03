@@ -67,15 +67,32 @@ def cookie(token: str) -> dict:
     return {"Cookie": f"session={token}"}
 
 
-def recommendation(rw, ws: int, login: str, amount: str) -> dict:
-    """Минимальная доказательная цепочка до рекомендации в данном workspace (как chain в test_schema)."""
+def recommendation(rw, ws: int, login: str, amount: str, *, audited: bool = True, action=None,
+                   same_audit: dict | None = None) -> dict:
+    """Минимальная доказательная цепочка до рекомендации в данном workspace (как chain в test_schema).
+    audited — кабинет вошёл в аудит своим снимком (audit_run_snapshots): рекомендация активна (app/api/active.py)."""
     n = next(_n)
     account = one(rw, "INSERT INTO direct_accounts (direct_connection_id, is_selected) VALUES (%s, true) RETURNING id",
                   connected(rw, "direct", ws, login))
-    release = one(rw, "INSERT INTO releases (commit_sha, build_id) VALUES (%s, %s) RETURNING id", "c" * 40, f"api{n}")
-    audit = one(rw, """INSERT INTO audit_runs (workspace_id, release_id, kind, task_key, data_cutoff, settings, rules_run)
-                       VALUES (%s, %s, 'scheduled', gen_random_uuid()::text, '2026-09-30', '{}', '{high_cpa_target@1}')
-                       RETURNING id""", ws, release)
+    if same_audit is not None:  # тот же аудит, что у другой рекомендации (несколько кабинетов в одном аудите)
+        release, audit = same_audit["release"], same_audit["audit"]
+    else:
+        release = one(rw, "INSERT INTO releases (commit_sha, build_id) VALUES (%s, %s) RETURNING id", "c" * 40,
+                      f"api{n}")
+        audit = one(rw, """INSERT INTO audit_runs (workspace_id, release_id, kind, task_key, data_cutoff, settings,
+                                                   rules_run)
+                           VALUES (%s, %s, 'scheduled', gen_random_uuid()::text, '2026-09-30', '{}',
+                                   '{high_cpa_target@1}') RETURNING id""", ws, release)
+    if audited:
+        sync = one(rw, """INSERT INTO sync_runs (workspace_id, direct_account_id, kind, status, finished_at)
+                          VALUES (%s, %s, 'scheduled', 'succeeded', now()) RETURNING id""", ws, account)
+        snapshot = one(rw, """INSERT INTO snapshots (workspace_id, sync_run_id, release_id, period_from, period_to,
+                                                     data_until, partial_from, sources)
+                              VALUES (%s, %s, %s, '2026-08-25', '2026-09-30', now(), '2026-09-28', '{yandex_direct}')
+                              RETURNING id""", ws, sync, release)
+        rw.execute("UPDATE snapshots SET status = 'complete', sealed_at = now() WHERE id = %s", (snapshot,))
+        rw.execute("INSERT INTO audit_run_snapshots (audit_run_id, direct_account_id, snapshot_id) VALUES (%s, %s, %s)",
+                   (audit, account, snapshot))
     issue = one(rw, """INSERT INTO issues (workspace_id, direct_account_id, issue_key, issue_type, object_type, object_id)
                        VALUES (%s, %s, %s, 'high_cpa', 'campaign', %s) RETURNING id""",
                 ws, account, key(ws, account, "high_cpa", n), 50000 + n)
@@ -87,12 +104,14 @@ def recommendation(rw, ws: int, login: str, amount: str) -> dict:
                                  'review', 'review') RETURNING id""",
                   audit, issue, Jsonb(lost),
                   Jsonb(value(amount=None, calculation_type="unavailable", data_sufficiency="insufficient")),
-                  Jsonb({"clicks": value(unit="count", amount=487)}), Jsonb({"type": "decrease_bid", "change_pct": -15}))
+                  Jsonb({"clicks": value(unit="count", amount=487)}),
+                  Jsonb(action or {"type": "decrease_bid", "change_pct": -15}))
     explanation = one(rw, """INSERT INTO explanations (finding_id, source, text, release_id)
                              VALUES (%s, 'template', 'CPA выше цели', %s) RETURNING id""", finding, release)
     rec = one(rw, "INSERT INTO recommendations (issue_id, finding_id, explanation_id) VALUES (%s, %s, %s) RETURNING id",
               issue, finding, explanation)
-    return {"rec": rec, "finding": finding, "account": account, "login": login}
+    return {"rec": rec, "finding": finding, "account": account, "login": login, "audit": audit, "release": release,
+            "issue": issue, "object_id": 50000 + n}
 
 
 @pytest.fixture
