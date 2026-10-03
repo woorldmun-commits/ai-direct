@@ -11,7 +11,8 @@
     "partial_from": "2026-09-28",
     "sources": [
       "yandex_direct",
-      "direct_conversions"
+      "direct_conversions",
+      "direct_placements"
     ],
     "campaigns": [
       {
@@ -68,7 +69,8 @@
           1
         ]
       },
-      "exposure": "20000.00"
+      "exposure": "20000.00",
+      "can_save": "unavailable"
     }
   ],
   "exposure_total": "20000.00"

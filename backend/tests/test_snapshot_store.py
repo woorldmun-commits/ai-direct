@@ -13,7 +13,7 @@ from app.rules.domain import AuditSettings, run
 from app.sources.direct import DirectFixture
 from app.sync.snapshot import Snapshot, SyncFailure, sync_account, sync_accounts, to_view
 from app.sync.store import SnapshotNotComplete, SyncRunStateError, load_view, record_failure, write_snapshot
-from test_direct_sync import GOALS, TO, campaign_tsv, query_tsv, root  # noqa: F401 — root: фикстура
+from test_direct_sync import CAMPAIGN_RULES, GOALS, TO, campaign_tsv, query_tsv, root  # noqa: F401 — root: фикстура
 from test_schema import chain, one  # noqa: F401 — chain: фикстура
 
 DATA_UNTIL = datetime(2026, 10, 1, 3, 0, tzinfo=timezone.utc)
@@ -47,7 +47,7 @@ def counts(rw, run_id) -> dict:
 
 
 def audit(view, settings=AuditSettings()):
-    return tuple(out for rule in RULES for out in run(rule, view, settings))
+    return tuple(out for rule in CAMPAIGN_RULES for out in run(rule, view, settings))
 
 
 # --- Запись и чтение -----------------------------------------------------------------------------

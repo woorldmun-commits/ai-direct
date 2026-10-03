@@ -10,7 +10,7 @@ import pytest
 from app.audit.values import to_value
 from app.contract import Value
 from app.rules import RULES
-from app.rules.domain import AuditSettings, Finding, NotEnoughData, Reason, run
+from app.rules.domain import DIRECT_PLACEMENTS, AuditSettings, Finding, NotEnoughData, Reason, run
 from app.sources.conversion import ConversionDefinition
 from app.sources.direct import CAMPAIGN_REPORT, QUERY_REPORT, REPORT_HEADERS, DirectFixture
 from app.sync.parse import FormatError, ReportFormatError, StatRow, parse_report, query_hash
@@ -22,6 +22,11 @@ FROM = TO - timedelta(36)
 GOALS = ConversionDefinition(counter_id=555, goal_ids=(111, 222))
 CONV = GOALS.direct_columns()
 CID = 12345
+
+
+# Снимки здесь — без отчёта площадок: правило площадок для них «не проверено» (account-level source_missing),
+# это проверяют tests/test_placements_*.py и test_rule_zero_conv_placements.py.
+CAMPAIGN_RULES = tuple(r for r in RULES if DIRECT_PLACEMENTS not in r.required_sources)
 
 
 def campaign_tsv(days=37, eval_cost="42000.00", eval_conv=("5", "3"), base_cost="115200.00", base_conv=("20", "10"),
@@ -72,7 +77,7 @@ def snapshot_of(root, **kw) -> Snapshot:
 
 def audit(snap: Snapshot, settings: AuditSettings):
     view = to_view(snap, snapshot_id=84721, workspace_id=7, direct_account_id=3)
-    return tuple(out for rule in RULES for out in run(rule, view, settings))
+    return tuple(out for rule in CAMPAIGN_RULES for out in run(rule, view, settings))
 
 
 # --- Нормальный аккаунт, 37 дней -----------------------------------------------------------------
@@ -124,9 +129,11 @@ def test_without_metrika_conversions_are_none_and_rules_are_not_computed(root):
     assert snap.sources == {"yandex_direct"} and snap.conversion_definition is None
     assert all(r.conversions is None for r in snap.rows)
     # каждое из трёх правил v1.0 требует конверсий — каждое честно говорит «недостаточно данных», ни одно не молчит
-    assert audit(snap, AuditSettings()) == (NotEnoughData("high_cpa_baseline@1", Reason.SOURCE_MISSING),
-                                            NotEnoughData("zero_conv_campaign@1", Reason.SOURCE_MISSING),
-                                            NotEnoughData("zero_conv_placements@1", Reason.SOURCE_MISSING))
+    view = to_view(snap, snapshot_id=84721, workspace_id=7, direct_account_id=3)
+    assert tuple(out for rule in RULES for out in run(rule, view, AuditSettings())) == (
+        NotEnoughData("high_cpa_baseline@1", Reason.SOURCE_MISSING),
+        NotEnoughData("zero_conv_campaign@1", Reason.SOURCE_MISSING),
+        NotEnoughData("zero_conv_placements@1", Reason.SOURCE_MISSING))
 
 
 # --- Несколько аккаунтов и частичная доступность -------------------------------------------------

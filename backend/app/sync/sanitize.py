@@ -43,18 +43,30 @@ def sanitize(text: str) -> str:
 
 # --- Площадки РСЯ -----------------------------------------------------------------------------------------------
 # Placement — домен сайта («avito.ru») или идентификатор приложения («com.avito.android»), не ПД и не свободный
-# текст. Поэтому не маскирование кусков, а строгий allowlist формы: метки из латиницы/кириллицы/цифр/«_»/«-» через
-# точку, хотя бы одна буква (только цифры — похоже на телефон или номер; "--" Reports API — нет значения), длина —
-# не больше домена (253). Нормализация: NFKC, нижний регистр, без «www.» и завершающей точки — «WWW.Avito.ru.» и
-# «avito.ru» одна площадка. Всё остальное (пробелы, «@», «/», «?», URL с параметрами, слишком длинное) → MASK:
-# такой строке в снимке не место, а правило не предлагает исключать площадку без имени.
+# текст. Поэтому не маскирование кусков, а строгий allowlist формы: метки из латиницы/кириллицы/цифр/«-» через точку
+# (как в домене: «-» не первым и не последним символом метки, «_» нет), хотя бы одна буква, длина — не больше домена
+# (253). Нормализация: NFKC, нижний регистр, без «www.» и завершающей точки — «WWW.Avito.ru.» и «avito.ru» одна
+# площадка. Всё остальное → MASK: такой строке в снимке не место, а правило не предлагает исключать площадку без имени.
+# Сверх формы — то, что похоже на номер или подделку, а не на имя площадки (тоже MASK):
+# - метка целиком из цифр или любая метка с ≥ 7 цифрами — телефон, номер договора, IP;
+# - латиница и кириллица в одной метке — гомоглифы («аvito.ru» с кириллической «а»).
+# Те же правила — CHECK таблицы placement_names (db/schema.sql).
 MAX_PLACEMENT_LENGTH = 253
-_PLACEMENT = re.compile(r"[0-9a-zа-яё_-]{1,63}(?:\.[0-9a-zа-яё_-]{1,63})*")
+MAX_LABEL_DIGITS = 6
+_LABEL = r"[0-9a-zа-яё](?:[0-9a-zа-яё-]{0,61}[0-9a-zа-яё])?"
+_PLACEMENT = re.compile(rf"{_LABEL}(?:\.{_LABEL})*")
+
+
+def _suspicious(label: str) -> bool:
+    digits = sum(c.isdigit() for c in label)
+    mixed = re.search(r"[a-z]", label) and re.search(r"[а-яё]", label)
+    return digits == len(label) or digits > MAX_LABEL_DIGITS or bool(mixed)
 
 
 def sanitize_placement(raw: str) -> str:
     name = unicodedata.normalize("NFKC", raw).strip().lower().rstrip(".")
     name = name.removeprefix("www.")
-    if len(name) > MAX_PLACEMENT_LENGTH or not _PLACEMENT.fullmatch(name) or not re.search(r"[a-zа-яё]", name):
+    if (len(name) > MAX_PLACEMENT_LENGTH or not _PLACEMENT.fullmatch(name) or not re.search(r"[a-zа-яё]", name)
+            or any(_suspicious(label) for label in name.split("."))):
         return MASK
     return name

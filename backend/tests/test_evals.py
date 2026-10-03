@@ -82,6 +82,13 @@ def test_gate_detects_missing_finding():
     assert _categories(case) == {"regression"}
 
 
+def test_gate_detects_changed_can_save():
+    """«Можно сэкономить» площадок — unavailable (нет модели перераспределения бюджета); копия exposure — регрессия."""
+    case = _mutated("zero_conv_placements/overlap_zero_conv_campaign",
+                    lambda d: [e.update(can_save="8000.00") for e in d["expected"] if "can_save" in e])
+    assert _categories(case) == {"regression"}
+
+
 def test_gate_detects_false_positive_on_clean_case():
     case = _mutated("zero_conv_campaign/clean_account",
                     lambda d: d["snapshot"]["campaigns"][1]["days"][0].update(conversions="0", cost="20000", clicks=60))

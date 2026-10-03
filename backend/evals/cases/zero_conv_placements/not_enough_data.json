@@ -9,7 +9,8 @@
     "partial_from": "2026-09-28",
     "sources": [
       "yandex_direct",
-      "direct_conversions"
+      "direct_conversions",
+      "direct_placements"
     ],
     "campaigns": [
       {

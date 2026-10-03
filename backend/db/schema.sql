@@ -528,7 +528,9 @@ CREATE TABLE snapshots (
   period_to    date NOT NULL,
   data_until   timestamptz NOT NULL,
   partial_from date NOT NULL,  -- даты >= partial_from → data_status = partial
-  sources      text[] NOT NULL CHECK (sources <@ array['yandex_direct', 'yandex_metrika']
+  -- API-источники + direct_placements: отчёт площадок РСЯ был в синхронизации и пришёл (без него правило площадок
+  -- не вычисляется — открытая проблема не закрывается от того, что площадки не смотрели).
+  sources      text[] NOT NULL CHECK (sources <@ array['yandex_direct', 'yandex_metrika', 'direct_placements']
                                       AND 'yandex_direct' = ANY (sources)),
   -- Что считалось конверсией: счётчик, цели, атрибуция — копия на момент синхронизации (sources/conversion.py).
   -- Конверсии кампаний в stat_rows(yandex_direct) — данные Метрики из отчёта Директа по этому определению.
@@ -1169,6 +1171,8 @@ BEGIN
   GET DIAGNOSTICS n = ROW_COUNT; counts := counts || jsonb_build_object('search_query_sightings', n);
   DELETE FROM search_query_texts WHERE workspace_id = ws;
   GET DIAGNOSTICS n = ROW_COUNT; counts := counts || jsonb_build_object('search_query_texts', n);
+  DELETE FROM placement_names WHERE workspace_id = ws;
+  GET DIAGNOSTICS n = ROW_COUNT; counts := counts || jsonb_build_object('placement_names', n);
   UPDATE payments SET subscription_id = NULL
     WHERE subscription_id IN (SELECT id FROM subscriptions WHERE workspace_id = ws);
   GET DIAGNOSTICS n = ROW_COUNT; counts := counts || jsonb_build_object('payments_anonymized', n);
@@ -1617,7 +1621,8 @@ ALTER DEFAULT PRIVILEGES FOR ROLE app_migrator IN SCHEMA public GRANT USAGE ON S
 --                параметр, actor — пользователь сессии, которого передаёт API.
 -- Без RLS: users, yandex_identities, sessions, telegram_links (данные пользователя, не workspace; приложение
 -- фильтрует по пользователю сессии), organizations и organization_memberships (нужны до выбора workspace;
--- изменять — только функциями), releases, free_audit_claims и placement_names (глобальные, без данных клиента).
+-- изменять — только функциями), releases и free_audit_claims (глобальные, без данных клиента).
+-- placement_names — под RLS, его политика — в разделе таблицы (создаётся ниже этого блока).
 
 -- app_workspace_id() — определена в разделе «OAuth-токены» (её используют и функции токенов).
 
@@ -1925,19 +1930,30 @@ GRANT EXECUTE ON FUNCTION purge_phone_auth(timestamptz) TO app_deleter;
 -- ============================================================================
 -- Справочник имён площадок РСЯ (zero_conv_placements): stat_rows.object_id уровня placement → имя
 -- ============================================================================
--- Глобальный, а не данные workspace — без RLS (как releases). Имя — нормализованный домен сайта или идентификатор
--- приложения (app/sync/sanitize.py: sanitize_placement), не ПД и не текст пользователя; id — хэш имени
--- (app/sync/parse.py: placement_id), одинаковый во всех workspace, поэтому строка не говорит, чей это кабинет и
--- кто на площадке тратил. Маска «***» сюда не пишется: CHECK повторяет allowlist формы из sanitize_placement.
--- Append-only: id — хэш имени, имя по id не меняется. Приложение добавляет (INSERT … ON CONFLICT DO NOTHING) и
--- читает; UPDATE и DELETE нет ни у одной рабочей роли (и триггер запрещает их всем).
+-- Данные workspace (0005): по каким площадкам тратил кабинет — сведения о клиенте, поэтому справочник свой у
+-- каждого workspace, под RLS, и удаляется вместе с данными (delete_workspace_data). Имя — нормализованный домен
+-- сайта или идентификатор приложения (app/sync/sanitize.py: sanitize_placement), не ПД; id — хэш имени
+-- (app/sync/parse.py: placement_id). Маска «***» сюда не пишется: CHECK повторяет allowlist sanitize_placement —
+-- метки домена без «_» и без «-» по краям, не из одних цифр, не больше 6 цифр в метке, без смеси латиницы и
+-- кириллицы в одной метке. Append-only: имя по (workspace, id) не меняется; приложение добавляет
+-- (INSERT … ON CONFLICT DO NOTHING) и читает; UPDATE и DELETE — ни у одной рабочей роли (DELETE — только функция
+-- удаления под меткой app.deleting).
 CREATE TABLE placement_names (  -- [A]
-  id   bigint PRIMARY KEY CHECK (id >= 0),
-  name text NOT NULL CHECK (length(name) <= 253
-                            AND name ~ '^[0-9a-zа-яё_-]{1,63}(\.[0-9a-zа-яё_-]{1,63})*$'
-                            AND name ~ '[a-zа-яё]')
+  workspace_id bigint NOT NULL REFERENCES workspaces,
+  id           bigint NOT NULL CHECK (id >= 0),
+  name         text NOT NULL CHECK (
+    length(name) <= 253
+    AND name ~ '^[0-9a-zа-яё]([0-9a-zа-яё-]{0,61}[0-9a-zа-яё])?(\.[0-9a-zа-яё]([0-9a-zа-яё-]{0,61}[0-9a-zа-яё])?)*$'
+    AND name ~ '[a-zа-яё]'
+    AND name !~ '(^|\.)[0-9]+(\.|$)'
+    AND name !~ '(^|\.)([^.]*[0-9]){7}'
+    AND name !~ '(^|\.)[^.]*([a-z][^.]*[а-яё]|[а-яё][^.]*[a-z])'),
+  PRIMARY KEY (workspace_id, id)
 );
 CREATE TRIGGER placement_names_append_only BEFORE UPDATE OR DELETE ON placement_names
   FOR EACH ROW EXECUTE FUNCTION forbid_mutation();
 REVOKE ALL ON placement_names FROM PUBLIC;
 GRANT SELECT, INSERT ON placement_names TO app_rw;
+ALTER TABLE placement_names ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant ON placement_names TO app_rw USING (workspace_id = app_workspace_id());
+CREATE POLICY system ON placement_names TO app_system USING (true) WITH CHECK (true);

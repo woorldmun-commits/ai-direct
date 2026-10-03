@@ -194,3 +194,19 @@ def test_discover_glues_directory_in_file_order(tmp_path):
     found = discover(tmp_path)
     assert [m.version for m in found] == ["0001_base", "0002_next"]
     assert found[0].sql == "SELECT 1;\nSELECT 2;\n"
+
+
+def test_0005_applies_on_non_empty_database(db):
+    """0005 на БД с глобальным справочником имён (0003): старые строки уходят вместе с таблицей, новая — по workspace."""
+    admin, name = _admin_uri(), "ai_direct_mig_0005"
+    _create_db(admin, name)
+    upto = [m for m in discover() if m.version < "0005"]
+    with psycopg.connect(_with_user(admin, "app_migrator", name)) as conn:
+        migrate(conn, upto)
+        conn.execute("INSERT INTO placement_names (id, name) VALUES (1, 'global-site.ru')")
+        conn.commit()
+        assert migrate(conn) == [m.version for m in discover() if m.version >= "0005"]
+        cols = [r[0] for r in conn.execute("""SELECT column_name FROM information_schema.columns
+                                              WHERE table_name = 'placement_names' ORDER BY ordinal_position""")]
+        assert cols == ["workspace_id", "id", "name"]
+        assert conn.execute("SELECT count(*) FROM placement_names").fetchone() == (0,)

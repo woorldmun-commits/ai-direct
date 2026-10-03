@@ -29,7 +29,8 @@
   "expected": [{                                          // ровно эти выводы, не больше и не меньше
     "rule_version": "zero_conv_campaign@1", "object_type": "campaign", "object_id": 101,
     "candidate_level": "inspect_only", "action_level": "inspect_only",
-    "action": {"type": "investigate_zero_conversions", ...}, "exposure": "42000.00"
+    "action": {"type": "investigate_zero_conversions", ...}, "exposure": "42000.00",
+    "can_save": "unavailable"                             // необязательно: «Можно сэкономить» — сумма или unavailable
   }],
   "expected_not_enough_data": [{"rule_version": "...", "reason": "...", "object_type": "campaign", "object_id": 101}]
 }                                                         // необязательно: эти «недостаточно данных» должны быть
@@ -69,7 +70,9 @@ _SNAPSHOT_KEYS = {"period_to", "history_days", "partial_from", "sources"}
 _CAMPAIGN_KEYS = {"id", "strategy", "history_days", "days"}
 _DAY_KEYS = {"date", "cost", "clicks", "conversions"}
 _PLACEMENT_KEYS = {"campaign_id", "id", "masked", "days"}
-_EXPECTED_KEYS = {"rule_version", "object_type", "object_id", "candidate_level", "action_level", "action", "exposure"}
+_REQUIRED_EXPECTED = {"rule_version", "object_type", "object_id", "candidate_level", "action_level", "action",
+                      "exposure"}
+_EXPECTED_KEYS = _REQUIRED_EXPECTED | {"can_save"}
 _NED_KEYS = {"rule_version", "reason", "object_type", "object_id"}
 TAGS = {"problem", "clean", "boundary", "partial", "autostrategy", "not_enough_data"}
 
@@ -168,7 +171,7 @@ def load_cases(root: Path = CASES_DIR) -> list[Case]:
         if "clean" in data.get("tags", ()) and data["expected"]:
             raise ValueError(f"{name}: у «чистого» кейса не может быть ожидаемых выводов")
         for e in data["expected"]:
-            _keys(e, _EXPECTED_KEYS, f"{name}: expected", _EXPECTED_KEYS)
+            _keys(e, _EXPECTED_KEYS, f"{name}: expected", _REQUIRED_EXPECTED)
         for e in data.get("expected_not_enough_data", []):
             _keys(e, _NED_KEYS, f"{name}: expected_not_enough_data", {"rule_version", "reason"})
         cases.append(Case(name, data))
@@ -191,6 +194,7 @@ class Outcome:
     action_level: str
     action: dict
     exposure: Decimal
+    can_save: str  # recoverable: сумма строкой или "unavailable"
     partial: bool  # хотя бы одно число вывода — за дни, которые ещё досчитываются
     card: ExposureFinding  # вход exposure_total@1: lost как Value и декларированная основа
 
@@ -217,6 +221,7 @@ def evaluate(case: Case) -> tuple[list[Outcome], list[NotEnoughData]]:
                                    out.exposure_basis)
             findings.append(Outcome(out.rule_version, out.object_type, out.object_id, d.candidate_level, d.level,
                                     _json(dict(out.action)), values[0].amount,
+                                    "unavailable" if out.recoverable.amount is None else str(out.recoverable.amount),
                                     any(v.data_status == "partial" for v in values), card))
     return findings, skipped
 
@@ -244,6 +249,8 @@ def gate(case: Case) -> list[tuple[str, str]]:
                                 ("exposure", o.exposure, Decimal(e["exposure"]))):
             if got != want:
                 violations.append(("regression", f"{key}: {name} {want!r} → {got!r}"))
+        if "can_save" in e and o.can_save != e["can_save"]:
+            violations.append(("regression", f"{key}: can_save {e['can_save']!r} → {o.can_save!r}"))
     for key in actual.keys() - expected.keys():
         violations.append(("false_positive", f"{key}: лишний вывод" + (" на чистом кейсе" if "clean" in case.tags
                                                                          else "")))

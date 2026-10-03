@@ -165,6 +165,8 @@ def test_source_failure_skips_only_rules_that_need_it(rw, ws, monkeypatch, tmp_p
     out = audit(rw, ws)
     assert one(rw, "SELECT count(*) FROM findings WHERE audit_run_id = %s", out.audit_run_id) == 1
     assert one(rw, "SELECT rules_skipped FROM audit_runs WHERE id = %s", out.audit_run_id) == [
+        {"account": ws["account"], "rule": "zero_conv_placements@1", "reason": "source_missing",  # отчёт площадок выкл.
+         "object_type": None, "object_id": None},
         {"account": ws["account"], "rule": "site_goal_health@1", "reason": "source_missing",
          "object_type": None, "object_id": None}]
 

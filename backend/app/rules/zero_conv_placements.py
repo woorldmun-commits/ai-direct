@@ -11,8 +11,14 @@
 Для объединения расхода без двойного учёта (audit/exposure.py) в evidence есть каждая площадка отдельно:
 placement_<id>_cost / _clicks за окно, а основа суммы декларирована явно: exposure_basis = spend по строкам уровня
 placement с object_id из placement_ids внутри кампании вывода за окно lost.period.
-recoverable — своя формула, но это ВЕРХНЯЯ оценка: после исключения площадок Директ обычно перераспределяет бюджет
-на другие площадки, и экономия будет меньше (formula это говорит).
+recoverable = unavailable (no_forecast): после исключения площадок Директ перераспределяет бюджет на другие площадки,
+а модели перераспределения в v1.0 нет — копия exposure завысила бы «Можно сэкономить».
+
+Правило вычисляется, только если в снимке есть отчёт площадок (возможность direct_placements): без него площадок
+«нет» не потому, что их проверили, — открытая проблема не должна закрыться как решённая. Если площадки без
+конверсий с расходом в окне есть, но ни одна не проходит пороги — NotEnoughData(VOLUME_INSUFFICIENT), конверсии
+площадки неизвестны (None) — NotEnoughData(SOURCE_MISSING): как у zero_conv_campaign, проблема не «исчезает» от того,
+что расход упал ниже порога. Вывода нет (None) — только когда в окне нет расхода площадок без конверсий.
 
 Ориентир CPA: target_cpa, если задан (user_input), иначе CPA самой кампании за весь снимок (37 дней, все сети и
 поиск) — при не меньше reference_min_conversions конверсиях; иначе «недостаточно данных», а не выдуманный порог.
@@ -26,9 +32,9 @@ recoverable — своя формула, но это ВЕРХНЯЯ оценка
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 
-from app.rules.domain import (DIRECT_CONVERSIONS, AuditSettings, CampaignDay, ExposureBasis, Fact, Finding,
-                              NotEnoughData, Output, PlacementDay, Reason, Rule, SnapshotView, Window, frozen, issue_key,
-                              windows)
+from app.rules.domain import (DIRECT_CONVERSIONS, DIRECT_PLACEMENTS, AuditSettings, CampaignDay, ExposureBasis,
+                              Fact, Finding, NotEnoughData, Output, PlacementDay, Reason, Rule, SnapshotView, Window,
+                              frozen, issue_key, windows)
 
 FAMILY = "zero_conv_placements"
 CENT = Decimal("0.01")
@@ -36,8 +42,6 @@ MASK = "***"  # sync/sanitize.py: имя площадки не прошло allo
 CPA_FORMULA = "campaign_total_spend / campaign_total_conversions"
 LOST_FORMULA = "sum(placement_cost) for placements with 0 conversions, cost >= reference_cpa * min_cost_cpa_share, " \
                "clicks >= min_clicks"
-RECOVERABLE_FORMULA = ("upper bound: sum(placement_cost) of excluded placements over the window, "
-                       "assuming the budget is not reallocated to other placements")
 QUALITY_ORDER = ("low", "medium", "high")
 
 
@@ -72,23 +76,33 @@ def _passes(cost: Decimal, clicks: int, reference: Decimal, p) -> bool:
 
 
 def _flagged(days: list[PlacementDay], reference: Decimal, evaluation: Window, partial_from: date | None, p):
-    """Площадки кампании, прошедшие пороги: (id, имя, расход, клики, только_с_досчётом) по убыванию расхода."""
+    """(прошедшие пороги, причина «недостаточно данных» или None). Прошедшие — (id, имя, расход, клики,
+    только_с_досчётом) по убыванию расхода. Кандидат — площадка с именем, без конверсий за снимок и с расходом в окне:
+    не прошла пороги → VOLUME_INSUFFICIENT; конверсии неизвестны → SOURCE_MISSING (ноль не выводится из отсутствия)."""
     by_placement: dict[int, list[PlacementDay]] = {}
     for d in days:
         by_placement.setdefault(d.placement_id, []).append(d)
-    out = []
+    out, reasons = [], set()
     for pid, pdays in by_placement.items():
         name = next((d.placement for d in pdays if d.placement is not None), None)
-        if name == MASK or any(d.conversions is None or d.conversions > 0 for d in pdays):
+        if name == MASK or any(d.conversions is not None and d.conversions > 0 for d in pdays):
             continue  # безымянная или с конверсиями хоть когда-то за снимок
         inside = [d for d in pdays if d.date in evaluation]
         cost, clicks = sum((d.cost for d in inside), Decimal(0)), sum(d.clicks for d in inside)
+        if cost <= 0:
+            continue
+        if any(d.conversions is None for d in pdays):
+            reasons.add(Reason.SOURCE_MISSING)
+            continue
         if not _passes(cost, clicks, reference, p):
+            reasons.add(Reason.VOLUME_INSUFFICIENT)
             continue
         complete = [d for d in inside if partial_from is not None and d.date < partial_from]
         solid = _passes(sum((d.cost for d in complete), Decimal(0)), sum(d.clicks for d in complete), reference, p)
         out.append((pid, name, cost, clicks, not solid))
-    return sorted(out, key=lambda x: (-x[2], x[0]))
+    reason = (Reason.SOURCE_MISSING if Reason.SOURCE_MISSING in reasons
+              else Reason.VOLUME_INSUFFICIENT if reasons else None)
+    return sorted(out, key=lambda x: (-x[2], x[0])), reason
 
 
 def _quality(expected_conversions: Decimal, partial: bool, p) -> str:
@@ -112,9 +126,9 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings, 
     if isinstance(ref, Reason):
         return NotEnoughData(rule.rule_version, ref, "campaign", campaign_id)
     reference, ref_evidence = ref
-    flagged = _flagged(days, reference, evaluation, snap.partial_from, p)
+    flagged, reason = _flagged(days, reference, evaluation, snap.partial_from, p)
     if not flagged:
-        return None
+        return None if reason is None else NotEnoughData(rule.rule_version, reason, "campaign", campaign_id)
 
     cost = sum((f[2] for f in flagged), Decimal(0))
     clicks = sum(f[3] for f in flagged)
@@ -140,7 +154,8 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings, 
         meta["level_reason"] = "conversions_partial"
 
     lost = Fact(cost, "rub", source, evaluation, "estimated", LOST_FORMULA)
-    recoverable = Fact(cost, "rub", source, evaluation, "estimated", RECOVERABLE_FORMULA)
+    # «Можно сэкономить» — нет модели перераспределения бюджета после исключения площадок (v1.0): не копия lost
+    recoverable = Fact.unavailable("rub", source, evaluation, reason="no_forecast")
     return Finding(
         rule_version=rule.rule_version, issue_type=rule.family, object_type="campaign", object_id=campaign_id,
         issue_key=issue_key(snap.workspace_id, snap.direct_account_id, rule.family, "campaign", campaign_id),
@@ -172,7 +187,7 @@ def evaluate(rule: Rule, snap: SnapshotView, settings: AuditSettings) -> tuple[O
 # Пороги v1 — ПРЕДЛОЖЕНИЕ, утверждает владелец (PRODUCT_SPEC §10.1). Любое изменение = новая версия правила.
 ZERO_CONV_PLACEMENTS = Rule(
     id="zero_conv_placements", version=1, family=FAMILY,
-    required_sources=frozenset({"yandex_direct", DIRECT_CONVERSIONS}), evaluate=evaluate,
+    required_sources=frozenset({"yandex_direct", DIRECT_CONVERSIONS, DIRECT_PLACEMENTS}), evaluate=evaluate,
     params=frozen({
         # Расход площадки за 7 дней ≥ 1 × ориентир CPA: на этих деньгах кампания в среднем уже получила бы
         # одну конверсию. Ниже — ноль конверсий ничего не значит (у Пуассона с ожиданием 0,5 ноль в 61% случаев).
