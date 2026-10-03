@@ -5,11 +5,11 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { PlatformIcon } from "@/components/ui";
 import { ValueView } from "@/components/value-view";
-import { ACTION_LEVEL_LABEL, type Recommendation } from "@/lib/contract";
+import { ACTION_LEVEL_LABEL, objectLabel, type Recommendation } from "@/lib/contract";
 import { EXPOSURE_SHORT } from "@/lib/site";
 import { formatPeriod, sourceLabel, type Value } from "@/lib/value";
 import { RecActions, StatusBadge } from "./rec-actions";
-import { ActionText } from "./rec-parts";
+import { ActionText, HeldNote, OverlapNote } from "./rec-parts";
 import { useDemo } from "./store";
 
 export { RecActions, StatusBadge };
@@ -56,16 +56,18 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
         <LevelBadge level={r.action_level} />
       </div>
       <h3 className="mt-3 text-lg font-bold">
-        <ActionText action={r.action} />
+        <ActionText r={r} />
       </h3>
       <p className="text-sm text-muted">
-        {r.title} · {r.object.name}
+        {r.title} · {objectLabel(r.object)}
       </p>
       <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
         <div>
           <dt className="label">{EXPOSURE_SHORT}</dt>
           <dd>
             <ValueView v={r.exposure} className="text-danger" />
+            <OverlapNote r={r} className="mt-1 block text-xs text-muted" />
+            <HeldNote r={r} className="mt-1 block text-xs text-muted" />
           </dd>
         </div>
         <div>
@@ -93,8 +95,13 @@ export function LossesList({ recs, selectable = true }: { recs: Recommendation[]
   const [selected, setSelected] = useState<string[]>([]);
   const toggle = (id: string) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
   const all = recs.length > 0 && selected.length === recs.length;
-  const overlapNote = (r: Recommendation) => r.exposure_overlap && <span className="block text-[11px] font-normal text-muted">уже учтено в другой карточке</span>;
-  const platform = (r: Recommendation) => (r.object.name.startsWith("РСЯ") ? "network" : "search");
+  const overlapNote = (r: Recommendation) => (
+    <>
+      <OverlapNote r={r} className="block text-[11px] font-normal whitespace-normal text-muted" />
+      <HeldNote r={r} className="block text-[11px] font-normal whitespace-normal text-muted" />
+    </>
+  );
+  const platform = (r: Recommendation) => (r.object.name?.startsWith("РСЯ") ? "network" : "search");
 
   return (
     <div className="relative">
@@ -126,7 +133,7 @@ export function LossesList({ recs, selectable = true }: { recs: Recommendation[]
                   <td className="px-4 py-4">
                     <input
                       type="checkbox"
-                      aria-label={`Выбрать: ${r.object.name}`}
+                      aria-label={`Выбрать: ${objectLabel(r.object)}`}
                       checked={selected.includes(r.id)}
                       onChange={() => toggle(r.id)}
                       className="size-4 accent-[var(--brand)]"
@@ -137,7 +144,7 @@ export function LossesList({ recs, selectable = true }: { recs: Recommendation[]
                   <div className="flex items-center gap-3">
                     <PlatformIcon platform={platform(r)} />
                     <div>
-                      <p className="font-semibold">{r.object.name}</p>
+                      <p className="font-semibold">{objectLabel(r.object)}</p>
                       <p className="text-xs text-muted">Яндекс Директ · {r.ad_account.login}</p>
                     </div>
                   </div>
@@ -171,7 +178,7 @@ export function LossesList({ recs, selectable = true }: { recs: Recommendation[]
               {selectable && (
                 <input
                   type="checkbox"
-                  aria-label={`Выбрать: ${r.object.name}`}
+                  aria-label={`Выбрать: ${objectLabel(r.object)}`}
                   checked={selected.includes(r.id)}
                   onChange={() => toggle(r.id)}
                   className="size-5 accent-[var(--brand)]"
@@ -179,7 +186,7 @@ export function LossesList({ recs, selectable = true }: { recs: Recommendation[]
               )}
             </div>
             <p className="mt-3 font-bold">{r.title}</p>
-            <p className="text-xs text-muted">{r.object.name}</p>
+            <p className="text-xs text-muted">{objectLabel(r.object)}</p>
             <div className="mt-3 flex items-center justify-between gap-3">
               <div>
                 <ValueView v={r.exposure} className="text-xl text-danger" />

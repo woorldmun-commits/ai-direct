@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { LossesList, MetricCard } from "@/components/app/problem";
-import { SAVED_NOTE } from "@/components/app/rec-parts";
+import { canSaveNote, SAVED_NOTE } from "@/components/app/rec-parts";
 import { useDemo } from "@/components/app/store";
 import { PageHeader, StateBox } from "@/components/ui";
 import { ValueView } from "@/components/value-view";
 import { ruleName, RULE_TITLE } from "@/lib/contract";
 import { P7 } from "@/lib/demo";
+import { isActive } from "@/lib/demo-backend";
 import { EXPOSURE, EXPOSURE_NOTE } from "@/lib/site";
 import { formatPeriod } from "@/lib/value";
 
@@ -21,7 +22,8 @@ const FILTERS = [
 export default function Losses() {
   const { active, today: getToday } = useDemo();
   const today = getToday("fresh");
-  const open = active.filter((r) => r.status !== "applied" && r.status !== "rejected");
+  // Open = what the total counts: postponed recommendations are out until they come back (as the backend).
+  const open = active.filter(isActive);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("all");
   const shown = filter === "all" ? open : open.filter((r) => ruleName(r.evidence.rule_version).startsWith(filter));
   const { exposure } = today;
@@ -31,7 +33,7 @@ export default function Losses() {
       <PageHeader title="Где бюджет расходуется неэффективно" sub={`Открытые проблемы за ${formatPeriod(P7)}. Порядок — по сумме расхода с признаками неэффективности.`} />
       <div className="grid gap-4 sm:grid-cols-3">
         <MetricCard label={EXPOSURE} v={exposure.total} tone="text-danger" />
-        <MetricCard label="Можно сэкономить" v={today.can_save.total} tone="text-warning" note="оценка по открытым рекомендациям, без двойного учёта" />
+        <MetricCard label="Можно сэкономить" v={today.can_save.total} tone="text-warning" note={canSaveNote(today.can_save)} />
         <MetricCard label="Сэкономлено" v={today.saved} tone="text-success" note={SAVED_NOTE} />
       </div>
       <div className="mt-3 space-y-1 text-xs text-muted">

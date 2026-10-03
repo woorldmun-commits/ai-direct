@@ -145,7 +145,7 @@ function ProductPreview() {
                   <ValueView v={main.exposure} hint={false} className="text-[15px] text-danger" />
                 </p>
                 <p className="mt-1 text-[10px] text-muted">
-                  <ActionText action={main.action} />
+                  <ActionText r={main} />
                 </p>
               </div>
               <div className="rounded-xl border border-line bg-surface p-3">

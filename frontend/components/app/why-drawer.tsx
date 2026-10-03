@@ -3,11 +3,11 @@
 import { ChevronDown, X } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { ValueView } from "@/components/value-view";
-import { ACTION_LEVEL_LABEL, REJECT_LABEL, resultLabel } from "@/lib/contract";
+import { ACTION_LEVEL_LABEL, objectLabel, REJECT_LABEL, resultLabel } from "@/lib/contract";
 import { CALCULATION_LABEL, formatPeriod, sourceLabel } from "@/lib/value";
 import { EXPOSURE, EXPOSURE_NOTE } from "@/lib/site";
 import { RecActions, StatusBadge } from "./rec-actions";
-import { ActionText, FACT_LABEL, LIMITATION_LABEL, MeasurementView, Origin, POLICY_REASON_LABEL } from "./rec-parts";
+import { ActionText, FACT_LABEL, HeldNote, LIMITATION_LABEL, MeasurementView, Origin, OverlapNote, POLICY_REASON_LABEL } from "./rec-parts";
 import { useDemo } from "./store";
 
 /** One block of the fixed order Что → Почему → Что сделать → Решение → Проверка (PRODUCT_SPEC §4.3). */
@@ -66,15 +66,14 @@ export function WhyDrawer() {
             {r.title}
           </h2>
           <p className="text-sm text-muted">
-            {r.object.name} · кабинет {r.ad_account.login}
+            {objectLabel(r.object)} · кабинет {r.ad_account.login}
           </p>
           <div className="mt-3 rounded-2xl bg-surface p-4">
             <p className="label">{EXPOSURE}</p>
             <ValueView v={r.exposure} caption className="text-[28px] text-danger" />
-            <p className="mt-1 text-xs text-muted">
-              {EXPOSURE_NOTE}
-              {r.exposure_overlap && " Часть суммы уже учтена в другой карточке."}
-            </p>
+            <p className="mt-1 text-xs text-muted">{EXPOSURE_NOTE}</p>
+            <OverlapNote r={r} className="mt-1 block text-xs font-semibold text-muted" />
+            <HeldNote r={r} className="mt-1 block text-xs font-semibold text-muted" />
           </div>
         </Step>
 
@@ -101,9 +100,13 @@ export function WhyDrawer() {
 
         <Step n={3} title="Что сделать">
           <p className="text-lg font-bold">
-            <ActionText action={r.action} />
+            <ActionText r={r} />
           </p>
-          <p className="text-sm text-muted">Вручную в Яндекс Директе — AdPilot в v1.0 не меняет кабинет.</p>
+          <p className="text-sm text-muted">
+            {r.action_level === "inspect_only"
+              ? "Только проверка: настройки кампании по этой рекомендации не меняются."
+              : "Вручную в Яндекс Директе — AdPilot в v1.0 не меняет кабинет."}
+          </p>
           <div className="mt-3 rounded-xl bg-surface p-3">
             <p className="label">Можно сэкономить</p>
             <ValueView v={r.can_save} caption className="text-lg text-warning" />

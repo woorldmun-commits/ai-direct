@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { StateBox } from "@/components/ui";
 import { ValueView } from "@/components/value-view";
-import { REJECT_LABEL, type Recommendation } from "@/lib/contract";
+import { objectLabel, REJECT_LABEL, type Recommendation } from "@/lib/contract";
 import { formatDate, formatMoment } from "@/lib/value";
 import { StatusBadge } from "./rec-actions";
 import { ActionText, MeasurementView, SAVED_NOTE } from "./rec-parts";
@@ -55,11 +55,11 @@ function CycleCard({ r }: { r: Recommendation }) {
         </p>
         <StatusBadge r={r} />
       </div>
-      <p className="mt-1 text-xs text-muted">{r.object.name}</p>
+      <p className="mt-1 text-xs text-muted">{objectLabel(r.object)}</p>
       <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-[150px_1fr]">
         <dt className="text-muted">Рекомендация</dt>
         <dd className="font-semibold">
-          <ActionText action={r.action} /> · <ValueView v={r.exposure} className="text-danger" />
+          <ActionText r={r} /> · <ValueView v={r.exposure} className="text-danger" />
         </dd>
         <dt className="text-muted">Вы</dt>
         <dd>

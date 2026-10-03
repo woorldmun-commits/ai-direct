@@ -4,14 +4,14 @@ import { ArrowRight, History, ListChecks } from "lucide-react";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui";
 import { DeltaBadge, ValueView } from "@/components/value-view";
-import type { TodayResponse } from "@/lib/contract";
+import { objectLabel, type TodayResponse } from "@/lib/contract";
 import { DEMO_ERROR, DEMO_NOW, integrations, type SourcesScenario } from "@/lib/demo-backend";
 import { TODAY_DATE, USER } from "@/lib/demo";
 import { EXPOSURE, EXPOSURE_NOTE } from "@/lib/site";
 import { formatMoment, formatPeriod } from "@/lib/value";
 import { StaleNotice } from "./freshness";
 import { LevelBadge, MetricCard } from "./problem";
-import { EVENT_LABEL, SAVED_NOTE } from "./rec-parts";
+import { ActionText, EVENT_LABEL, HeldNote, OverlapNote, SAVED_NOTE } from "./rec-parts";
 import { ConnectDirect, DemoStateSwitch, ErrorState, LoadingState, NothingFound, type ScreenState } from "./screen-state";
 import { useDemo } from "./store";
 
@@ -85,14 +85,21 @@ function TodayData({ today }: { today: TodayResponse }) {
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold">{r.title}</p>
+                  <p className="text-sm">
+                    <ActionText r={r} />
+                  </p>
                   <p className="text-xs text-muted">
-                    {r.object.name} · {formatPeriod(r.period)}
+                    {objectLabel(r.object)} · {formatPeriod(r.period)}
                   </p>
                 </div>
                 <span className="self-start sm:self-auto">
                   <LevelBadge level={r.action_level} />
                 </span>
-                <ValueView v={r.exposure} className="text-lg text-danger" />
+                <span className="sm:max-w-[200px] sm:text-right">
+                  <ValueView v={r.exposure} className="text-lg text-danger" />
+                  <OverlapNote r={r} className="block text-[11px] text-muted" />
+                  <HeldNote r={r} className="block text-[11px] text-muted" />
+                </span>
                 <button className="btn btn-secondary btn-sm" onClick={() => openWhy(r.id)}>
                   Почему? Что сделать
                 </button>

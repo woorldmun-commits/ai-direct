@@ -3,7 +3,7 @@
  * the real `GET /api/v1/workspaces/{ws}/…` endpoints is a change of data source, not of screens.
  * Unknown fields from the server are ignored (§1); enums are the v1.0 sets.
  */
-import type { DataStatus, DecimalString, Period, Value } from "./value";
+import type { DataStatus, DataSufficiency, DecimalString, Period, Value } from "./value";
 
 // §3 — recommendation lifecycle
 export type RecStatus = "new" | "requires_decision" | "accepted" | "applied" | "postponed" | "rejected";
@@ -68,19 +68,44 @@ export interface AdAccountRef {
 export interface ObjectRef {
   type: string;
   id: string;
-  name: string;
+  /** Campaign name for the user; `null` when the server does not send it. */
+  name: string | null;
 }
 
-// §5 — what the human changes in Direct by hand: exactly four shapes of the three v1.0 rules, `execution` is
-// always `manual`. A discriminated union on `type`, so a screen has to handle each one.
+/** Name of the object for the screen; the id when the name is unknown. */
+export const objectLabel = (o: ObjectRef): string => o.name ?? `Кампания ${o.id}`;
+
+// §5 — what the human changes in Direct by hand, `execution` is always `manual`. A discriminated union on `type`,
+// so a screen has to handle each one. The shape follows the policy level: `inspect_only` → `investigate` (only
+// what to check, no settings change); `review` of `decrease_bid` with an unknown strategy → `levers` (manual bid
+// or the autostrategy's target). A shape this client does not know arrives as `action = null`.
 export type ActionSuggestion = "set_target_cpa";
 export type ZeroConversionCheck = "conversion_goals" | "strategy" | "search_queries_negative_keywords";
 
+/** One way to make the change, depending on the campaign's strategy (unknown to AdPilot in v1.0). */
+export interface BidLever {
+  strategy: "manual" | "auto";
+  /** Ready text from the server, e.g. «снизить целевую цену конверсии или проверить цели». */
+  text: string;
+  /** Manual bids only: negative Decimal string. */
+  change_pct?: DecimalString | null;
+}
 export interface DecreaseBidAction {
   type: "decrease_bid";
   execution: "manual";
   /** Negative Decimal string, e.g. `"-15.00"`. */
   change_pct: DecimalString;
+  /** `review` with an unknown strategy: both levers, the human picks the one that fits the campaign. */
+  levers?: BidLever[];
+}
+export type InvestigateTopic = "high_cpa" | "zero_conv_campaign" | "zero_conv_placements";
+/** `action_level = inspect_only`: what to check; nothing in the settings is changed. */
+export interface InvestigateAction {
+  type: "investigate";
+  execution: "manual";
+  topic: InvestigateTopic;
+  /** Check codes; an unknown code is shown as it comes. */
+  checks: string[];
 }
 export interface InvestigateCpaGrowthAction {
   type: "investigate_cpa_growth";
@@ -104,7 +129,8 @@ export type RecommendationAction =
   | DecreaseBidAction
   | InvestigateCpaGrowthAction
   | InvestigateZeroConversionsAction
-  | ExcludePlacementsAction;
+  | ExcludePlacementsAction
+  | InvestigateAction;
 
 // §5 — list item
 export interface RecommendationListItem {
@@ -114,14 +140,19 @@ export interface RecommendationListItem {
   ad_account: AdAccountRef;
   object: ObjectRef;
   action_level: ActionLevel;
-  action: RecommendationAction;
+  /** `null` — a shape this client does not know: «Действие недоступно, см. доказательства». */
+  action: RecommendationAction | null;
   status: RecStatus;
+  /** Week 4: `null` until the server sends them. */
   execution_mode: ExecutionMode | null;
   verification_status: VerificationStatus | null;
   exposure: Value;
-  exposure_overlap: boolean;
+  /** Part of `exposure` already counted by another card (`0.00` — none); the total counts it once. */
+  exposure_overlap: Value;
   can_save: Value;
   data_status: Value["data_status"];
+  /** `insufficient` — a held problem: the card is shown, its sum is not in the total. */
+  data_sufficiency: DataSufficiency;
   period: Period;
   /** When the current version (`version_id`) was calculated. */
   computed_at: string;
@@ -180,10 +211,11 @@ export interface Recommendation {
   allowed_actions: UserAction[];
   blocked_actions: { action: UserAction; reason: BlockedReason }[];
   exposure: Value;
-  exposure_overlap: boolean;
+  exposure_overlap: Value;
   can_save: Value;
+  data_sufficiency: DataSufficiency;
   explanation: { text: string; source: "llm" | "template" };
-  action: RecommendationAction;
+  action: RecommendationAction | null;
   evidence: { facts: Record<string, Value>; meta: Record<string, string>; rule_version: string };
   safety: { safety_policy: string; candidate_level: ActionLevel; policy_reasons: string[]; data_status: Value["data_status"] };
   limitations: string[];
