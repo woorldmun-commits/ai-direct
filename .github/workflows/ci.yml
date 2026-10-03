@@ -118,6 +118,13 @@ jobs:
         run: |
           python -m pip install pip-audit==2.10.1
           pip-audit -r backend/requirements-dev.txt
-      - name: npm audit (high and critical block)
+      # Блокирует high/critical в зависимостях, которые попадают в продакшен-сборку. Инструменты разработки
+      # (eslint и т. п.) не исполняются в продакшене: их уязвимости видны в отчёте, но merge не блокируют —
+      # иначе advisory без исправленной версии (например, braces через eslint-config-next) останавливает всю работу.
+      - name: npm audit (production, high and critical block)
         working-directory: frontend
+        run: npm audit --audit-level=high --package-lock-only --omit=dev
+      - name: npm audit (dev tooling, report only)
+        working-directory: frontend
+        continue-on-error: true
         run: npm audit --audit-level=high --package-lock-only
