@@ -29,3 +29,6 @@ e2e-result/
 .claude-flow/
 .agents/
 graphify-out/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/

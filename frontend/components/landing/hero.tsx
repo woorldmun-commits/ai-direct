@@ -163,7 +163,7 @@ function ProductPreview() {
       </div>
       <div className="absolute -right-2 -bottom-10 hidden w-[260px] rounded-2xl border border-white/15 bg-[#0c1916]/80 p-4 text-white shadow-[0_20px_50px_-20px_rgba(0,0,0,.7)] backdrop-blur-xl sm:block lg:-right-6">
         <p className="flex items-center gap-2 text-xs font-bold">
-          <BadgeCheck size={15} className="text-[#39BFA0]" /> Почему AdPilot так решил
+          <BadgeCheck size={15} className="text-[#39BFA0]" /> Почему AdPilot так считает?
         </p>
         <p className="mt-1.5 text-xs text-white/70">
           {main.explanation.text.split(". ")[0]}. Источник: Директ + Метрика.

@@ -23,7 +23,7 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
   );
 }
 
-/** Passport «Почему AdPilot так решил». Works without an LLM: the text is a template over the finding's facts. */
+/** Passport «Почему AdPilot так считает?». Works without an LLM: the text is a template over the finding's facts. */
 export function WhyDrawer() {
   const { get, whyId, closeWhy } = useDemo();
   const r = whyId ? get(whyId) : undefined;
@@ -58,7 +58,7 @@ export function WhyDrawer() {
           </button>
         </div>
         <p id="why-title" className="mt-3 text-xs text-muted">
-          Почему AdPilot так решил
+          Почему AdPilot так считает?
         </p>
 
         <Step n={1} title="Что">
