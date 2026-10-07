@@ -21,17 +21,20 @@ TARGET = AuditSettings(target_cpa=Decimal("3000"))
 NO_TARGET = AuditSettings()
 
 
-def snap(eval_cost=42000, eval_conv=8, base_cost=115200, base_conv=30, history_days=37, sources=BOTH, extra=()):
+def snap(eval_cost=42000, eval_conv=8, base_cost=115200, base_conv=30, history_days=37, sources=BOTH, extra=(),
+         eval_day=D, partial_from=D + timedelta(1), eval_clicks=10):  # по умолчанию все дни завершены
     """37-дневный снимок одной кампании: итоги периода — в последний день, итоги baseline — в последний день baseline,
     остальные дни нулевые (они задают глубину истории)."""
     first = D - timedelta(history_days - 1)
     rows = {first + timedelta(i): [Decimal(0), Decimal(0)] for i in range(history_days)}
-    rows[D] = [Decimal(eval_cost), Decimal(eval_conv)]
+    rows[eval_day] = [Decimal(eval_cost), Decimal(eval_conv)]
     if D - timedelta(7) in rows:
         rows[D - timedelta(7)] = [Decimal(base_cost), Decimal(base_conv)]
-    days = tuple(CampaignDay(CID, d, cost, 10, conv) for d, (cost, conv) in sorted(rows.items())) + tuple(extra)
+    days = tuple(CampaignDay(CID, d, cost, eval_clicks if d == eval_day else 10, conv)
+                 for d, (cost, conv) in sorted(rows.items())) + tuple(extra)
     return SnapshotView(snapshot_id=84721, workspace_id=7, direct_account_id=3,
-                        period_from=D - timedelta(36), period_to=D, sources=sources, campaign_days=days)
+                        period_from=D - timedelta(36), period_to=D, sources=sources, campaign_days=days,
+                        partial_from=partial_from)
 
 
 HIGH_CPA_RULES = tuple(r for r in RULES if r.family == "high_cpa")  # другие семейства — свои тесты
@@ -61,7 +64,7 @@ def test_target_high_cpa_exact_contract():
     assert f.lost.source == "yandex_direct+yandex_metrika+user_input"
     assert f.recoverable == f.lost  # target-режим: действие с шагом ставки, прогноз = lost
     assert f.current_data_quality == "medium"  # 8 конверсий в периоде
-    assert set(f.evidence) == {"cost", "conversions", "cpa", "target_cpa"}
+    assert set(f.evidence) == {"cost", "conversions", "cpa", "target_cpa", *DECOMPOSITION}
     assert f.evidence["target_cpa"].source == "user_input"
     assert (f.evidence["cost"].amount, f.evidence["conversions"].amount) == (Decimal(42000), Decimal(8))
     assert f.evidence["cost"].period == windows(D)[0]
@@ -96,6 +99,7 @@ def test_target_v1_params_are_fixed():
         "mode": "target", "trigger_delta_pct": 10, "step_excess_pct": 20, "bid_change_step_pct": 5,
         "rounding": "floor", "min_bid_change_pct": 5, "max_bid_change_pct": 25,
         "current_high_conversions": 10, "current_medium_conversions": 3,
+        "decomposition_min_baseline_conversions": 10, "cpc_growth_pct": 10, "cr_drop_max_p": 0.05,
     }
 
 
@@ -127,8 +131,9 @@ def test_baseline_high_cpa_exact_contract():
     assert f.lost.amount == Decimal("11280.00") and f.lost.source == "yandex_direct+yandex_metrika"
     # «Проверить»: прогноза эффекта нет — «Можно сэкономить» недоступно, а не копия lost (ARCHITECTURE §4)
     assert (f.recoverable.amount, f.recoverable.calculation_type) == (None, "unavailable")
-    assert dict(f.evidence_meta) == {"baseline_data_quality": "high"}
-    assert set(f.evidence) == {"cost", "conversions", "cpa", "baseline_cost", "baseline_conversions", "baseline_cpa"}
+    assert dict(f.evidence_meta) == {"baseline_data_quality": "high", "cpa_driver": "cpc", "cr_drop_p": "0.717"}
+    assert set(f.evidence) == {"cost", "conversions", "cpa", "baseline_cost", "baseline_conversions", "baseline_cpa",
+                               *DECOMPOSITION}
     b = f.evidence["baseline_cpa"]
     assert (b.calculation_type, b.formula, b.period) == ("estimated", "period_total_spend / period_total_conversions",
                                                          windows(D)[1])
@@ -229,6 +234,65 @@ def test_current_data_quality_does_not_block_action():
     безопасности (tests/test_safety_policy.py), а не правило."""
     f = only(audit(snap(eval_cost=5000, eval_conv=1), TARGET))
     assert f.current_data_quality == "low" and f.action["type"] == "decrease_bid"
+
+
+# --- Разложение CPA = CPC / CR ---------------------------------------------------------------------
+
+DECOMPOSITION = {"clicks", "cpc", "cr", "baseline_clicks", "baseline_cpc", "baseline_cr"}
+
+
+def test_decomposition_names_expensive_click():
+    """CPA 5 250 против базы 3 840: клик 600 ₽ против 384 ₽ (+56%), конверсия из клика не упала (11,43% против 10%)."""
+    f = only(audit(snap(), TARGET))
+    ev = f.evidence
+    assert (ev["cpc"].amount, ev["baseline_cpc"].amount) == (Decimal("600.00"), Decimal("384.00"))
+    assert (ev["cr"].amount, ev["baseline_cr"].amount) == (Decimal("11.43"), Decimal("10.00"))
+    assert (ev["clicks"].amount, ev["baseline_clicks"].amount) == (Decimal(70), Decimal(300))
+    assert ev["cpc"].formula and ev["cr"].formula and ev["cpc"].calculation_type == "estimated"
+    assert ev["baseline_cpc"].period == windows(D)[1] and ev["cpc"].period == windows(D)[0]
+    assert f.evidence_meta["cpa_driver"] == "cpc"
+
+
+def test_decomposition_names_conversion_drop_only_when_significant():
+    """Клик стоит как обычно (≈ 382 ₽), конверсия из клика 3,64% против 10%: p ≈ 0,03 — это не шум."""
+    f = only(audit(snap(eval_cost=42000, eval_conv=4, eval_clicks=50), TARGET))
+    assert f.evidence_meta["cpa_driver"] == "cr" and Decimal(f.evidence_meta["cr_drop_p"]) < Decimal("0.05")
+
+
+def test_decomposition_does_not_guess_on_noise():
+    """8 конверсий на 110 кликов (7,27% против 10%): p ≈ 0,27 — так бывает случайно; клик не подорожал. Числа
+    показываются, причина — нет."""
+    f = only(audit(snap(eval_cost=42000, eval_conv=8, eval_clicks=50), TARGET))
+    assert f.evidence_meta["cpa_driver"] == "unclear" and DECOMPOSITION <= set(f.evidence)
+
+
+@pytest.mark.parametrize("kwargs", [
+    {"base_conv": 9, "base_cost": 34560},          # база < 10 конверсий: CR базы — шум
+    {"partial_from": None},                        # граница досчёта неизвестна: окончательных дней нет
+    {"partial_from": D - timedelta(6)},            # всё окно оценки досчитывается: окончательных дней нет
+])
+def test_no_decomposition_without_solid_data(kwargs):
+    f = only(audit(snap(**kwargs), TARGET))
+    assert not DECOMPOSITION & set(f.evidence) and "cpa_driver" not in f.evidence_meta
+
+
+# --- Досчёт конверсий (partial) -----------------------------------------------------------------
+
+PARTIAL = D - timedelta(2)  # последние 3 дня досчитываются
+SOLID_DAY = D - timedelta(3)
+
+
+@pytest.mark.parametrize("eval_day, partial_from", [(D, PARTIAL), (SOLID_DAY, None)])
+def test_quality_reached_only_with_partial_days_is_capped(eval_day, partial_from):
+    """12 конверсий — high, но они за дни досчёта (или граница неизвестна): CPA этих дней завышен, достаточность
+    данных не выше medium, как в zero_conv_campaign."""
+    f = only(audit(snap(eval_cost=63000, eval_conv=12, eval_day=eval_day, partial_from=partial_from), TARGET))
+    assert f.current_data_quality == "medium" and f.evidence_meta["level_reason"] == "conversions_partial"
+
+
+def test_quality_on_complete_days_is_not_capped():
+    f = only(audit(snap(eval_cost=63000, eval_conv=12, eval_day=SOLID_DAY, partial_from=PARTIAL), TARGET))
+    assert f.current_data_quality == "high" and "level_reason" not in f.evidence_meta
 
 
 @pytest.mark.parametrize("settings", [TARGET, NO_TARGET])

@@ -8,7 +8,7 @@ import pytest
 
 from app.audit.policy import CANDIDATE_LEVEL, LEVELS, decide
 from app.audit.templates import explain
-from test_rule_high_cpa import NO_TARGET, TARGET, audit, only, snap
+from test_rule_high_cpa import D, NO_TARGET, PARTIAL, TARGET, audit, only, snap
 from test_direct_sync import root  # noqa: F401 — фикстура
 from test_metrika_sync import metrika  # noqa: F401 — фикстура
 from test_schema import EVENT_AT, EXECUTED, chain, one, value  # noqa: F401 — фикстура
@@ -31,6 +31,30 @@ def test_bid_change_is_downgraded_by_data_and_unknown_strategy(conv, level, reas
     assert f.action["type"] == "decrease_bid"                             # правило предлагает кандидата всегда
     d = decide(f)
     assert (d.candidate_level, d.level, d.reasons, d.version) == ("change", level, reasons, "safety_policy@1")
+
+
+@pytest.mark.parametrize("settings", [TARGET, NO_TARGET])
+def test_partial_conversions_are_named_in_explanation(settings):
+    """Конверсии за дни досчёта: карточка говорит, что CPA может снизиться, — иначе клиент примет его за итоговый."""
+    f = only(audit(snap(eval_cost=63000, eval_conv=12, eval_day=D, partial_from=PARTIAL), settings))
+    assert f.evidence_meta["level_reason"] == "conversions_partial"
+    assert "досчитывается" in explain(f, decide(f))
+
+
+@pytest.mark.parametrize("kwargs, phrase", [
+    ({}, "Главная причина — подорожал клик: клик 600 ₽ против 384 ₽"),
+    ({"eval_conv": 4, "eval_clicks": 50}, "Главная причина — упала конверсия из клика: конверсия из клика 3,64% против 10%"),
+    ({"eval_conv": 8, "eval_clicks": 50}, "в пределах обычного разброса"),
+])
+def test_explanation_names_cause_only_from_decomposition(kwargs, phrase):
+    f = only(audit(snap(eval_cost=42000, **kwargs), TARGET))
+    assert phrase in explain(f, decide(f))
+
+
+def test_explanation_without_decomposition_names_no_cause():
+    f = only(audit(snap(partial_from=None), TARGET))
+    text = explain(f, decide(f))
+    assert "причина" not in text.lower() and "разброса" not in text
 
 
 def test_investigation_stays_inspect_only():

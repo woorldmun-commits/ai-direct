@@ -9,8 +9,17 @@ saved = NULL. Схема БД: saved есть ⇔ verdict = effect; «измен
 
 high_cpa: saved = конверсии_после × max(CPA_до − CPA_после, 0): расходы, сэкономленные на фактически полученном
 объёме против прежнего CPA. Падение CPA за счёт урезанного объёма в saved не превращается.
-- high_cpa_measure@2 — текущая: экономия подтверждается только при конверсиях_после ≥ конверсий_до; иначе
-  verdict = not_confirmed («стоимость заявки снизилась, но экономия не подтверждена: заявок стало меньше»).
+- high_cpa_measure@3 — текущая. «До» — 30-дневный базовый период выполненного вывода (из снимка, по которому
+  сработало правило), а не 7 дней перед выполнением: неделя «до» — та самая, по которой правило сработало, и в
+  среднем она хуже обычной; сравнение с ней «находило» экономию там, где кампания просто вернулась к норме
+  (регрессия к среднему; моделирование: ≈ 80% ложных effect у @2 при CPA, равном цели). Объём сравнивается в
+  конверсиях в день (окна разной длины). Экономия подтверждается, только если рост конверсий на рубль значим:
+  условный биномиальный тест, p = P(X ≥ конверсии_после), X ~ Bin(конверсии_до + конверсии_после,
+  расход_после / (расход_до + расход_после)) — при неизменном CPA конверсии делятся между окнами пропорционально
+  расходу; p ≥ max_p_value → not_confirmed (not_significant). Контрольной группы нет: сезонность не учтена.
+- high_cpa_measure@2 — для замеров, созданных до @3: экономия подтверждается только при конверсиях_после ≥
+  конверсий_до; иначе verdict = not_confirmed («стоимость заявки снизилась, но экономия не подтверждена: заявок
+  стало меньше»).
 - high_cpa_measure@1 — историческая (допуск падения конверсий 20%, при падении — no_effect). Новые замеры по ней не
   создаются; остаётся для воспроизводимости уже сделанных.
 
@@ -23,6 +32,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Iterable, Literal, Mapping
 
 from app.rules.domain import CampaignDay, Fact, PlacementDay, Window, frozen
+from app.rules.stats import binomial_upper_tail
 
 DESIGN = "uncontrolled_before_after"
 _WAIT = {"final_data_wait_days": 14}  # сколько ждать окончательных данных за окно «после»; дальше — insufficient
@@ -38,12 +48,18 @@ METHODS = {
     "high_cpa_measure@1": frozen(_V1),
     "high_cpa_measure@2": frozen({**_V1, "max_conversion_drop_pct": 0,  # conv_after ≥ conv_before
                                   "conversions_dropped_verdict": "not_confirmed"}),
+    # min_before_conversions = 10 — как baseline_min_conversions в high_cpa_baseline@1; max_p_value — порог значимости.
+    # Оба УТВЕРЖДАЕТ ВЛАДЕЛЕЦ ПРОДУКТА. before_from_finding_snapshot: окно «до» — базовый период вывода, данные — из
+    # снимка вывода (снимок замера его не покрывает: синхронизация грузит 37 дней).
+    "high_cpa_measure@3": frozen({**_V1, "max_conversion_drop_pct": 0, "conversions_dropped_verdict": "not_confirmed",
+                                  "min_before_conversions": 10, "max_p_value": 0.10,
+                                  "before_from_finding_snapshot": True}),
     # CPA после ≤ max_cpa_after_reference_share × ориентир CPA выполненного вывода. Утверждает владелец продукта.
     "zero_conv_campaign_measure@2": frozen({"max_cpa_after_reference_share": Decimal(1), **_WAIT}),
     # Конверсии кампании «до» — не меньше: иначе «конверсии не упали» ничего не значит (0 → 0). Утверждает владелец.
     "zero_conv_placements_measure@2": frozen({"min_before_conversions": 3, **_WAIT}),
 }
-POLICY = "high_cpa_measure@2"  # high_cpa: по ней создаются новые замеры (триггер на 'done' в schema.sql)
+POLICY = "high_cpa_measure@3"  # high_cpa: по ней создаются новые замеры (триггер на 'done' в schema.sql)
 PARAMS = METHODS[POLICY]
 CENT = Decimal("0.01")
 CPA_FORMULA = "period_total_spend / period_total_conversions"
@@ -87,6 +103,14 @@ def _period(days: list[CampaignDay], window: Window) -> tuple[Decimal, Decimal, 
     return cost, conv, facts
 
 
+def _length(window: Window) -> int:
+    return (window.date_to - window.date_from).days + 1
+
+
+def _count(conversions: Decimal) -> int:
+    return int(conversions.to_integral_value(ROUND_HALF_UP))
+
+
 def _known(days: list[CampaignDay], *windows: Window) -> bool:
     """Конверсии известны за каждый день окон: ноль конверсий не выводится из их отсутствия (Метрика не подключена)."""
     return all(d.conversions is not None for d in days if any(d.date in w for w in windows))
@@ -119,11 +143,18 @@ def measure_cpa(days: Iterable[CampaignDay], before: Window, after: Window, para
     if a_conv == 0:
         return result("no_effect", "no_conversions_after")
     cpa_b, cpa_a = b_cost / b_conv, a_cost / a_conv
-    observed = {"cpa_change_pct": _pct(cpa_a, cpa_b), "conversions_change_pct": _pct(a_conv, b_conv)}
+    # Объём — в конверсиях в день, перекрёстным умножением (точно в Decimal): окна у @3 разной длины, у @1/@2 равны.
+    b_days, a_days = _length(before), _length(after)
+    observed = {"cpa_change_pct": _pct(cpa_a, cpa_b), "conversions_change_pct": _pct(a_conv * b_days, b_conv * a_days)}
     if cpa_a >= cpa_b:
         return result("no_effect", "cpa_not_lower", **observed)
-    if a_conv < b_conv * (1 - Decimal(params["max_conversion_drop_pct"]) / 100):
+    if a_conv * b_days < b_conv * a_days * (1 - Decimal(params["max_conversion_drop_pct"]) / 100):
         return result(params["conversions_dropped_verdict"], "conversions_dropped", **observed)
+    if (alpha := params.get("max_p_value")) is not None:
+        p = binomial_upper_tail(_count(a_conv), _count(a_conv + b_conv), float(a_cost / (a_cost + b_cost)))
+        observed["p_value"] = f"{p:.3f}"
+        if p >= alpha:
+            return result("not_confirmed", "not_significant", **observed)
     saved = Fact((a_conv * (cpa_b - cpa_a)).quantize(CENT, ROUND_HALF_UP), "rub", DM, after, "estimated", SAVED_FORMULA)
     return result("effect", "cpa_lower_at_same_volume", saved, **observed)
 

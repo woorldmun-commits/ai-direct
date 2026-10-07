@@ -33,6 +33,25 @@ def _bid_advice(f: Finding, d: Decision) -> str:
     return f"Рекомендуется снизить ставку на {change}%."
 
 
+def _cause(f: Finding) -> str:
+    """Разложение CPA = CPC / CR (rules/decompose.py): причина — только если правило признало её не шумом."""
+    driver = f.evidence_meta.get("cpa_driver")
+    if driver is None:
+        return ""
+    ev = f.evidence
+    cpc = f"клик {_rub(ev['cpc'].amount)} ₽ против {_rub(ev['baseline_cpc'].amount)} ₽"
+    cr = f"конверсия из клика {_rub(ev['cr'].amount)}% против {_rub(ev['baseline_cr'].amount)}%"
+    period = " (дни недели с окончательными данными против 30 дней до неё)"
+    return {
+        "cpc": f" Главная причина — подорожал клик: {cpc}; {cr}{period}.",
+        "cr": (f" Главная причина — упала конверсия из клика: {cr}; {cpc}{period}. Сначала проверьте посадочную "
+               "страницу, формы и учёт целей: если дело в сайте, снижение ставки лишь сократит трафик."),
+        "cpc_and_cr": f" Подорожал клик и упала конверсия из клика: {cpc}, {cr}{period}.",
+        "unclear": (f" По отдельности цена клика и конверсия изменились в пределах обычного разброса: {cpc}, "
+                    f"{cr}{period}."),
+    }[driver]
+
+
 _ZERO_CONV_REFERENCE = {
     "target_cpa": ("target_cpa", "целевого CPA"),
     "campaign_baseline": ("baseline_cpa", "CPA кампании за прошлые 30 дней"),
@@ -90,9 +109,13 @@ def explain(f: Finding, d: Decision) -> str:
     if f.reason_code == "placements_without_conversions":
         return _placements(f, d)
     head = f"CPA кампании {f.object_id} — {_rub(f.actual)} ₽"
+    partial = (" Часть конверсий последних дней ещё досчитывается — CPA может оказаться ниже."
+               if f.evidence_meta.get("level_reason") == "conversions_partial" else "")
     if f.reason_code == "cpa_above_target":
-        return f"{head}, это на {f.delta_pct}% выше целевого CPA {_rub(f.reference)} ₽. {_bid_advice(f, d)}"
+        return (f"{head}, это на {f.delta_pct}% выше целевого CPA {_rub(f.reference)} ₽.{partial}{_cause(f)} "
+                f"{_bid_advice(f, d)}")
     if f.reason_code == "cpa_above_baseline":
-        return (f"{head}, это на {f.delta_pct}% выше исторического базового уровня {_rub(f.reference)} ₽. "
+        return (f"{head}, это на {f.delta_pct}% выше исторического базового уровня {_rub(f.reference)} ₽.{partial}"
+                f"{_cause(f)} "
                 "Проверьте причину роста и укажите целевой CPA — оценка станет точнее.")
     return f"{f.metric} = {f.actual}, ориентир {f.reference} ({f.reference_type}), отклонение {f.delta_pct}%."

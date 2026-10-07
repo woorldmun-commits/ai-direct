@@ -9,7 +9,7 @@ effect / no_effect / insufficient) · Skipped (guard: подписка неак�
 В сумму «Сэкономлено ≈» результат входит отдельным решением — counted_saved: ручное выполнение (execution_mode =
 manual, в v1.0 это каждое 'done') только при verification_status = confirmed (сверка — API_CONTRACT §6.1)."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Callable
@@ -66,6 +66,12 @@ class _M:
     workspace_id: int
     account_id: int
     campaign_id: int
+    finding_snapshot: tuple[int, date]  # (id, partial_from) снимка, по которому построен выполненный вывод
+
+    @property
+    def before_from_finding(self) -> bool:
+        """Окно «до» — из снимка вывода (high_cpa_measure@3: базовый период), а не из снимка замера."""
+        return bool(METHODS[self.policy].get("before_from_finding_snapshot"))
 
 
 def _load(conn: psycopg.Connection, measurement_id: int) -> _M | None:
@@ -73,7 +79,8 @@ def _load(conn: psycopg.Connection, measurement_id: int) -> _M | None:
     # append-only, расходиться нечему.
     row = conn.execute("""SELECT m.id, m.recommendation_id, m.issue_id, m.finding_id, m.done_event_id, m.policy,
                                  m.before_from, m.before_to, m.after_from, m.after_to, s.conversion_definition,
-                                 f.action, f.evidence, i.workspace_id, i.direct_account_id, i.object_id
+                                 f.action, f.evidence, i.workspace_id, i.direct_account_id, i.object_id,
+                                 s.id, s.partial_from
                           FROM measurements m
                           JOIN issues i ON i.id = m.issue_id
                           JOIN findings f ON f.id = m.finding_id
@@ -83,9 +90,10 @@ def _load(conn: psycopg.Connection, measurement_id: int) -> _M | None:
                           WHERE m.id = %s""", (measurement_id,)).fetchone()
     if row is None:
         return None
-    mid, rec, issue, finding, done, policy, bf, bt, af, at, definition, action, evidence, ws, account, campaign = row
+    (mid, rec, issue, finding, done, policy, bf, bt, af, at, definition, action, evidence, ws, account, campaign,
+     f_snap, f_partial) = row
     return _M(mid, rec, issue, finding, done, policy, Window(bf, bt), Window(af, at), definition, action, evidence, ws,
-              account, campaign)
+              account, campaign, (f_snap, f_partial))
 
 
 def _finished(conn: psycopg.Connection, m: _M) -> Measured | Skipped | None:
@@ -105,13 +113,15 @@ def _claim(conn: psycopg.Connection, m: _M) -> Measured | Skipped | None:
 
 
 def _snapshot(conn: psycopg.Connection, m: _M) -> tuple[int, date, dict | None] | None:
-    """Снимок, в котором оба окна целиком и данные за окно «после» уже окончательные (вне окна дозачёта)."""
+    """Снимок, в котором окна целиком (окно «до» — если оно не из снимка вывода) и данные за окно «после» уже
+    окончательные (вне окна дозачёта)."""
+    cover_from = m.after.date_from if m.before_from_finding else m.before.date_from
     return conn.execute("""SELECT s.id, s.partial_from, s.conversion_definition
                            FROM snapshots s JOIN sync_runs r ON r.id = s.sync_run_id
                            WHERE s.workspace_id = %s AND r.direct_account_id = %s AND s.status = 'complete'
                              AND s.period_from <= %s AND s.period_to >= %s AND s.partial_from > %s
                            ORDER BY s.sealed_at DESC, s.id DESC LIMIT 1""",
-                        (m.workspace_id, m.account_id, m.before.date_from, m.after.date_to, m.after.date_to)).fetchone()
+                        (m.workspace_id, m.account_id, cover_from, m.after.date_to, m.after.date_to)).fetchone()
 
 
 def _write(conn: psycopg.Connection, m: _M, *, release_id: int, now: datetime, snapshot: tuple | None,
@@ -182,13 +192,19 @@ def _run_measurement(conn: psycopg.Connection, measurement_id: int, *, release_i
     if snap[2] != m.definition:  # сравнивать можно только одно и то же определение конверсии
         return _write(conn, m, release_id=release_id, now=now, snapshot=snap, verdict="insufficient",
                       before={}, after={}, saved=None, effect={"reason": "conversion_definition_changed"})
-    r = measure(m.policy, _input(m, load_view(conn, snap[0])), m.before, m.after)
+    view = load_view(conn, snap[0])
+    before_snap = m.finding_snapshot if m.before_from_finding else (snap[0], snap[1])
+    if m.before_from_finding:  # «до» — из неизменяемого снимка вывода, «после» — из снимка замера
+        before_days = tuple(d for d in load_view(conn, before_snap[0]).campaign_days if d.date in m.before)
+        view = replace(view, campaign_days=before_days + tuple(d for d in view.campaign_days if d.date in m.after))
+    r = measure(m.policy, _input(m, view), m.before, m.after)
 
-    def values(facts):
-        return {k: to_value(f, snap[0], snap[1], m.policy).model_dump(mode="json") for k, f in facts.items()}
+    def values(facts, source):  # каждое число ссылается на снимок, из которого взято
+        return {k: to_value(f, source[0], source[1], m.policy).model_dump(mode="json") for k, f in facts.items()}
     saved = to_value(r.saved, snap[0], snap[1], m.policy).model_dump(mode="json") if r.saved else None
     return _write(conn, m, release_id=release_id, now=now, snapshot=snap, verdict=r.verdict,
-                  before=values(r.before), after=values(r.after), saved=saved, effect=dict(r.effect))
+                  before=values(r.before, before_snap), after=values(r.after, snap), saved=saved,
+                  effect=dict(r.effect))
 
 
 # Ориентир CPA вывода zero_conv_campaign — ровно один из этих ключей evidence (rules/zero_conv_campaign.py: _reference);
