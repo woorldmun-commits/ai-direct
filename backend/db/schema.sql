@@ -872,16 +872,24 @@ CREATE TABLE measurements (
 );
 
 -- День выполнения — execution_date события 'done' (его считает приложение в часовом поясе данных).
--- measure@2 (текущая; @1 — только для уже созданных замеров): 7 дней до дня выполнения и 7 дней после; сам день выполнения не входит ни в одно окно.
+-- Окно «после» — 7 дней после дня выполнения; сам день ни в одно окно не входит.
+-- high_cpa_measure@3 (0006): «до» — 30 дней перед неделей оценки выполненного вывода (его базовый период; неделя оценки
+-- — evidence.cost), а не неделя перед выполнением: та неделя — та, по которой сработало правило (регрессия к среднему).
+-- Остальные семейства — measure@2: 7 дней до дня выполнения. @1 — только для уже созданных замеров.
 CREATE FUNCTION create_measurement_on_done() RETURNS trigger
 LANGUAGE plpgsql AS $$
 DECLARE d date := NEW.execution_date;
 BEGIN
   INSERT INTO measurements (done_event_id, recommendation_id, issue_id, finding_id, policy,
                             before_from, before_to, after_from, after_to)
-  SELECT NEW.id, NEW.recommendation_id, NEW.issue_id, NEW.finding_id, i.issue_type || '_measure@2',
-         d - 7, d - 1, d + 1, d + 7
-  FROM issues i
+  SELECT NEW.id, NEW.recommendation_id, NEW.issue_id, NEW.finding_id,
+         i.issue_type || CASE WHEN v3 THEN '_measure@3' ELSE '_measure@2' END,
+         CASE WHEN v3 THEN (f.evidence->'cost'->>'period_from')::date - 30 ELSE d - 7 END,
+         CASE WHEN v3 THEN (f.evidence->'cost'->>'period_from')::date - 1 ELSE d - 1 END,
+         d + 1, d + 7
+  FROM issues i JOIN findings f ON f.id = NEW.finding_id,
+       -- @3 нужна неделя оценки вывода; без доказательства cost — прежняя @2, а не отказ в «Выполнено»
+       LATERAL (SELECT i.issue_type = 'high_cpa' AND f.evidence ? 'cost' AS v3) x
   WHERE i.id = NEW.issue_id;
   RETURN NULL;
 END

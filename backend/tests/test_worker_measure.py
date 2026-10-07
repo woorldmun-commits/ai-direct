@@ -59,8 +59,10 @@ def test_execution_date_is_moscow_calendar_day():
         execution_date(datetime(2026, 9, 30, 12))
 
 
-def measurement_snapshot(rw, ws, m, before=(50000, 10), after=(35000, 10), definition=GOALS, settle=3) -> int:
-    """Снимок, в котором оба окна целиком; settle=3 — окно «после» вне окна дозачёта (партиал — последние 3 дня)."""
+def measurement_snapshot(rw, ws, m, before=(50000, 10), after=(21000, 14), definition=GOALS, settle=3) -> int:
+    """Снимок замера; settle=3 — окно «после» вне окна дозачёта (партиал — последние 3 дня). У high_cpa_measure@3
+    окно «до» берётся из снимка вывода (база CPA 3 840 ₽), строка before здесь в замер не входит. after по умолчанию —
+    значимый эффект: CPA 1 500 ₽, 14 конверсий за 7 дней (2 в день против 1 в базе)."""
     to = m["after_to"] + timedelta(settle)
     rows = (StatRow("campaign", CID, to - timedelta(36), 1, 0, Decimal(0), Decimal(0)),
             StatRow("campaign", CID, m["before_to"], 700, 70, Decimal(before[0]), Decimal(before[1])),
@@ -103,20 +105,27 @@ def test_measurement_follows_the_version_that_was_done(rw, ws):
     assert one(rw, "SELECT action->>'change_pct' FROM findings WHERE id = %s", finding_b) == "-25"
 
     m = done(rw, ws, rec, finding_b)
-    assert m["finding"] == finding_b and m["policy"] == "high_cpa_measure@2"
-    # окна — от дня выполнения, который передало приложение; сам день — ни в одном окне
-    assert (m["before_from"], m["before_to"]) == (EXECUTED - timedelta(7), EXECUTED - timedelta(1))
+    assert m["finding"] == finding_b and m["policy"] == "high_cpa_measure@3"
+    # «после» — от дня выполнения, который передало приложение; «до» — 30 дней перед неделей оценки вывода (его база),
+    # а не неделя перед выполнением: по той неделе правило и сработало (регрессия к среднему)
+    eval_from = date.fromisoformat(one(rw, "SELECT evidence->'cost'->>'period_from' FROM findings WHERE id = %s",
+                                       finding_b))
+    assert (m["before_from"], m["before_to"]) == (eval_from - timedelta(30), eval_from - timedelta(1))
     assert (m["after_from"], m["after_to"]) == (EXECUTED + timedelta(1), EXECUTED + timedelta(7))
 
     measured_snap = measurement_snapshot(rw, ws, m)
     out = measure(rw, ws, m)
     assert isinstance(out, Measured) and out.verdict == "effect"
-    finding, saved, snapshot_id = rw.execute("""SELECT finding_id, saved, snapshot_id FROM recommendation_results
-                                                WHERE id = %s""", (out.result_id,)).fetchone()
+    finding, saved, snapshot_id, before = rw.execute("""SELECT finding_id, saved, snapshot_id, before
+                                                        FROM recommendation_results WHERE id = %s""",
+                                                     (out.result_id,)).fetchone()
     assert finding == finding_b and finding != finding_a
-    # «Сэкономлено» воспроизводимо: 10 × (5 000 − 3 500), снимок, окно «после», методика и формула — в Value
-    assert (Decimal(saved["amount"]), saved["snapshot_id"], saved["rule_version"]) == \
-        (Decimal("15000.00"), measured_snap, "high_cpa_measure@2")
+    # «до» — из снимка вывода (он неизменяем), с его id: база 115 200 ₽ / 30 = 3 840 ₽
+    finding_snap = one(rw, "SELECT (evidence->'cost'->>'snapshot_id')::bigint FROM findings WHERE id = %s", finding_b)
+    assert (Decimal(before["cpa"]["amount"]), before["cpa"]["snapshot_id"]) == (Decimal("3840.00"), finding_snap)
+    assert finding_snap != measured_snap
+    # «Сэкономлено» воспроизводимо: 14 × (3 840 − 1 500), снимок, окно «после», методика и формула — в Value
+    assert (Decimal(saved["amount"]), saved["snapshot_id"], saved["rule_version"]) ==         (Decimal("32760.00"), measured_snap, "high_cpa_measure@3")
     assert (saved["period_from"], saved["period_to"]) == (m["after_from"].isoformat(), m["after_to"].isoformat())
     assert saved["formula"] == "conversions_after * (cpa_before - cpa_after)" and snapshot_id == measured_snap
     assert one(rw, "SELECT close_reason FROM issues i JOIN recommendations r ON r.issue_id = i.id WHERE r.id = %s",

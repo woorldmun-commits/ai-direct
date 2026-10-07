@@ -9,6 +9,7 @@ high_cpa_baseline@1 — target_cpa не задан → сравнение с bas
 from datetime import date
 from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
 
+from app.rules.decompose import decompose
 from app.rules.domain import (DIRECT_CONVERSIONS, FORMULA, AuditSettings, CampaignDay, Fact, Finding, NotEnoughData,
                               Output, Reason, Rule, SnapshotView, Window, frozen, issue_key, windows)
 
@@ -16,6 +17,7 @@ FAMILY = "high_cpa"
 CPA_FORMULA = "period_total_spend / period_total_conversions"
 CENT = Decimal("0.01")
 ROUNDING = {"floor": ROUND_FLOOR}
+LEVELS = ("low", "medium", "high")
 
 
 def _sum(days: list[CampaignDay], window: Window) -> tuple[Decimal, Decimal]:
@@ -30,6 +32,17 @@ def _current_data_quality(conversions: Decimal, p) -> str:
     if conversions >= p["current_medium_conversions"]:
         return "medium"
     return "low"
+
+
+def _capped_by_partial(days: list[CampaignDay], snap: SnapshotView, evaluation: Window, quality: str, p) -> str | None:
+    """Дни date ≥ partial_from досчитываются: их конверсии неполные, CPA завышен. Если уровень достигается только с
+    ними (или граница неизвестна) — достаточность не выше medium, как в zero_conv_campaign. None — ограничения нет."""
+    complete = sum((d.conversions or Decimal(0) for d in days
+                    if d.date in evaluation and snap.partial_from is not None and d.date < snap.partial_from), Decimal(0))
+    solid = _current_data_quality(complete, p)
+    if LEVELS.index(solid) < LEVELS.index(quality):
+        return min(quality, "medium", key=LEVELS.index)
+    return None
 
 
 def _baseline_quality(conversions: Decimal, p) -> str | None:
@@ -100,6 +113,12 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings,
         "cpa": Fact(cpa, "rub", "yandex_direct+yandex_metrika", evaluation, "estimated", CPA_FORMULA),
         **ref_evidence,
     }
+    reason_facts, reason_meta = decompose(days, evaluation, baseline, snap.partial_from, p)
+    evidence |= reason_facts
+    meta = {**meta, **reason_meta}
+    quality = _current_data_quality(conv, p)
+    if (capped := _capped_by_partial(days, snap, evaluation, quality, p)) is not None:
+        quality, meta = capped, {**meta, "level_reason": "conversions_partial"}
     source = "yandex_direct+yandex_metrika" + ("+user_input" if mode == "target" else "")
     lost = Fact(((cpa - reference) * conv).quantize(CENT, ROUND_HALF_UP), "rub", source, evaluation,
                 "estimated", f"(cpa - {mode}_cpa) * conversions")
@@ -115,7 +134,7 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings,
         delta_pct=delta.quantize(Decimal("0.1"), ROUND_HALF_UP), lost=lost,
         # «Проверить» (baseline) — обоснованной формулы прогноза нет: «Можно сэкономить» не копирует lost (ARCHITECTURE §4).
         recoverable=lost if mode == "target" else Fact.unavailable("rub", source, evaluation, reason="no_forecast"),
-        current_data_quality=_current_data_quality(conv, p),
+        current_data_quality=quality,
         evidence=frozen(evidence), evidence_meta=frozen(meta), action=frozen(action),
         exposure_basis=FORMULA,  # (cpa − ориентир) × конверсии: на единицы расхода не раскладывается
     )
@@ -135,7 +154,9 @@ def evaluate(rule: Rule, snap: SnapshotView, settings: AuditSettings) -> tuple[O
 
 _SOURCES = frozenset({"yandex_direct", DIRECT_CONVERSIONS})
 # ponytail: v1-значения, в PRD чисел нет — уточнить на реальных данных. Любое изменение = новая версия правила.
-_COMMON = {"trigger_delta_pct": 10, "current_high_conversions": 10, "current_medium_conversions": 3}
+_COMMON = {"trigger_delta_pct": 10, "current_high_conversions": 10, "current_medium_conversions": 3,
+           # разложение CPA = CPC / CR (rules/decompose.py): пороги «причина — не шум», УТВЕРЖДАЕТ ВЛАДЕЛЕЦ ПРОДУКТА
+           "decomposition_min_baseline_conversions": 10, "cpc_growth_pct": 10, "cr_drop_max_p": 0.05}
 
 HIGH_CPA_TARGET = Rule(
     id="high_cpa_target", version=1, family=FAMILY, required_sources=_SOURCES, evaluate=evaluate,
