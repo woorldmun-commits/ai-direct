@@ -6,7 +6,8 @@ from app.intelligence.metrics.definitions import VERSION, source_of_truth
 from app.rules.domain import NotEnoughData, Reason, Rule, SnapshotView
 
 LEGACY_LABELS = ("yandex_metrika", "yandex_direct+yandex_metrika")  # (конверсии, CPA) у @1
-PARTIAL = {"level_reason": "conversions_partial"}
+PARTIAL_REASON = "conversions_partial"  # evidence_meta.level_reason и причина понижения в safety_policy@2
+PARTIAL = {"level_reason": PARTIAL_REASON}
 
 
 def labels(rule: Rule) -> tuple[str, str]:

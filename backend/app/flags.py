@@ -2,8 +2,11 @@
 INTELLIGENCE_V2, LLM_ENABLED …). Умолчания — решения владельца продукта (Intelligence 2.0). Пустое или непонятное
 значение оставляет умолчание: опечатка не включает и не выключает функцию."""
 
+import logging
 import os
 from typing import Mapping
+
+log = logging.getLogger(__name__)
 
 DEFAULTS: Mapping[str, bool] = {
     "intelligence_v2": True,
@@ -19,6 +22,7 @@ DEFAULTS: Mapping[str, bool] = {
     "creative_intelligence": False,
     "llm_enabled": False,
 }
+SAFETY_FLAGS = ("safety_engine_v2", "source_of_truth_v2")  # их выключение возвращает старое, менее строгое поведение
 _TRUE = {"1", "true", "yes", "on"}
 _FALSE = {"0", "false", "no", "off"}
 
@@ -31,4 +35,8 @@ def flag(name: str, env: Mapping[str, str] | None = None) -> bool:
 
 
 def active_flags(env: Mapping[str, str] | None = None) -> dict[str, bool]:
-    return {name: flag(name, env) for name in DEFAULTS}
+    active = {name: flag(name, env) for name in DEFAULTS}
+    for name in SAFETY_FLAGS:
+        if not active[name]:
+            log.warning("флаг %s выключен: действует прежнее поведение (@1) без проверок v2", name)
+    return active

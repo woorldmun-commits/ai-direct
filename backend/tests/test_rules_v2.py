@@ -11,6 +11,7 @@ from app.audit.policy import DataHealth, decide, decide_v2
 from app.intelligence.metrics.definitions import VERSION as METRICS_VERSION
 from app.rules import ALL_RULES, RULES
 from app.rules.domain import AuditSettings, Finding, NotEnoughData, Reason, run
+from app.rules import RULES_V1, RULES_V2
 from app.rules.high_cpa import HIGH_CPA_BASELINE, HIGH_CPA_BASELINE_V2, HIGH_CPA_TARGET, HIGH_CPA_TARGET_V2
 from app.rules.zero_conv_campaign import ZERO_CONV_CAMPAIGN, ZERO_CONV_CAMPAIGN_V2
 from app.rules.zero_conv_placements import ZERO_CONV_PLACEMENTS_V2
@@ -98,7 +99,7 @@ def test_high_cpa_v2_partial_only_conversions_cap_data_quality_and_policy():
     s = hc_view(partial_from=hc.D - timedelta(2), eval_cost=63000, eval_conv=12)  # всё окно — за дни досчёта
     f = hc.only(v2(s, hc.TARGET))
     assert f.evidence_meta["level_reason"] == "conversions_partial"
-    assert f.current_data_quality == "medium"  # 12 конверсий были бы high
+    assert f.current_data_quality == "low"  # завершённых конверсий 0: 12 за дни досчёта не считаются
     d = decide_v2(f)
     assert d.level != "change" and "conversions_partial" in d.reasons
 
@@ -120,11 +121,34 @@ def test_high_cpa_v2_mixed_days_are_solid_if_complete_days_alone_exceed_trigger(
     assert f.current_data_quality == "high"
 
 
-@pytest.mark.parametrize("complete", [(40000, 0), (30000, 10)])  # конверсий нет / CPA завершённых дней = цели
-def test_high_cpa_v2_mixed_days_not_solid_when_complete_days_alone_do_not_trigger(complete):
+@pytest.mark.parametrize("complete, quality", [((40000, 0), "low"),       # конверсий нет
+                                               ((30000, 10), "medium")])  # CPA завершённых дней = цели, вывод не держится
+def test_high_cpa_v2_mixed_days_not_solid_when_complete_days_alone_do_not_trigger(complete, quality):
     days = {hc.D - timedelta(3): complete, hc.D: (63000 - complete[0], 12 - complete[1])}
     f = hc.only(v2(hc_view(partial_from=hc.D - timedelta(2), eval_cost=0, eval_conv=0, days=days), hc.TARGET))
-    assert f.evidence_meta["level_reason"] == "conversions_partial" and f.current_data_quality == "medium"
+    assert f.evidence_meta["level_reason"] == "conversions_partial" and f.current_data_quality == quality
+
+
+@pytest.mark.parametrize("complete_conv, quality", [(1, "low"), (2, "low"), (3, "medium"), (9, "medium")])
+def test_high_cpa_v2_quality_comes_from_complete_days_conversions(complete_conv, quality):
+    """Завершённые дни держат вывод (CPA выше порога), но конверсий в них мало; 10 в сумме с досчётом — не high."""
+    days = {hc.D - timedelta(3): (5000 * complete_conv, complete_conv),
+            hc.D: (63000 - 5000 * complete_conv, 10 - complete_conv)}
+    f = hc.only(v2(hc_view(partial_from=hc.D - timedelta(2), eval_cost=0, eval_conv=0, days=days), hc.TARGET))
+    assert f.current_data_quality == quality and f.evidence_meta["level_reason"] == "conversions_partial"
+    assert decide_v2(f).level != "change"
+
+
+# завершённые дни: 10 конверсий; CPA ровно на trigger_delta_pct (10%) выше ориентира → держит; на копейку ниже → нет
+@pytest.mark.parametrize("settings, cost, solid", [
+    (hc.TARGET, "33000.00", True), (hc.TARGET, "32999.90", False),        # ориентир 3000 → 3300
+    (hc.NO_TARGET, "42240.00", True), (hc.NO_TARGET, "42239.00", False),  # baseline 3840 → 4224
+])
+def test_high_cpa_v2_solid_boundary_is_inclusive_at_trigger(settings, cost, solid):
+    days = {hc.D - timedelta(3): (cost, 10), hc.D: ("30000.00", 2)}
+    f = hc.only(v2(hc_view(partial_from=hc.D - timedelta(2), eval_cost=0, eval_conv=0, days=days), settings))
+    assert ("level_reason" not in f.evidence_meta) is solid
+    assert f.current_data_quality == ("high" if solid else "medium")
 
 
 # --- safety_policy@2: только понижает ----------------------------------------------------------------------
@@ -134,6 +158,17 @@ def test_policy_v2_keeps_v1_behaviour_without_new_signals():
     d1, d2 = decide(f), decide_v2(f)
     assert (d2.candidate_level, d2.level, d2.reasons) == (d1.candidate_level, d1.level, d1.reasons)
     assert d2.version == "safety_policy@2" and d1.version == "safety_policy@1"
+
+
+@pytest.mark.parametrize("conv", [1, 3, 12, 50, 500])
+@pytest.mark.parametrize("partial_from", [None, hc.D - timedelta(2), NEVER_PARTIAL])
+@pytest.mark.parametrize("health", [DataHealth(), DataHealth(source_failed=False, stale=False)])
+def test_policy_v2_unknown_strategy_never_reaches_change(conv, partial_from, health):
+    s = hc_view(partial_from=partial_from, eval_cost=5250 * conv, eval_conv=conv)
+    f = hc.only(v2(s, hc.TARGET))
+    assert f.action["type"] == "decrease_bid"  # кандидат — change
+    d = decide_v2(f, health)
+    assert d.candidate_level == "change" and d.level != "change" and "strategy_unknown" in d.reasons
 
 
 def test_policy_v2_unknown_health_does_not_escalate():
@@ -158,6 +193,35 @@ def test_policy_v2_never_raises_level(conv, health):
     d = decide_v2(hc.only(v2(s, hc.TARGET)), health)
     assert LEVELS.index(d.level) <= LEVELS.index(d.candidate_level)
     assert (d.level == d.candidate_level) == (d.reasons == ())
+
+
+# --- Выбор версий по флагам ---------------------------------------------------------------------------------
+
+def test_active_rules_follow_source_of_truth_flag():
+    from app.rules import active_rules
+    assert active_rules({}) == RULES_V2 and active_rules({"SOURCE_OF_TRUTH_V2": "0"}) == RULES_V1
+
+
+def test_mixed_versions_rules_v1_with_policy_v2_are_allowed():
+    """Флаги независимы: правила @1 (прежние метки) + safety_policy@2 — рабочая смесь, политика только понижает."""
+    from app.audit.policy import decide_active
+    from app.rules import active_rules
+    env = {"SOURCE_OF_TRUTH_V2": "0"}
+    (rule,) = [r for r in active_rules(env) if r.rule_version == "high_cpa_target@1"]
+    f = hc.only(run(rule, hc.snap(eval_cost=63000, eval_conv=12), hc.TARGET))
+    assert f.rule_version == "high_cpa_target@1"
+    assert decide_active(f, env=env).version == "safety_policy@2"
+    assert decide_active(f, env={"SAFETY_ENGINE_V2": "0"}).version == "safety_policy@1"
+
+
+def test_partial_reason_is_one_shared_constant():
+    import inspect
+    import app.audit.policy as policy
+    import app.audit.templates as templates
+    from app.rules.evidence import PARTIAL_REASON
+    assert PARTIAL_REASON == "conversions_partial"
+    assert '"conversions_partial"' not in inspect.getsource(policy)
+    assert '"conversions_partial"' not in inspect.getsource(templates)
 
 
 # --- @1 остаются вызываемыми -------------------------------------------------------------------------------

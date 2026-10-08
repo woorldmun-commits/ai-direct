@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from app.audit.policy import Decision
 from app.rules.domain import Finding
+from app.rules.evidence import PARTIAL_REASON
 
 
 def _rub(x: Decimal) -> str:
@@ -77,7 +78,7 @@ def _placements(f: Finding, d: Decision) -> str:
             f"{_PLACEMENT_REFERENCE.get(f.evidence_meta.get('reference_mode'), 'CPA')} {_rub(f.reference)} ₽.")
     if names := _placement_names(f):
         text += " Площадки: " + ", ".join(names[:NAMES_SHOWN]) + (" и другие." if len(names) > NAMES_SHOWN else ".")
-    if f.evidence_meta.get("level_reason") == "conversions_partial":
+    if f.evidence_meta.get("level_reason") == PARTIAL_REASON:
         text += " Конверсии последних дней ещё досчитываются — проверьте площадки перед исключением."
     if d.level == "inspect_only":
         text += (" Расхода пока мало для уверенного вывода: проверьте, что это за площадки и подходит ли их аудитория, "

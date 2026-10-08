@@ -32,6 +32,19 @@ def test_unknown_flag_is_an_error():
         flags.flag("typo_flag", {})
 
 
+@pytest.mark.parametrize("name", ["safety_engine_v2", "source_of_truth_v2"])
+def test_disabling_a_safety_flag_logs_a_warning(name, caplog):
+    with caplog.at_level("WARNING", logger="app.flags"):
+        flags.active_flags({name.upper(): "0"})
+    assert any(name in r.getMessage() and r.levelname == "WARNING" for r in caplog.records)
+
+
+def test_defaults_log_no_warning(caplog):
+    with caplog.at_level("WARNING", logger="app.flags"):
+        flags.active_flags({})
+    assert caplog.records == []
+
+
 def test_reads_process_environment_by_default(monkeypatch):
     monkeypatch.setenv("CHIEF_ANALYST", "1")
     assert flags.active_flags()["chief_analyst"] is True

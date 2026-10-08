@@ -124,6 +124,8 @@ def _row(values: dict[str, str], spec: ReportSpec, conv_columns: tuple[str, ...]
     if not date_from <= day <= date_to:
         raise ReportFormatError(FormatError.DATE_OUT_OF_RANGE, f"Date {day} вне {date_from}–{date_to}")
     campaign_id = _count(values["CampaignId"], "CampaignId")
+    # "--" в столбце конверсий = 0 конверсий — решение владельца, см. empty_cell_semantics у conversions в
+    # app/intelligence/metrics/definitions.py (там же его тест).
     conversions = (sum((Decimal(0) if values[c] == EMPTY else _money(values[c], c) for c in conv_columns),
                        Decimal(0)) if conv_columns else None)
     common = dict(

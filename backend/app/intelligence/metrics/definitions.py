@@ -23,12 +23,17 @@ class MetricDefinition:
     attribution_model: str | None    # None: метрика не зависит от атрибуции
     goal_definition: str | None      # None: метрика не зависит от целей
     formula: str
+    empty_cell_semantics: str | None = None  # что значит пустая ячейка отчёта провайдера (решение владельца)
     version: str = VERSION
 
 
+# Решение владельца: «--» в столбце Conversions_* Директа — 0 конверсий за день по цели (sync/parse.py), не «нет данных».
+_DASH_IS_ZERO = "'--' в столбце конверсий Директа = 0 конверсий"
+
+
 def _direct(metric: str, formula: str, *, conversion: bool = False) -> MetricDefinition:
-    return MetricDefinition(metric, "yandex_direct", _LEVELS, "yandex_direct",
-                            _ATTRIBUTION if conversion else None, _GOALS if conversion else None, formula)
+    return MetricDefinition(metric, "yandex_direct", _LEVELS, "yandex_direct", _ATTRIBUTION if conversion else None,
+                            _GOALS if conversion else None, formula, _DASH_IS_ZERO if metric == "conversions" else None)
 
 
 DEFINITIONS: dict[str, MetricDefinition] = {d.metric: d for d in (

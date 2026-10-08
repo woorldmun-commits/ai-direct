@@ -35,13 +35,13 @@ def test_every_rule_family_has_its_case_directory():
 
 
 def test_every_rule_version_has_expected_findings():
-    """Каждая версия правил хотя бы в 4 кейсах (@1) / 2 кейсах (@2) — выводом или ожидаемым «недостаточно данных»."""
+    """Каждая версия правил хотя бы в 4 кейсах — выводом или ожидаемым «недостаточно данных»."""
     mentions = Counter()
     for c in CASES:
         versions = {e["rule_version"] for e in c.data["expected"] + c.data.get("expected_not_enough_data", [])}
         mentions.update(versions)
     for rule in ALL_RULES:
-        assert mentions[rule.rule_version] >= (4 if rule.version == 1 else 2), rule.rule_version
+        assert mentions[rule.rule_version] >= 4, rule.rule_version
         assert any(e["rule_version"] == rule.rule_version for c in CASES for e in c.data["expected"]), rule.rule_version
 
 

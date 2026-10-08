@@ -24,6 +24,7 @@ from dataclasses import dataclass
 
 from app.flags import flag
 from app.rules.domain import Finding
+from app.rules.evidence import PARTIAL_REASON
 
 VERSION = "safety_policy@1"
 VERSION_V2 = "safety_policy@2"
@@ -82,8 +83,8 @@ class DataHealth:
 
 def decide_v2(f: Finding, health: DataHealth = DataHealth()) -> Decision:
     caps = [(MAX_BY_DATA[f.current_data_quality], f"data_sufficiency_{f.current_data_quality}")]
-    if f.evidence_meta.get("level_reason") == "conversions_partial":
-        caps.append((MAX_PARTIAL, "conversions_partial"))
+    if f.evidence_meta.get("level_reason") == PARTIAL_REASON:
+        caps.append((MAX_PARTIAL, PARTIAL_REASON))
     caps.append((MAX_WITHOUT_STRATEGY, "strategy_unknown"))
     if health.source_failed:
         caps.append((MAX_UNHEALTHY, "source_failed"))
@@ -92,6 +93,8 @@ def decide_v2(f: Finding, health: DataHealth = DataHealth()) -> Decision:
     return _lowered(f, tuple(caps), VERSION_V2)
 
 
-def decide_active(f: Finding, health: DataHealth = DataHealth()) -> Decision:
-    """Политика, которой аудит решает сейчас: по флагу safety_engine_v2 (app/flags.py)."""
-    return decide_v2(f, health) if flag("safety_engine_v2") else decide(f)
+def decide_active(f: Finding, health: DataHealth = DataHealth(), env=None) -> Decision:
+    """Политика, которой аудит решает сейчас: по флагу safety_engine_v2 (app/flags.py), читается при каждом вызове.
+    Версии правил (RULES, флаг source_of_truth_v2) выбираются при старте процесса из того же окружения: флаги
+    независимы, допустима смесь правила @1 + политика @2 (политика только понижает уровень, метки @1 не меняются)."""
+    return decide_v2(f, health) if flag("safety_engine_v2", env) else decide(f)

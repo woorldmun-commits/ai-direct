@@ -57,7 +57,7 @@ def snapshot_like(rw, ws, account, snap_id, *, shift=0, eval_cost=None, eval_con
     stat = []
     for level, cid, day, impr, clicks, cost, conv in rows:
         day = day + timedelta(shift)
-        if day == to and eval_cost is not None:
+        if day == to - timedelta(3) and eval_cost is not None:  # завершённый день окна (DONE в test_direct_sync)
             cost, conv = Decimal(eval_cost), Decimal(eval_conv)
         stat.append(StatRow(level, cid, day, impr, clicks, cost, conv))
     from app.sources.conversion import ConversionDefinition

@@ -36,6 +36,13 @@ def test_every_metric_has_formula_and_known_source():
         assert d.source_of_truth in ("yandex_direct", "yandex_metrika", "user_input")
 
 
+def test_direct_dash_means_zero_conversions_is_pinned():
+    """Решение владельца: «--» в столбце конверсий Директа — 0 конверсий (sync/parse.py), не «нет данных»."""
+    note = DEFINITIONS["conversions"].empty_cell_semantics
+    assert "--" in note and "0 конверсий" in note
+    assert DEFINITIONS["cost"].empty_cell_semantics is None
+
+
 def test_definition_is_immutable():
     with pytest.raises(dataclasses.FrozenInstanceError):
         DEFINITIONS["cpa"].source_of_truth = "yandex_metrika"

@@ -129,8 +129,7 @@ def test_audit_stores_policy_decision_and_explains_it(rw, ws):
                         FROM findings f JOIN issues i ON i.id = f.issue_id JOIN explanations x ON x.finding_id = f.id
                         WHERE i.workspace_id = %s ORDER BY f.id DESC LIMIT 1""", (ws["ws"],)).fetchone()  # не из chain
     assert row[:6] == ("high_cpa_target@2", "safety_policy@2", "decrease_bid", "change", "review",
-                       ["data_sufficiency_medium", "conversions_partial", "strategy_unknown"])  # 8 конверсий — medium;
-    # конверсии окна — за дни досчёта (safety_policy@2)
+                       ["data_sufficiency_medium", "strategy_unknown"])            # 8 конверсий — medium
     assert "рычаги кампании" in row[6] and "снизить ставку" not in row[6]
 
 

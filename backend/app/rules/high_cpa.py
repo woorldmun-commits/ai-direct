@@ -37,12 +37,19 @@ def _unknown(days: list[CampaignDay], window: Window) -> bool:
     return any(d.conversions is None for d in days if d.date in window)
 
 
-def _solid(rule: Rule, snap: SnapshotView, days: list[CampaignDay], evaluation: Window, reference: Decimal) -> bool:
-    """@2: держится ли вывод на завершённых днях окна. Конверсии дней досчёта ещё приходят — CPA по ним завышен."""
-    if rule.version < 2:
-        return True
-    cost, conv = _sum([d for d in days if snap.partial_from is not None and d.date < snap.partial_from], evaluation)
-    return conv > 0 and delta_pct(cost / conv, reference) >= rule.params["trigger_delta_pct"]
+def _quality_v2(rule: Rule, snap: SnapshotView, days: list[CampaignDay], evaluation: Window, reference: Decimal,
+                conv: Decimal) -> tuple[str, bool]:
+    """@2: (достаточность данных, вывод опирается на дни досчёта). Конверсии дней досчёта ещё приходят, поэтому
+    достаточность считается по конверсиям завершённых дней (те же пороги), а если вывод держится не на них (CPA по
+    завершённым дням ниже порога срабатывания или конверсий там нет) — не выше medium."""
+    done_cost, done_conv = _sum([d for d in days if snap.partial_from is not None and d.date < snap.partial_from],
+                                evaluation)
+    p = rule.params
+    quality = _current_data_quality(done_conv, p)
+    solid = done_conv > 0 and delta_pct(done_cost / done_conv, reference) >= p["trigger_delta_pct"]
+    if not solid and quality == "high":
+        quality = "medium"
+    return quality, not solid or quality != _current_data_quality(conv, p)
 
 
 def _current_data_quality(conversions: Decimal, p) -> str:
@@ -122,8 +129,8 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings,
         return None
 
     conv_label, cpa_label = labels(rule)
-    solid = _solid(rule, snap, days, evaluation, reference)
-    quality = _current_data_quality(conv, p)
+    quality, partial = (_current_data_quality(conv, p), False) if rule.version < 2 else \
+        _quality_v2(rule, snap, days, evaluation, reference, conv)
     evidence = {
         "cost": Fact(cost, "rub", "yandex_direct", evaluation),
         "conversions": Fact(conv, "count", conv_label, evaluation),
@@ -145,9 +152,9 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings,
         delta_pct=delta.quantize(Decimal("0.1"), ROUND_HALF_UP), lost=lost,
         # «Проверить» (baseline) — обоснованной формулы прогноза нет: «Можно сэкономить» не копирует lost (ARCHITECTURE §4).
         recoverable=lost if mode == "target" else Fact.unavailable("rub", source, evaluation, reason="no_forecast"),
-        current_data_quality="medium" if not solid and quality == "high" else quality,
+        current_data_quality=quality,
         evidence=frozen(evidence),
-        evidence_meta=frozen({**meta, **definition_meta(rule, snap), **({} if solid else PARTIAL)}),
+        evidence_meta=frozen({**meta, **definition_meta(rule, snap), **(PARTIAL if partial else {})}),
         action=frozen(action),
         exposure_basis=FORMULA,  # (cpa − ориентир) × конверсии: на единицы расхода не раскладывается
     )

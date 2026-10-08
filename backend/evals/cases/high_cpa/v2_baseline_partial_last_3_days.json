@@ -1,13 +1,11 @@
 {
-  "description": "@2: все конверсии окна — в последних 3 днях досчёта: завершённых конверсий нет, данные low — только «проверить», change невозможен.",
+  "description": "@2: baseline-режим, конверсии окна только в днях досчёта: вывод остаётся, уровень inspect_only.",
   "tags": [
     "problem",
     "partial"
   ],
   "rules_version": 2,
-  "settings": {
-    "target_cpa": "3000"
-  },
+  "settings": {},
   "snapshot": {
     "period_to": "2026-09-30",
     "sources": [
@@ -27,9 +25,9 @@
           },
           {
             "date": "2026-09-30",
-            "cost": "63000",
-            "clicks": 200,
-            "conversions": "12"
+            "cost": "42000",
+            "clicks": 70,
+            "conversions": "8"
           }
         ]
       }
@@ -44,16 +42,16 @@
   },
   "expected": [
     {
-      "rule_version": "high_cpa_target@2",
+      "rule_version": "high_cpa_baseline@2",
       "object_type": "campaign",
       "object_id": 101,
-      "candidate_level": "change",
+      "candidate_level": "inspect_only",
       "action_level": "inspect_only",
       "action": {
-        "type": "decrease_bid",
-        "change_pct": -15
+        "type": "investigate_cpa_growth",
+        "suggest": "set_target_cpa"
       },
-      "exposure": "27000.00"
+      "exposure": "11280.00"
     }
   ]
 }
