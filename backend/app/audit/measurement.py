@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Iterable, Literal, Mapping
 
+from app.intelligence.metrics.definitions import source_of_truth
 from app.rules.domain import CampaignDay, Fact, PlacementDay, Window, frozen
 
 DESIGN = "uncontrolled_before_after"
@@ -50,7 +51,8 @@ CPA_FORMULA = "period_total_spend / period_total_conversions"
 SAVED_FORMULA = "conversions_after * (cpa_before - cpa_after)"
 ZERO_CAMPAIGN_SAVED_FORMULA = "campaign_cost_before - campaign_cost_after"
 PLACEMENTS_SAVED_FORMULA = "excluded_placements_cost_before - excluded_placements_cost_after"
-DM = "yandex_direct+yandex_metrika"
+DM = source_of_truth("cpa")  # CPA и экономия — Директ (Reports API, реестр метрик); раньше писали yandex_direct+yandex_metrika
+CONVERSIONS = source_of_truth("conversions")
 Verdict = Literal["effect", "no_effect", "not_confirmed", "insufficient"]
 
 
@@ -80,8 +82,8 @@ def family(policy: str) -> str:
 def _period(days: list[CampaignDay], window: Window) -> tuple[Decimal, Decimal, dict[str, Fact]]:
     inside = [d for d in days if d.date in window]
     cost = sum((d.cost for d in inside), Decimal(0))
-    conv = sum((d.conversions or Decimal(0) for d in inside), Decimal(0))
-    facts = {"cost": Fact(cost, "rub", "yandex_direct", window), "conversions": Fact(conv, "count", "yandex_metrika", window)}
+    conv = sum((d.conversions for d in inside), Decimal(0))  # неизвестные конверсии отсекает _known
+    facts = {"cost": Fact(cost, "rub", "yandex_direct", window), "conversions": Fact(conv, "count", CONVERSIONS, window)}
     if conv > 0:
         facts["cpa"] = Fact((cost / conv).quantize(CENT, ROUND_HALF_UP), "rub", DM, window, "estimated", CPA_FORMULA)
     return cost, conv, facts
@@ -108,6 +110,8 @@ def _builder(b_facts: dict, a_facts: dict):
 
 def measure_cpa(days: Iterable[CampaignDay], before: Window, after: Window, params=PARAMS) -> Measured:
     days = list(days)
+    if not _known(days, before, after):
+        return _builder({}, {})("insufficient", "conversions_unknown")
     b_cost, b_conv, b_facts = _period(days, before)
     a_cost, a_conv, a_facts = _period(days, after)
     result = _builder(b_facts, a_facts)

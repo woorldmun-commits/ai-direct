@@ -1,0 +1,146 @@
+{
+  "description": "@2: конверсии кампании (ориентир CPA) неизвестны: не ноль, а «недостаточно данных».",
+  "tags": [
+    "not_enough_data"
+  ],
+  "settings": {},
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "partial_from": "2026-09-28",
+    "sources": [
+      "yandex_direct",
+      "direct_conversions",
+      "direct_placements"
+    ],
+    "campaigns": [
+      {
+        "id": 101,
+        "strategy": "manual",
+        "days": [
+          {
+            "date": "2026-09-10",
+            "cost": "30000.00",
+            "clicks": 1200,
+            "conversions": null
+          },
+          {
+            "date": "2026-09-25",
+            "cost": "30000.00",
+            "clicks": 1000,
+            "conversions": null
+          }
+        ]
+      }
+    ],
+    "placements": [
+      {
+        "campaign_id": 101,
+        "id": 1,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "3000.00",
+            "clicks": 90,
+            "conversions": "0"
+          }
+        ]
+      },
+      {
+        "campaign_id": 101,
+        "id": 6,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "1600.00",
+            "clicks": 60,
+            "conversions": "0"
+          }
+        ]
+      },
+      {
+        "campaign_id": 101,
+        "id": 2,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "1499.99",
+            "clicks": 70,
+            "conversions": "0"
+          }
+        ]
+      },
+      {
+        "campaign_id": 101,
+        "id": 3,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "2000.00",
+            "clicks": 19,
+            "conversions": "0"
+          }
+        ]
+      },
+      {
+        "campaign_id": 101,
+        "id": 4,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "3000.00",
+            "clicks": 80,
+            "conversions": "1"
+          }
+        ]
+      },
+      {
+        "campaign_id": 101,
+        "id": 5,
+        "days": [
+          {
+            "date": "2026-09-01",
+            "cost": "100.00",
+            "clicks": 3,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-25",
+            "cost": "2500.00",
+            "clicks": 40,
+            "conversions": "0"
+          }
+        ]
+      },
+      {
+        "campaign_id": 101,
+        "id": 9,
+        "masked": true,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "5000.00",
+            "clicks": 200,
+            "conversions": "0"
+          }
+        ]
+      }
+    ],
+    "conversion_definition": {
+      "goal_ids": [
+        111,
+        222
+      ],
+      "attribution": "last"
+    }
+  },
+  "expected": [],
+  "rules_version": 2,
+  "expected_not_enough_data": [
+    {
+      "rule_version": "zero_conv_placements@2",
+      "reason": "source_missing",
+      "object_type": "campaign",
+      "object_id": 101
+    }
+  ]
+}

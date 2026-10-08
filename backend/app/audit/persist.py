@@ -13,7 +13,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from app.audit.exposure import basis_meta
-from app.audit.policy import decide
+from app.audit.policy import decide_active
 from app.audit.templates import explain
 from app.audit.values import to_value
 from app.rules.domain import Finding, issue_key
@@ -37,7 +37,7 @@ def _finding_row(f: Finding, snapshot_id: int, partial_from: date) -> tuple:
     meta = {**f.evidence_meta, "reason_code": f.reason_code, "metric": f.metric, "reference_type": f.reference_type,
             "actual": str(f.actual), "reference": str(f.reference), "delta_pct": str(f.delta_pct),
             **basis_meta(f.exposure_basis)}  # основа exposure — для итога без двойного учёта (api/today.py)
-    d = decide(f)
+    d = decide_active(f)
     return (f.rule_version, Jsonb(value(f.lost)), Jsonb(value(f.recoverable)), f.current_data_quality,
             Jsonb({k: value(x) for k, x in f.evidence.items()}), Jsonb(meta), Jsonb(dict(f.action)),
             d.version, d.candidate_level, d.level, list(d.reasons))
@@ -62,7 +62,7 @@ def persist_finding(conn: psycopg.Connection, audit_run_id: int, workspace_id: i
         (audit_run_id, issue_id, *_finding_row(f, result.snapshot_id, result.partial_from))).fetchone()[0]
     explanation_id = conn.execute("""INSERT INTO explanations (finding_id, source, text, release_id)
                                      VALUES (%s, 'template', %s, %s) RETURNING id""",
-                                  (finding_id, explain(f, decide(f)), release_id)).fetchone()[0]
+                                  (finding_id, explain(f, decide_active(f)), release_id)).fetchone()[0]
     rec = conn.execute("SELECT id FROM recommendations WHERE issue_id = %s", (issue_id,)).fetchone()
     payload = {"issue_id": issue_id, "finding_id": finding_id, "rule_version": f.rule_version}
     if rec is None:

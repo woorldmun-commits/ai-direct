@@ -131,4 +131,5 @@ def to_view(snapshot: Snapshot, snapshot_id: int, workspace_id: int, direct_acco
                               key=lambda p: (p.campaign_id, p.date, p.placement_id)))  # порядок как в load_view
     return SnapshotView(snapshot_id, workspace_id, direct_account_id, snapshot.period_from, snapshot.period_to,
                         capabilities(snapshot.sources, snapshot.conversion_definition is not None), days,
-                        placement_days=placements, partial_from=snapshot.partial_from)
+                        placement_days=placements, partial_from=snapshot.partial_from,
+                        conversion_definition=snapshot.conversion_definition)

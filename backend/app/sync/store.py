@@ -10,6 +10,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from app.rules.domain import CampaignDay, PlacementDay, SnapshotView
+from app.sources.conversion import ConversionDefinition
 from app.sync.parse import PlacementRow, placement_id, query_hash
 from app.sync.sanitize import MASK
 from app.sync.snapshot import Snapshot, SyncFailure, capabilities
@@ -143,12 +144,13 @@ def load_view(conn: psycopg.Connection, snapshot_id: int) -> SnapshotView:
     """Снимок из БД → вход правил. Тот же вид, что to_view() из памяти: аудит не зависит от того, откуда снимок."""
     row = conn.execute(
         """SELECT s.workspace_id, r.direct_account_id, s.period_from, s.period_to, s.partial_from, s.sources,
-                  s.conversion_definition IS NOT NULL
+                  s.conversion_definition
            FROM snapshots s JOIN sync_runs r ON r.id = s.sync_run_id
            WHERE s.id = %s AND s.status = 'complete'""", (snapshot_id,)).fetchone()
     if row is None:
         raise SnapshotNotComplete(snapshot_id)
-    ws, account, period_from, period_to, partial_from, sources, has_conversions = row
+    ws, account, period_from, period_to, partial_from, sources, definition_json = row
+    definition = ConversionDefinition.from_json(definition_json) if definition_json is not None else None
     days = conn.execute("""SELECT campaign_id, date, cost, clicks, conversions FROM stat_rows
                            WHERE snapshot_id = %s AND level = 'campaign' ORDER BY campaign_id, date""",
                         (snapshot_id,)).fetchall()
@@ -162,5 +164,5 @@ def load_view(conn: psycopg.Connection, snapshot_id: int) -> SnapshotView:
     placement_days = tuple(PlacementDay(*p[:6], MASK if p[6] is None and p[1] == MASK_PLACEMENT_ID else p[6])
                            for p in placements)
     return SnapshotView(snapshot_id, ws, account, period_from, period_to,
-                        capabilities(frozenset(sources), has_conversions), tuple(CampaignDay(*d) for d in days),
-                        placement_days=placement_days, partial_from=partial_from)
+                        capabilities(frozenset(sources), definition is not None), tuple(CampaignDay(*d) for d in days),
+                        placement_days=placement_days, partial_from=partial_from, conversion_definition=definition)

@@ -57,7 +57,7 @@ def snapshot_like(rw, ws, account, snap_id, *, shift=0, eval_cost=None, eval_con
     stat = []
     for level, cid, day, impr, clicks, cost, conv in rows:
         day = day + timedelta(shift)
-        if day == to and eval_cost is not None:
+        if day == to - timedelta(3) and eval_cost is not None:  # завершённый день окна (DONE в test_direct_sync)
             cost, conv = Decimal(eval_cost), Decimal(eval_conv)
         stat.append(StatRow(level, cid, day, impr, clicks, cost, conv))
     from app.sources.conversion import ConversionDefinition
@@ -165,7 +165,7 @@ def test_source_failure_skips_only_rules_that_need_it(rw, ws, monkeypatch, tmp_p
     out = audit(rw, ws)
     assert one(rw, "SELECT count(*) FROM findings WHERE audit_run_id = %s", out.audit_run_id) == 1
     assert one(rw, "SELECT rules_skipped FROM audit_runs WHERE id = %s", out.audit_run_id) == [
-        {"account": ws["account"], "rule": "zero_conv_placements@1", "reason": "source_missing",  # отчёт площадок выкл.
+        {"account": ws["account"], "rule": "zero_conv_placements@2", "reason": "source_missing",  # отчёт площадок выкл.
          "object_type": None, "object_id": None},
         {"account": ws["account"], "rule": "site_goal_health@1", "reason": "source_missing",
          "object_type": None, "object_id": None}]
@@ -237,7 +237,7 @@ def test_not_enough_data_does_not_resolve(rw, ws):
     assert events(rw, ws) == [] and open_issues(rw, ws) == 2
     assert {r[0] for r in rw.execute("SELECT issue_type FROM issues WHERE workspace_id = %s AND closed_at IS NULL",
                                      (ws["ws"],)).fetchall()} >= {"high_cpa", "zero_conv_campaign"}
-    assert {"account": ws["account"], "rule": "high_cpa_baseline@1", "reason": "no_conversions",
+    assert {"account": ws["account"], "rule": "high_cpa_baseline@2", "reason": "no_conversions",
             "object_type": "campaign", "object_id": 12345} in \
         one(rw, "SELECT rules_skipped FROM audit_runs WHERE id = %s", second.audit_run_id)
 

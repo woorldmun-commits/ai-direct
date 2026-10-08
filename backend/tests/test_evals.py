@@ -8,7 +8,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.rules import RULES
+from app.rules import ALL_RULES
 from evals import golden
 from evals.golden import CASES_DIR, Case, gate, load_cases
 
@@ -26,7 +26,7 @@ def test_golden_case_passes_gate(case):
 def test_every_rule_family_has_its_case_directory():
     """Кейсы — по подкаталогу на семейство правила; на семейство ≥ 4 кейсов, из них хотя бы один «чистый»
     и хотя бы один граничный."""
-    families = {r.family for r in RULES}
+    families = {r.family for r in ALL_RULES}
     per_family = Counter(c.name.split("/")[0] for c in CASES)
     for family in families:
         assert per_family[family] >= 4, family
@@ -35,12 +35,12 @@ def test_every_rule_family_has_its_case_directory():
 
 
 def test_every_rule_version_has_expected_findings():
-    """Каждая зарегистрированная версия хотя бы в 4 кейсах — выводом или ожидаемым «недостаточно данных»."""
+    """Каждая версия правил хотя бы в 4 кейсах — выводом или ожидаемым «недостаточно данных»."""
     mentions = Counter()
     for c in CASES:
         versions = {e["rule_version"] for e in c.data["expected"] + c.data.get("expected_not_enough_data", [])}
         mentions.update(versions)
-    for rule in RULES:
+    for rule in ALL_RULES:
         assert mentions[rule.rule_version] >= 4, rule.rule_version
         assert any(e["rule_version"] == rule.rule_version for c in CASES for e in c.data["expected"]), rule.rule_version
 

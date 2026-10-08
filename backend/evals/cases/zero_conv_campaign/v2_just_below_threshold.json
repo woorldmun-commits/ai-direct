@@ -1,0 +1,54 @@
+{
+  "description": "@2: расход на копейку ниже порога — «недостаточно данных», вывода нет.",
+  "tags": [
+    "boundary",
+    "not_enough_data"
+  ],
+  "settings": {
+    "target_cpa": "3000"
+  },
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "sources": [
+      "yandex_direct",
+      "direct_conversions"
+    ],
+    "campaigns": [
+      {
+        "id": 101,
+        "strategy": "manual",
+        "days": [
+          {
+            "date": "2026-09-23",
+            "cost": "115200",
+            "clicks": 300,
+            "conversions": "30"
+          },
+          {
+            "date": "2026-09-30",
+            "cost": "8999.99",
+            "clicks": 50,
+            "conversions": "0"
+          }
+        ]
+      }
+    ],
+    "conversion_definition": {
+      "goal_ids": [
+        111,
+        222
+      ],
+      "attribution": "last"
+    }
+  },
+  "expected": [],
+  "expected_not_enough_data": [
+    {
+      "rule_version": "zero_conv_campaign@2",
+      "reason": "volume_insufficient",
+      "object_type": "campaign",
+      "object_id": 101
+    }
+  ],
+  "rules_version": 2
+}

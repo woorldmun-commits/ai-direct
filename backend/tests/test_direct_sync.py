@@ -18,6 +18,7 @@ from app.sync.sanitize import sanitize
 from app.sync.snapshot import Snapshot, SyncFailure, sync_account, sync_accounts, to_view
 
 TO = date(2026, 9, 30)
+DONE = TO - timedelta(3)  # завершённый день внутри окна оценки (partial_from = TO - 2)
 FROM = TO - timedelta(36)
 GOALS = ConversionDefinition(counter_id=555, goal_ids=(111, 222))
 CONV = GOALS.direct_columns()
@@ -37,7 +38,7 @@ def campaign_tsv(days=37, eval_cost="42000.00", eval_conv=("5", "3"), base_cost=
     first = TO - timedelta(days - 1)
     rows = {first: ("1", "0", "0.00", ("--",) * len(CONV))}
     rows[TO - timedelta(7)] = ("5000", "700", base_cost, base_conv)
-    rows[TO] = ("3000", "300", eval_cost, eval_conv)
+    rows[DONE] = ("3000", "300", eval_cost, eval_conv)  # завершённый день окна: дни досчёта (TO-2…TO) не финальны
     lines = ["\t".join(columns)]
     for d, (impr, clicks, cost, conv) in sorted(rows.items()):
         if d >= first and d not in skip:
@@ -88,12 +89,12 @@ def test_normal_account_end_to_end(root):
     assert snap.sources == {"yandex_direct"} and snap.conversion_definition == GOALS
     assert to_view(snap, 1, 7, 3).sources == {"yandex_direct", "direct_conversions"}
     campaign = [r for r in snap.rows if r.level == "campaign"]
-    assert [r.date for r in campaign] == [FROM, TO - timedelta(7), TO]
-    assert campaign[-1] == StatRow("campaign", CID, TO, 3000, 300, Decimal("42000.00"), Decimal(8))
+    assert [r.date for r in campaign] == [FROM, TO - timedelta(7), DONE]
+    assert campaign[-1] == StatRow("campaign", CID, DONE, 3000, 300, Decimal("42000.00"), Decimal(8))
 
     (finding,) = audit(snap, AuditSettings())  # пример PRD §4.1 проходит через весь конвейер
     assert (finding.rule_version, finding.actual, finding.reference) == \
-        ("high_cpa_baseline@1", Decimal("5250.00"), Decimal("3840.00"))
+        ("high_cpa_baseline@2", Decimal("5250.00"), Decimal("3840.00"))
     values = {name: to_value(fact, 84721, snap.partial_from, finding.rule_version)
               for name, fact in finding.evidence.items()}
     assert all(isinstance(v, Value) for v in values.values())
@@ -104,7 +105,7 @@ def test_normal_account_end_to_end(root):
 def test_less_than_37_days_of_history(root):
     snap = snapshot_of(root, campaign=campaign_tsv(days=36))
     assert audit(snap, AuditSettings()) == \
-        (NotEnoughData("high_cpa_baseline@1", Reason.BASELINE_HISTORY_INSUFFICIENT, "campaign", CID),)
+        (NotEnoughData("high_cpa_baseline@2", Reason.BASELINE_HISTORY_INSUFFICIENT, "campaign", CID),)
 
 
 def test_campaign_paused_mid_history_keeps_baseline(root):
@@ -116,10 +117,10 @@ def test_campaign_paused_mid_history_keeps_baseline(root):
 
 def test_zero_conversions_shown_as_dashes(root):
     snap = snapshot_of(root, campaign=campaign_tsv(eval_conv=("--", "--")))
-    assert [r.conversions for r in snap.rows if r.level == "campaign" and r.date == TO] == [Decimal(0)]
+    assert [r.conversions for r in snap.rows if r.level == "campaign" and r.date == DONE] == [Decimal(0)]
     high_cpa, zero_conv = audit(snap, AuditSettings(target_cpa=Decimal(3000)))
-    assert high_cpa == NotEnoughData("high_cpa_target@1", Reason.NO_CONVERSIONS, "campaign", CID)
-    assert isinstance(zero_conv, Finding) and zero_conv.rule_version == "zero_conv_campaign@1"  # «--» = ноль, не None
+    assert high_cpa == NotEnoughData("high_cpa_target@2", Reason.NO_CONVERSIONS, "campaign", CID)
+    assert isinstance(zero_conv, Finding) and zero_conv.rule_version == "zero_conv_campaign@2"  # «--» = ноль, не None
 
 
 def test_without_metrika_conversions_are_none_and_rules_are_not_computed(root):
@@ -131,9 +132,9 @@ def test_without_metrika_conversions_are_none_and_rules_are_not_computed(root):
     # каждое из трёх правил v1.0 требует конверсий — каждое честно говорит «недостаточно данных», ни одно не молчит
     view = to_view(snap, snapshot_id=84721, workspace_id=7, direct_account_id=3)
     assert tuple(out for rule in RULES for out in run(rule, view, AuditSettings())) == (
-        NotEnoughData("high_cpa_baseline@1", Reason.SOURCE_MISSING),
-        NotEnoughData("zero_conv_campaign@1", Reason.SOURCE_MISSING),
-        NotEnoughData("zero_conv_placements@1", Reason.SOURCE_MISSING))
+        NotEnoughData("high_cpa_baseline@2", Reason.SOURCE_MISSING),
+        NotEnoughData("zero_conv_campaign@2", Reason.SOURCE_MISSING),
+        NotEnoughData("zero_conv_placements@2", Reason.SOURCE_MISSING))
 
 
 # --- Несколько аккаунтов и частичная доступность -------------------------------------------------

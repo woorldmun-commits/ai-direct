@@ -1,5 +1,5 @@
 """MVP-0: прогон одного реального аккаунта без БД и без UI — Метрика → определение конверсии → отчёты Директа →
-снимок → проверки целостности → контекст кампаний → правила → safety_policy@1 → объяснения.
+снимок → проверки целостности → контекст кампаний → правила → safety_policy (активная версия, decide_active) → объяснения.
 
 Только чтение. Токены — из окружения, в вывод, лог и файлы не попадают; названия кампаний не печатаются (только
 id), логин в файлах — хэшем. Результат каждого прогона — артефакт: <out>/<время>/run.json и summary.txt.
@@ -25,7 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.audit.policy import decide  # noqa: E402
+from app.audit.policy import decide_active  # noqa: E402
 from app.audit.templates import explain  # noqa: E402
 from app.rules import RULES  # noqa: E402
 from app.rules.domain import AuditSettings, Finding, NotEnoughData, run  # noqa: E402
@@ -143,7 +143,7 @@ def audit(snap: Snapshot, settings: AuditSettings, contexts: dict) -> dict:
             continue
         found.add(o.object_id)
         assert isinstance(o, Finding)
-        d = decide(o)
+        d = decide_active(o)
         levels[d.level] += 1
         ctx = contexts.get(o.object_id)
         strategy = f"{ctx.strategy.value} ({ctx.search.provider_type if ctx.search else '-'})" if ctx else "?"

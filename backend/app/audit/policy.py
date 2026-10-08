@@ -12,13 +12,22 @@ safety_policy@1:
 - достаточность данных текущего периода: low (1–2 конверсии) → inspect_only, medium → review, high → change;
 - стратегия кампании пока неизвестна (данных Campaigns.get в снимке нет) → не выше review: ручная ставка может
   быть недоступна на автостратегии. Проверка совместимости стратегии — safety_policy@2;
-- неизвестный тип действия → inspect_only: новое правило не может обойти политику."""
+- неизвестный тип действия → inspect_only: новое правило не может обойти политику.
+
+safety_policy@2 — всё из @1 и дополнительно (только понижает):
+- конверсии вывода за дни досчёта (evidence_meta.level_reason = conversions_partial) → не выше review;
+- источник данных упал (DataHealth.source_failed) или данные устарели (DataHealth.stale) → inspect_only.
+DataHealth пока не поставляет ни один воркер (в SnapshotView нет ни source_failures, ни свежести): по умолчанию оба поля
+None = «неизвестно» и не понижают уровень — неизвестное не выдаётся ни за хорошее, ни за плохое. Подключение — отдельным шагом."""
 
 from dataclasses import dataclass
 
+from app.flags import flag
 from app.rules.domain import Finding
+from app.rules.evidence import PARTIAL_REASON
 
 VERSION = "safety_policy@1"
+VERSION_V2 = "safety_policy@2"
 LEVELS = ("inspect_only", "review", "change")  # по возрастанию воздействия на кабинет
 
 # Уровень, который действие правила требует само по себе.
@@ -31,6 +40,8 @@ CANDIDATE_LEVEL = {
 }
 MAX_BY_DATA = {"low": "inspect_only", "medium": "review", "high": "change"}
 MAX_WITHOUT_STRATEGY = "review"
+MAX_PARTIAL = "review"       # @2: конверсии последних дней ещё досчитываются
+MAX_UNHEALTHY = "inspect_only"  # @2: источник упал или данные устарели
 
 
 @dataclass(frozen=True)
@@ -45,15 +56,45 @@ def _rank(level: str) -> int:
     return LEVELS.index(level)
 
 
-def decide(f: Finding) -> Decision:
+def _lowered(f: Finding, caps: tuple[tuple[str, str], ...], version: str) -> Decision:
     candidate = CANDIDATE_LEVEL.get(f.action["type"])
     if candidate is None:
-        return Decision("inspect_only", "inspect_only", ())  # неизвестное действие изменений не предлагает
-    caps = ((MAX_BY_DATA[f.current_data_quality], f"data_sufficiency_{f.current_data_quality}"),
-            (MAX_WITHOUT_STRATEGY, "strategy_unknown"))
+        return Decision("inspect_only", "inspect_only", (), version)  # неизвестное действие изменений не предлагает
     level, reasons = candidate, []
     for cap, reason in caps:
         if _rank(cap) < _rank(candidate):
             reasons.append(reason)
             level = min(level, cap, key=_rank)
-    return Decision(candidate, level, tuple(reasons))
+    return Decision(candidate, level, tuple(reasons), version)
+
+
+def decide(f: Finding) -> Decision:
+    caps = ((MAX_BY_DATA[f.current_data_quality], f"data_sufficiency_{f.current_data_quality}"),
+            (MAX_WITHOUT_STRATEGY, "strategy_unknown"))
+    return _lowered(f, caps, VERSION)
+
+
+@dataclass(frozen=True)
+class DataHealth:
+    """Состояние источника данных. None — неизвестно: не понижает (см. docstring модуля)."""
+    source_failed: bool | None = None
+    stale: bool | None = None
+
+
+def decide_v2(f: Finding, health: DataHealth = DataHealth()) -> Decision:
+    caps = [(MAX_BY_DATA[f.current_data_quality], f"data_sufficiency_{f.current_data_quality}")]
+    if f.evidence_meta.get("level_reason") == PARTIAL_REASON:
+        caps.append((MAX_PARTIAL, PARTIAL_REASON))
+    caps.append((MAX_WITHOUT_STRATEGY, "strategy_unknown"))
+    if health.source_failed:
+        caps.append((MAX_UNHEALTHY, "source_failed"))
+    if health.stale:
+        caps.append((MAX_UNHEALTHY, "source_stale"))
+    return _lowered(f, tuple(caps), VERSION_V2)
+
+
+def decide_active(f: Finding, health: DataHealth = DataHealth(), env=None) -> Decision:
+    """Политика, которой аудит решает сейчас: по флагу safety_engine_v2 (app/flags.py), читается при каждом вызове.
+    Версии правил (RULES, флаг source_of_truth_v2) выбираются при старте процесса из того же окружения: флаги
+    независимы, допустима смесь правила @1 + политика @2 (политика только понижает уровень, метки @1 не меняются)."""
+    return decide_v2(f, health) if flag("safety_engine_v2", env) else decide(f)

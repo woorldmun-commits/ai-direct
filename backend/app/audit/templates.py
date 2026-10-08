@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from app.audit.policy import Decision
 from app.rules.domain import Finding
+from app.rules.evidence import PARTIAL_REASON
 
 
 def _rub(x: Decimal) -> str:
@@ -21,8 +22,12 @@ def _rub(x: Decimal) -> str:
     return sign + grouped + ("," + frac if frac else "")
 
 
-def _bid_advice(f: Finding, d: Decision) -> str:
+def _bid_advice(f: Finding, d: Decision, strategy: str) -> str:
     change = abs(f.action["change_pct"])
+    if d.level != "inspect_only" and strategy != "manual":
+        # рычаг «ставка» есть только у ручной стратегии; у автоматической или неизвестной ставку не советуем
+        return ("Проверьте рычаги кампании для снижения CPA: какие из них доступны, зависит от стратегии "
+                "(целевой CPA, цели конверсий).")
     if d.level == "inspect_only":
         conv = f.evidence["conversions"].amount
         return (f"Конверсий за период пока мало ({_rub(conv)}) для безопасного изменения ставки — продолжаем "
@@ -73,7 +78,7 @@ def _placements(f: Finding, d: Decision) -> str:
             f"{_PLACEMENT_REFERENCE.get(f.evidence_meta.get('reference_mode'), 'CPA')} {_rub(f.reference)} ₽.")
     if names := _placement_names(f):
         text += " Площадки: " + ", ".join(names[:NAMES_SHOWN]) + (" и другие." if len(names) > NAMES_SHOWN else ".")
-    if f.evidence_meta.get("level_reason") == "conversions_partial":
+    if f.evidence_meta.get("level_reason") == PARTIAL_REASON:
         text += " Конверсии последних дней ещё досчитываются — проверьте площадки перед исключением."
     if d.level == "inspect_only":
         text += (" Расхода пока мало для уверенного вывода: проверьте, что это за площадки и подходит ли их аудитория, "
@@ -84,14 +89,15 @@ def _placements(f: Finding, d: Decision) -> str:
     return text
 
 
-def explain(f: Finding, d: Decision) -> str:
+def explain(f: Finding, d: Decision, strategy: str = "unknown") -> str:
+    """strategy — как в audit/present.py: manual · auto · unknown. Сейчас в снимке стратегии нет — тогда unknown."""
     if f.reason_code == "zero_conversions":
         return _zero_conv(f)
     if f.reason_code == "placements_without_conversions":
         return _placements(f, d)
     head = f"CPA кампании {f.object_id} — {_rub(f.actual)} ₽"
     if f.reason_code == "cpa_above_target":
-        return f"{head}, это на {f.delta_pct}% выше целевого CPA {_rub(f.reference)} ₽. {_bid_advice(f, d)}"
+        return f"{head}, это на {f.delta_pct}% выше целевого CPA {_rub(f.reference)} ₽. {_bid_advice(f, d, strategy)}"
     if f.reason_code == "cpa_above_baseline":
         return (f"{head}, это на {f.delta_pct}% выше исторического базового уровня {_rub(f.reference)} ₽. "
                 "Проверьте причину роста и укажите целевой CPA — оценка станет точнее.")
