@@ -326,3 +326,26 @@ def test_zero_conv_placements_v2_unknown_campaign_conversions_are_not_zero():
     campaign = [zp.cday(zp.CID, zp.TO - timedelta(20), "30000.00", 1000, None)]
     assert zc.only(zp_run(FLAGGED, campaign=campaign)) == NotEnoughData(
         "zero_conv_placements@2", Reason.SOURCE_MISSING, "campaign", zp.CID)
+
+
+# --- retrieval_source и measurement_source в доказательствах -----------------------------------------------------
+
+def _meta_cases():
+    yield "high_cpa_target", lambda: hc.only(v2(hc_view(), hc.TARGET))
+    yield "high_cpa_baseline", lambda: hc.only(v2(hc_view(), hc.NO_TARGET))
+    yield "zero_conv_campaign", lambda: zc.only(run(ZERO_CONV_CAMPAIGN_V2, zc_view(), zc.TARGET))
+    yield "zero_conv_placements", lambda: zc.only(zp_run(FLAGGED))
+
+
+@pytest.mark.parametrize("name, make", list(_meta_cases()), ids=[n for n, _ in _meta_cases()])
+def test_v2_evidence_meta_separates_retrieval_from_measurement_source(name, make):
+    f = make()
+    assert f.evidence_meta["retrieval_source"] == "yandex_direct"      # откуда число
+    assert f.evidence_meta["measurement_source"] == "yandex_metrika"   # кто измерил конверсии
+    assert f.evidence["conversions"].source == "yandex_direct"          # метка Fact не меняется
+    assert f.evidence_meta["goal_ids"] and f.evidence_meta["metric_definitions"] == METRICS_VERSION
+
+
+def test_v1_evidence_meta_is_unchanged():
+    f = hc.only(tuple(run(HIGH_CPA_TARGET, hc.snap(), hc.TARGET)))
+    assert "retrieval_source" not in f.evidence_meta and "measurement_source" not in f.evidence_meta

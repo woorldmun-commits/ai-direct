@@ -2,7 +2,7 @@
 не пересчитываются), @2 берёт источник конверсий и CPA из реестра метрик и кладёт в evidence_meta цели и атрибуцию.
 Чистый модуль, как остальной rules/."""
 
-from app.intelligence.metrics.definitions import VERSION, source_of_truth
+from app.intelligence.metrics.definitions import DEFINITIONS, VERSION, source_of_truth
 from app.rules.domain import NotEnoughData, Reason, Rule, SnapshotView
 
 LEGACY_LABELS = ("yandex_metrika", "yandex_direct+yandex_metrika")  # (конверсии, CPA) у @1
@@ -24,7 +24,10 @@ def definition_meta(rule: Rule, snap: SnapshotView) -> dict[str, str]:
     d = snap.conversion_definition
     if rule.version < 2 or d is None:
         return {}
+    conversions = DEFINITIONS["conversions"]  # CPA и CR наследуют оба источника от конверсий
     return {"goal_ids": ",".join(map(str, d.goal_ids)), "attribution_model": d.attribution,
+            "retrieval_source": conversions.source_of_truth,      # откуда число: отчёт Директа
+            "measurement_source": conversions.measurement_source,  # кто измерил конверсии: Метрика
             "metric_definitions": VERSION}
 
 
