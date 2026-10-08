@@ -9,7 +9,7 @@ import psycopg
 import pytest
 
 from app.rules import RULES
-from app.rules.domain import AuditSettings, run
+from app.rules.domain import DIRECT_CONVERSIONS, AuditSettings, run
 from app.sources.direct import DirectFixture
 from app.sync.snapshot import Snapshot, SyncFailure, sync_account, sync_accounts, to_view
 from app.sync.store import SnapshotNotComplete, SyncRunStateError, load_view, record_failure, write_snapshot
@@ -152,3 +152,12 @@ def test_partial_accounts_are_recorded_per_sync_run(rw, chain, root):
     assert failed == {"B": ("failed", "access_denied", None),
                       "C": ("failed", "invalid_report_format", "negative_value")}
     assert counts(rw, runs["B"])["snapshots"] == counts(rw, runs["C"])["snapshots"] == 0
+
+
+def test_load_view_exposes_conversion_definition_of_the_snapshot(rw, chain, root):
+    """Цели и атрибуция снимка доходят до правил (а значит, до доказательств), а не только флаг «конверсии есть»."""
+    snap = fetch(root)
+    snapshot_id = write(rw, chain, sync_run(rw, chain), snap)
+    loaded = load_view(rw, snapshot_id)
+    assert loaded.conversion_definition == snap.conversion_definition == GOALS
+    assert DIRECT_CONVERSIONS in loaded.sources

@@ -57,7 +57,7 @@ def run(monkeypatch, capsys, tmp_path):
 
 def test_full_path_passes_and_leaves_artifact(run):
     out, r, run_dir = run()
-    assert "high_cpa_target@1 → review" in out and "стратегия auto_cpa (AVERAGE_CPA)" in out
+    assert "high_cpa_target@2 → review" in out and "стратегия auto_cpa (AVERAGE_CPA)" in out
     assert r["status"] == "PASS" and "STATUS: PASS" in (run_dir / "summary.txt").read_text(encoding="utf-8")
     i = r["integrity"]
     assert (i["dates_expected"], i["dates_found"], i["duplicate_rows"]) == (37, 3, 0)

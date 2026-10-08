@@ -1,0 +1,109 @@
+{
+  "description": "@2: площадка проходит пороги только с днями досчёта — данные не выше medium, уровень не выше review.",
+  "tags": [
+    "partial",
+    "problem"
+  ],
+  "settings": {},
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "partial_from": "2026-09-28",
+    "sources": [
+      "yandex_direct",
+      "direct_conversions",
+      "direct_placements"
+    ],
+    "campaigns": [
+      {
+        "id": 202,
+        "strategy": "manual",
+        "days": [
+          {
+            "date": "2026-09-10",
+            "cost": "30000.00",
+            "clicks": 1200,
+            "conversions": "20"
+          },
+          {
+            "date": "2026-09-25",
+            "cost": "30000.00",
+            "clicks": 1000,
+            "conversions": "20"
+          },
+          {
+            "date": "2026-09-27",
+            "cost": "1000.00",
+            "clicks": 30,
+            "conversions": "0"
+          },
+          {
+            "date": "2026-09-29",
+            "cost": "600.00",
+            "clicks": 20,
+            "conversions": "0"
+          }
+        ]
+      }
+    ],
+    "placements": [
+      {
+        "campaign_id": 202,
+        "id": 1,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "16000.00",
+            "clicks": 500,
+            "conversions": "0"
+          }
+        ]
+      },
+      {
+        "campaign_id": 202,
+        "id": 2,
+        "days": [
+          {
+            "date": "2026-09-27",
+            "cost": "1000.00",
+            "clicks": 30,
+            "conversions": "0"
+          },
+          {
+            "date": "2026-09-29",
+            "cost": "600.00",
+            "clicks": 20,
+            "conversions": "0"
+          }
+        ]
+      }
+    ],
+    "conversion_definition": {
+      "goal_ids": [
+        111,
+        222
+      ],
+      "attribution": "last"
+    }
+  },
+  "expected": [
+    {
+      "rule_version": "zero_conv_placements@2",
+      "object_type": "campaign",
+      "object_id": 202,
+      "candidate_level": "review",
+      "action_level": "review",
+      "action": {
+        "type": "exclude_placements",
+        "execution": "manual",
+        "placement_ids": [
+          1,
+          2
+        ]
+      },
+      "exposure": "17600.00",
+      "can_save": "unavailable"
+    }
+  ],
+  "exposure_total": "17600.00",
+  "rules_version": 2
+}

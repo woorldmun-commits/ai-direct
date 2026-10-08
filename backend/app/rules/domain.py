@@ -12,6 +12,8 @@ from enum import Enum
 from types import MappingProxyType
 from typing import Callable, Literal, Mapping
 
+from app.sources.conversion import ConversionDefinition
+
 Source = Literal["yandex_direct", "yandex_metrika", "user_input"]
 DataQuality = Literal["high", "medium", "low"]
 
@@ -69,6 +71,8 @@ class SnapshotView:
     campaign_days: tuple[CampaignDay, ...]
     placement_days: tuple[PlacementDay, ...] = ()  # пусто: отчёта площадок нет или у аккаунта нет расхода в сетях
     partial_from: date | None = None  # даты >= partial_from досчитываются; None — неизвестно, считать всё partial
+    # цели и атрибуция, по которым посчитаны конверсии снимка; None — определения нет (правила @2 не вычисляются)
+    conversion_definition: ConversionDefinition | None = None
 
 
 @dataclass(frozen=True)

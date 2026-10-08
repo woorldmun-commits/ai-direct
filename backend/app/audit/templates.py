@@ -21,8 +21,12 @@ def _rub(x: Decimal) -> str:
     return sign + grouped + ("," + frac if frac else "")
 
 
-def _bid_advice(f: Finding, d: Decision) -> str:
+def _bid_advice(f: Finding, d: Decision, strategy: str) -> str:
     change = abs(f.action["change_pct"])
+    if d.level != "inspect_only" and strategy != "manual":
+        # рычаг «ставка» есть только у ручной стратегии; у автоматической или неизвестной ставку не советуем
+        return ("Проверьте рычаги кампании для снижения CPA: какие из них доступны, зависит от стратегии "
+                "(целевой CPA, цели конверсий).")
     if d.level == "inspect_only":
         conv = f.evidence["conversions"].amount
         return (f"Конверсий за период пока мало ({_rub(conv)}) для безопасного изменения ставки — продолжаем "
@@ -84,14 +88,15 @@ def _placements(f: Finding, d: Decision) -> str:
     return text
 
 
-def explain(f: Finding, d: Decision) -> str:
+def explain(f: Finding, d: Decision, strategy: str = "unknown") -> str:
+    """strategy — как в audit/present.py: manual · auto · unknown. Сейчас в снимке стратегии нет — тогда unknown."""
     if f.reason_code == "zero_conversions":
         return _zero_conv(f)
     if f.reason_code == "placements_without_conversions":
         return _placements(f, d)
     head = f"CPA кампании {f.object_id} — {_rub(f.actual)} ₽"
     if f.reason_code == "cpa_above_target":
-        return f"{head}, это на {f.delta_pct}% выше целевого CPA {_rub(f.reference)} ₽. {_bid_advice(f, d)}"
+        return f"{head}, это на {f.delta_pct}% выше целевого CPA {_rub(f.reference)} ₽. {_bid_advice(f, d, strategy)}"
     if f.reason_code == "cpa_above_baseline":
         return (f"{head}, это на {f.delta_pct}% выше исторического базового уровня {_rub(f.reference)} ₽. "
                 "Проверьте причину роста и укажите целевой CPA — оценка станет точнее.")

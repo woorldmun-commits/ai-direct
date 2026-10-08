@@ -27,14 +27,19 @@ recoverable = unavailable (no_forecast): после исключения пло�
 дней досчёта, остаётся в выводе, но вывод помечается level_reason = conversions_partial, и достаточность данных не
 выше medium (политика → не выше review). Действие — исключить площадки вручную в Директе; кандидат уровня review
 (safety_policy: CANDIDATE_LEVEL["exclude_placements"] = "review"), change не бывает: исключение площадок меняет
-охват кампании, и решение — за человеком."""
+охват кампании, и решение — за человеком.
 
+@2 (те же пороги): источник конверсий и CPA — yandex_direct из реестра метрик; в evidence_meta — цели и атрибуция
+снимка (без определения конверсии правило не вычисляется). Конверсии кампании неизвестны (None) — SOURCE_MISSING."""
+
+from dataclasses import replace
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 
 from app.rules.domain import (DIRECT_CONVERSIONS, DIRECT_PLACEMENTS, AuditSettings, CampaignDay, ExposureBasis,
                               Fact, Finding, NotEnoughData, Output, PlacementDay, Reason, Rule, SnapshotView, Window,
                               frozen, issue_key, windows)
+from app.rules.evidence import definition_meta, definition_missing, labels, user_input
 
 FAMILY = "zero_conv_placements"
 CENT = Decimal("0.01")
@@ -47,8 +52,7 @@ QUALITY_ORDER = ("low", "medium", "high")
 
 def _sum_cost_conv(days, window: Window | None = None) -> tuple[Decimal, Decimal]:
     inside = [d for d in days if window is None or d.date in window]
-    return (sum((d.cost for d in inside), Decimal(0)),
-            sum((d.conversions or Decimal(0) for d in inside), Decimal(0)))
+    return (sum((d.cost for d in inside), Decimal(0)), sum((d.conversions for d in inside), Decimal(0)))
 
 
 def _reference(rule: Rule, snap: SnapshotView, settings: AuditSettings, campaign_days: list[CampaignDay],
@@ -56,6 +60,8 @@ def _reference(rule: Rule, snap: SnapshotView, settings: AuditSettings, campaign
     if settings.target_cpa is not None:
         return settings.target_cpa, {"reference_cpa": Fact(settings.target_cpa, "rub", "user_input", evaluation)}
     period = Window(snap.period_from, snap.period_to)
+    if any(d.conversions is None for d in campaign_days):
+        return Reason.SOURCE_MISSING  # ноль конверсий не выводится из их отсутствия
     cost, conv = _sum_cost_conv(campaign_days)
     if conv == 0:
         return Reason.NO_CONVERSIONS  # кампания без конверсий целиком — это zero_conv_campaign, не площадки
@@ -64,10 +70,11 @@ def _reference(rule: Rule, snap: SnapshotView, settings: AuditSettings, campaign
     cpa = (cost / conv).quantize(CENT, ROUND_HALF_UP)
     if cpa <= 0:
         return Reason.BASELINE_DATA_INSUFFICIENT
+    conv_label, cpa_label = labels(rule)
     return cpa, {
         "campaign_cost": Fact(cost, "rub", "yandex_direct", period),
-        "campaign_conversions": Fact(conv, "count", "yandex_metrika", period),
-        "reference_cpa": Fact(cpa, "rub", "yandex_direct+yandex_metrika", period, "estimated", CPA_FORMULA),
+        "campaign_conversions": Fact(conv, "count", conv_label, period),
+        "reference_cpa": Fact(cpa, "rub", cpa_label, period, "estimated", CPA_FORMULA),
     }
 
 
@@ -134,15 +141,17 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings, 
     clicks = sum(f[3] for f in flagged)
     partial = any(f[4] for f in flagged)
     mode = "target" if settings.target_cpa is not None else "campaign"
-    source = "yandex_direct+yandex_metrika" + ("+user_input" if mode == "target" else "")
+    conv_label, cpa_label = labels(rule)
+    source = user_input(cpa_label) if mode == "target" else cpa_label
     evidence = {
         "cost": Fact(cost, "rub", "yandex_direct", evaluation),
         "clicks": Fact(Decimal(clicks), "count", "yandex_direct", evaluation),
-        "conversions": Fact(Decimal(0), "count", "yandex_metrika", Window(snap.period_from, snap.period_to)),
+        "conversions": Fact(Decimal(0), "count", conv_label, Window(snap.period_from, snap.period_to)),
         "placements": Fact(Decimal(len(flagged)), "count", "yandex_direct", evaluation),
         **ref_evidence,
     }
-    meta = {"reference_mode": mode, "placement_ids": ",".join(str(f[0]) for f in flagged)}
+    meta = {"reference_mode": mode, "placement_ids": ",".join(str(f[0]) for f in flagged),
+            **definition_meta(rule, snap)}
     for pid, name, p_cost, p_clicks, only_partial in flagged:
         evidence[f"placement_{pid}_cost"] = Fact(p_cost, "rub", "yandex_direct", evaluation)
         evidence[f"placement_{pid}_clicks"] = Fact(Decimal(p_clicks), "count", "yandex_direct", evaluation)
@@ -171,6 +180,8 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings, 
 
 
 def evaluate(rule: Rule, snap: SnapshotView, settings: AuditSettings) -> tuple[Output, ...]:
+    if missing := definition_missing(rule, snap):
+        return missing
     evaluation, _ = windows(snap.period_to)
     placements: dict[int, list[PlacementDay]] = {}
     for d in snap.placement_days:
@@ -202,3 +213,6 @@ ZERO_CONV_PLACEMENTS = Rule(
         "medium_expected_conversions": 3,
     }),
 )
+
+# @2 — те же пороги, другие метки источника и доказательства; @1 остаётся для старых выводов.
+ZERO_CONV_PLACEMENTS_V2 = replace(ZERO_CONV_PLACEMENTS, version=2)
