@@ -93,3 +93,44 @@ def test_importing_rules_and_audit_loads_no_llm_sdk():
             "print(bad)\nsys.exit(1 if bad else 0)\n")
     done = subprocess.run([sys.executable, "-c", code], cwd=BACKEND, capture_output=True, text=True)
     assert done.returncode == 0, done.stdout + done.stderr
+
+
+PURE_V2 = ("contracts", "metrics", "actions")
+V2_FORBIDDEN = REGISTRY_FORBIDDEN + ("app.audit", "app.db", "app.sync", "app.worker")
+
+
+@pytest.mark.parametrize("package", PURE_V2)
+def test_v2_intelligence_packages_are_import_pure(package):
+    files = sorted((APP / "intelligence" / package).rglob("*.py"))
+    assert files
+    for path in files:
+        assert not file_hits(path, V2_FORBIDDEN), (path.name, file_hits(path, V2_FORBIDDEN))
+
+
+def test_agents_package_is_pure_too():
+    files = sorted((APP / "intelligence" / "agents").rglob("*.py"))
+    assert files
+    for path in files:
+        assert not file_hits(path, V2_FORBIDDEN), (path.name, file_hits(path, V2_FORBIDDEN))
+
+
+def test_rules_and_audit_never_import_agents():
+    for package in ("rules", "audit"):
+        for path in sorted((APP / package).rglob("*.py")):
+            assert not file_hits(path, ("app.intelligence.agents",)), path.name
+
+
+def test_importing_v2_packages_loads_no_db_http_or_llm_modules():
+    code = ("import sys, app.intelligence.contracts.evidence, app.intelligence.contracts.finding, "
+            "app.intelligence.metrics.definitions, app.intelligence.actions.capabilities, "
+            "app.intelligence.agents.registry, app.intelligence.agents.run_record\n"
+            "bad = [m for m in sys.modules if m.split('.')[0] in ('anthropic', 'openai', 'litellm', 'psycopg', "
+            "'psycopg2', 'requests', 'httpx', 'urllib3') or m.startswith(('app.ai', 'app.intelligence.llm'))]\n"
+            "print(bad)\nsys.exit(1 if bad else 0)\n")
+    done = subprocess.run([sys.executable, "-c", code], cwd=BACKEND, capture_output=True, text=True)
+    assert done.returncode == 0, done.stdout + done.stderr
+
+
+def test_strategy_matrix_module_is_pure():
+    path = APP / "sources" / "strategy.py"
+    assert not file_hits(path, V2_FORBIDDEN), file_hits(path, V2_FORBIDDEN)
