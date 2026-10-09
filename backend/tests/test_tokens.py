@@ -87,3 +87,42 @@ def test_security_definer_functions_have_fixed_search_path(rw):
                                           "phone_code_request", "phone_code_for_check", "phone_code_record",
                                           "phone_auth_log", "phone_auth_last_hour", "purge_phone_auth"}
     assert all(cfg and any(c.startswith("search_path=") for c in cfg) for _, cfg in rows)
+
+
+# --- Прикладная роль без контекста workspace (HIGH): ws — параметр, без контекста его не с чем сверить -------------
+
+@pytest.fixture
+def app_role(db):
+    with db("app_rw") as conn:
+        yield conn
+
+
+@pytest.mark.parametrize("sql", [
+    "SELECT set_connection_token('direct', %s, %s, '\x01', NULL)",
+    "SELECT drop_connection_token('direct', %s, %s, 'disconnected')",
+])
+def test_app_role_without_workspace_context_is_refused(app_role, chain, conn_id, sql):
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        app_role.execute(sql, (chain["ws"], conn_id))
+
+
+def test_app_role_in_its_workspace_writes_token_but_not_in_another(app_role, rw, chain, conn_id):
+    with workspace_scope(app_role, chain["ws"]):
+        app_role.execute("SELECT set_connection_token('direct', %s, %s, '\x01', NULL)", (chain["ws"], conn_id))
+        app_role.execute("SELECT drop_connection_token('direct', %s, %s, 'disconnected')", (chain["ws"], conn_id))
+    assert one(rw, "SELECT status FROM direct_connections WHERE id = %s", conn_id) == "disconnected"
+    other_ws = new_workspace(rw, "x")
+    other = connected(rw, "direct", other_ws, f"tok{other_ws}", token=TOKEN)
+    with workspace_scope(app_role, chain["ws"]):
+        for sql in ("SELECT set_connection_token('direct', %s, %s, '\x01', NULL)",
+                    "SELECT drop_connection_token('direct', %s, %s, 'disconnected')"):
+            with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                app_role.execute(sql, (other_ws, other))
+    assert one(rw, "SELECT status FROM direct_connections WHERE id = %s", other) == "connected"
+
+
+def test_worker_and_system_roles_keep_working_without_context(rw, token_role, chain, conn_id):
+    """Без контекста — только системная роль и роль воркера: workspace — явный параметр, право проверяет вызывающий."""
+    assert bytes(one(token_role, "SELECT connection_token('direct', %s, %s)", chain["ws"], conn_id)) == TOKEN
+    rw.execute("SELECT set_connection_token('direct', %s, %s, '\x02', NULL)", (chain["ws"], conn_id))
+    rw.execute("SELECT drop_connection_token('direct', %s, %s, 'disconnected')", (chain["ws"], conn_id))
