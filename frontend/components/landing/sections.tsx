@@ -162,15 +162,15 @@ export function DemoCta() {
         <div className="relative grid items-center gap-8 lg:grid-cols-[1.4fr_1fr]">
           <div>
             <h2 id="audit-title" className="text-[26px] font-bold tracking-tight md:text-[32px]">
-              Бесплатный аудит Яндекс Директ
+              Аудит Яндекс Директ в закрытом пилоте
             </h2>
             <p className="mt-3 max-w-[560px] text-white/70">
-              Первый аудит бесплатно — один на рекламный аккаунт, без привязки карты. Хотите сначала посмотреть? Откройте демо-кабинет
-              с тестовыми данными без регистрации.
+              Для участников пилота аудит проводится по договору. Хотите сначала посмотреть? Откройте демо с тестовыми данными, данные
+              в нём вымышлены.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link href="/signup" className="btn h-12 bg-[#39BFA0] px-6 text-[#04130f] hover:bg-[#52cfb2]">
-                Запустить аудит <ArrowRight size={18} />
+                Подать заявку <ArrowRight size={18} />
               </Link>
               <Link href="/demo" className="btn h-12 border border-white/25 px-6 text-white hover:border-white/60">
                 <Play size={16} /> Попробовать демо

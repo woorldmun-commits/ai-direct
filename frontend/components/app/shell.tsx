@@ -101,7 +101,7 @@ function Sidebar({ path }: { path: string }) {
         <p className="mt-1 text-xs text-muted">Сейчас изменения в Директе вносите вы, а AdPilot сверяет их по данным и измеряет эффект.</p>
       </div>
       <Link href="/signup" className="btn btn-primary mt-3">
-        Запустить свой аудит
+        Заявка на пилот
       </Link>
     </aside>
   );
