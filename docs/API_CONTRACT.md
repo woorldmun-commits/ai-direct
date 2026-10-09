@@ -38,6 +38,10 @@ Direct API и «Спросить AI» — v1.1 ([API_CONTRACT_EXECUTION.md](API_
 - **`Idempotency-Key`** (UUID) — **обязателен** для биллинга (§13); для остальных `POST` — по желанию. Тот же ключ и
   тело → тот же ответ без повторного действия; тот же ключ и другое тело → `409 idempotency_conflict`. Ключ живёт 24 часа.
 - **`X-Request-Id`** — в каждом ответе; клиент может прислать свой (UUID). Он же в теле ошибки (§12).
+- **Уведомления** (в интерфейсе; тексты — без названий клиентов, кампаний, площадок, запросов и логинов):
+  `GET /me/notifications?cursor=…` → `{items: [{id, kind, title, body, recommendation_id|null, created_at, read_at}],
+  next_cursor}`; `POST /me/notifications/{id}/read` и `POST /me/notifications/read-all` → `204`;
+  `PATCH /me/notification-preferences` `{email_digest: bool, critical_only: bool}`.
 - В ответах нет: OAuth-токенов, хэшей кодов и сессий, `snapshot_id`, внутренних id таблиц, текстов поисковых запросов.
 - Фронтенд **не считает** бизнес-значения и не решает, какие действия разрешены: показывает `allowed_actions` и
   `Value` как пришли. Суммы, проценты и знак «≈» получаются из полей, а не вычисляются.
@@ -392,6 +396,7 @@ CPA (`high_cpa`: `high_cpa_target@N` / `high_cpa_baseline@N`), площадки 
 | POST | `/workspaces/{ws}/integrations/{provider}/disconnect` | отключить: токен удаляется, синхронизация останавливается |
 | PATCH | `/workspaces/{ws}/integrations/ad-accounts/{id}` | `{selected}` — включить кабинет в анализ |
 | GET · PUT | `/workspaces/{ws}/integrations/yandex_metrika/goals` | цели счётчика для выбора (ранжированные, ARCHITECTURE.md §2.8) · выбранные цели |
+| GET · PATCH | `/workspaces/{ws}/notification-preferences` | каналы и частота: `in_app` (всегда включено), `email_digest`, `email_digest_time`, `critical_only` |
 
 ```json
 {"items": [{"provider": "yandex_direct", "status": "connected", "account": "client-login",
@@ -446,24 +451,35 @@ AI в v1.0 — только `explanation` рекомендации (§5): утв
 `GET /workspaces/{ws}/members`, `PUT/DELETE /workspaces/{ws}/members/{user}` `{ws_role}` — только для участника той же
 организации, иначе `404`.
 
-## 11. Вход по номеру телефона
+## 11. Вход по номеру телефона (единственный способ входа)
 
 | Метод | Путь | Тело / ответ |
 |---|---|---|
-| POST | `/auth/code/request` | `{phone}` → **всегда `202`** с одинаковым телом: зарегистрирован ли номер, не раскрывается |
+| POST | `/auth/code/request` | `{phone, captcha_token?}` → **всегда `202`** с одинаковым телом: зарегистрирован ли номер, не раскрывается |
 | POST | `/auth/code/verify` | `{phone, code, accepted?: {offer, pd_consent, marketing?}}` → `200` + cookie сессии |
-| POST | `/auth/logout` | → `204` |
+| POST | `/auth/logout` | текущая сессия → `204` |
+| POST | `/auth/logout-all` | все сессии пользователя → `204` |
+| GET | `/me/sessions` | активные сессии: `[{id, device, ip_region, last_seen_at, created_at}]` |
+| DELETE | `/me/sessions/{id}` | отозвать сессию → `204` |
 
 - `phone` — российский мобильный, нормализуется в E.164 (`+7…`); иной формат → `400 invalid_request`. Код — 6 цифр,
   SMS российского провайдера, живёт 5 минут, одноразовый, до 5 попыток ввода.
-- Лимиты: повторный код не чаще 1 раза в 60 с; 5 кодов в час на номер и 20 на IP → `429 rate_limited` + `Retry-After`.
+- **Лимиты:** повторный код не чаще 1 раза в 60 с; 5 кодов в час на номер и 20 на IP → `429 rate_limited` +
+  `Retry-After`. При 2-м и последующих запросах за сутки с одного IP нужен `captcha_token` → `422 action_unavailable`
+  с `reason: captcha_required`. VoIP-номера и номера-«одноразовики» блокируются по префиксу (список — в конфиге).
 - Неверный, истёкший, использованный или исчерпавший попытки код — один ответ `401 invalid_code`.
 - Регистрация и вход — один поток. Номер новый и `accepted` без текущих версий `offer` и `pd_consent` →
   `422 acceptance_required` (код не гасится, пока не истёк); пользователь создаётся только вместе с принятием
   (`legal_acceptances` с хэшем текста, языком, IP и user agent).
-- Пароля и входа по email нет; email — необязательный контакт для чеков (`PATCH /me` `{email}`). Яндекс OAuth — только
-  подключение Директа и Метрики (§8), не вход.
-- Законность входа по SMS (ст. 10 149-ФЗ) — открытый пункт LEGAL.md; до заключения юриста регистрация на HOLD.
+- **Сессия:** httpOnly cookie, `SameSite=Lax`, `Secure`. TTL 30 дней, скользящее продление при активности. Отзыв:
+  логаут, логаут со всех устройств, смена номера (после верификации), блокировка пользователя.
+- **Восстановление доступа:** смена номера — только через поддержку с верификацией (email на аккаунте, история
+  сессий). Отдельного endpoint в v1.0 нет; процесс — форма поддержки, обработка вручную.
+- Пароля и входа по email нет; email — необязательный контакт для чеков, безопасности и дайджеста (`PATCH /me`
+  `{email}` → `200` + письмо-подтверждение; пока email не подтверждён, дайджест на него не отправляется). Яндекс OAuth —
+  только подключение Директа и Метрики (§8), не вход; альтернативные способы входа — резерв v1.1+.
+- Юридическая обвязка SMS-входа (согласие по 152-ФЗ, порядок идентификации, РКН-уведомление, DPA со SMS-провайдером) —
+  открытый пункт LEGAL.md; подтверждение требуется до **публичного** запуска, не до пилота на закрытом круге агентств.
 
 ## 12. Ошибки
 
@@ -480,7 +496,7 @@ AI в v1.0 — только `explanation` рекомендации (§5): утв
 | 404 | `not_found` | нет объекта или нет доступа к workspace |
 | 409 | `version_outdated` · `invalid_transition` · `idempotency_conflict` · `last_owner` | |
 | 410 | `workspace_deleted` | workspace в удалении |
-| 422 | `action_unavailable` (+ `reason`, §4) · `acceptance_required` | |
+| 422 | `action_unavailable` (+ `reason`, §4; для входа также `captcha_required`) · `acceptance_required` | |
 | 429 | `rate_limited` | + заголовок `Retry-After` |
 | 500 | `internal` | без деталей и стека; `request_id` есть всегда |
 

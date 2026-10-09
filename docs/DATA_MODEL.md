@@ -65,7 +65,7 @@ erDiagram
 Только `purpose = invitation`: `id`, `organization_id`, `token_hash` (sha256; токен — только в ссылке приглашения), `expires_at`, `used_at`. Одноразовый. Куда уходит приглашение (номер или email) — §11 п. 5.
 
 ### `yandex_identities` [O] — выводится в v1.0
-Вход через Яндекс ID (`yandex_uid`) — модель MVP, реализована в `auth/login.py` и остаётся до отдельного PR входа. В v1.0 вход — по номеру телефона (`auth_codes`), Яндекс OAuth — только подключения (§3). Таблица удаляется миграцией в PR входа, если юрист подтвердит вход по SMS.
+Вход через Яндекс ID (`yandex_uid`) — модель MVP, реализована в `auth/login.py` и остаётся до отдельного PR входа. В v1.0 вход — по номеру телефона (`auth_codes`), Яндекс OAuth — только подключения (§3). Таблица удаляется миграцией в PR входа по SMS; Яндекс ID как резервный способ входа (v1.1+) потребует её вернуть или завести заново.
 
 ### `sessions` [O]
 `id` (случайный 256 бит, в httpOnly cookie хранится он; в БД — sha256), `user_id`, `created_at`, `expires_at`, `revoked_at`. Workspace в сессии не хранится — он в пути запроса (API_CONTRACT.md §1).
@@ -96,8 +96,8 @@ PK (`user_id`, `workspace_id`), `ws_role`: `approver` (смотреть, decide;
 
 Изменения настроек не ломают воспроизводимость: `audit_runs.settings` хранит замороженную копию. `approval_mode` (`single_step` / `two_step` по `kind`) убран: в v1.1 число одобрений задаёт риск действия (EXECUTION_SAFETY.md); в v1.0 решение принимает один человек с правом decide.
 
-### `telegram_links` [O]
-`user_id` PK, `chat_id` UNIQUE, `linked_at`. Одноразовый токен deep-link — в Redis с TTL 15 минут.
+### `telegram_links` [O] — не используется в v1.0
+Telegram в AdPilot не используется (D15, VERSION_SCOPE §3.2). Таблица (`user_id` PK, `chat_id` UNIQUE, `linked_at`) осталась в схеме и в релизной миграции `0001_baseline`; к удалению отдельной миграцией (документация код не меняет).
 
 ## 3. Подключения
 
@@ -275,7 +275,7 @@ PK (`user_id`, `workspace_id`), `ws_role`: `approver` (смотреть, decide;
 `id`, `workspace_id`, `kind` (`daily` · `weekly`), `snapshot_id`, `audit_run_id`, `payload` jsonb (все показанные `Value` + ID рекомендаций), `created_at`. Отправка — через `notifications`.
 
 ### `notifications` [O]
-`id`, `workspace_id`, `kind` (`digest` · `correction` · `new_problem` · `critical` · `billing`), `channel` (`telegram` · `email`), `dedup_key` UNIQUE, `digest_id` NULL, `snapshot_id` NULL, `payload` jsonb, `status` (`queued` · `sent` · `failed` · `skipped`), `attempts`, `created_at`, `sent_at`.
+`id`, `workspace_id`, `kind` (`digest` · `correction` · `new_problem` · `critical` · `billing`), `channel` (целевое: `in_app` · `email`; в схеме пока `telegram` · `email` — приводится миграцией), `dedup_key` UNIQUE, `digest_id` NULL, `snapshot_id` NULL, `payload` jsonb, `status` (`queued` · `sent` · `failed` · `skipped`), `attempts`, `created_at`, `sent_at`.
 `dedup_key` = `kind:workspace:object:date` — повтор не создаёт второе сообщение. `date` — день самого события в поясе данных, не день доставки: повторная доставка outbox-события на следующий день не даёт дубль. Причина `skipped` — `payload.skip_reason` (`subscription_inactive`, `workspace_inactive`, `no_recipient`).
 
 ## 7. Биллинг и бесплатный аудит

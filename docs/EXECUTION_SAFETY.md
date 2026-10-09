@@ -244,7 +244,7 @@ created ──гейт──▶ started ──запись──▶ verifying �
 | `worker_ai` | объяснения; «Спросить AI» — [v1.1] | **нет** | `explanations` | видеть токены, названия, тексты запросов (только обезличенные агрегаты) |
 | `worker_execution` **[v1.1]** | предпросмотр, исполнение, откат | читает | `execution_attempts`, события исполнения | удалять, биллинг, писать снимки |
 | `worker_billing` | продление, списания, сверка | нет | подписки, платежи | токены рекламы |
-| `worker_notify` | доставка outbox, Telegram | нет | `notifications` | токены, исполнение |
+| `worker_notify` | доставка outbox, email-дайджест | нет | `notifications` | токены, исполнение |
 | `worker_deleter` | удаление, ретеншн | нет | только через функции удаления (`app_deleter`, ARCHITECTURE §2.3) | всё остальное |
 
 Сейчас (ARCHITECTURE §2.3) роль `app_token` — одна на весь воркер. Задачи одного workspace — под `app_rw` / `app_token` с `app.workspace_id` (RLS, D13); задачи по многим workspace (планировщик, outbox, уведомления, выбор замеров) — под `app_system`; удаление и ретеншн — функции `SECURITY DEFINER` под `app_deleter`.
