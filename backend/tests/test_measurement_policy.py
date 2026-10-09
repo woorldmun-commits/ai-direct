@@ -73,3 +73,18 @@ def test_saved_only_with_effect_everywhere():
     for bc, bv, ac, av in [(50000, 10, 35000, 10), (50000, 10, 60000, 10), (50000, 2, 1, 1), (1, 10, 1, 10)]:
         m = measure_cpa(days(bc, bv, ac, av), BEFORE, AFTER)
         assert (m.saved is not None) == (m.verdict == "effect")
+
+
+def test_unknown_conversions_are_insufficient_not_no_effect():
+    """Конверсии за день окна неизвестны (Метрика не подключена / нет данных): None — не ноль. Вердикт insufficient, а не
+    ложное «no_effect: нет конверсий после»."""
+    d = days(50000, 10, 35000, 10)
+    d[2] = CampaignDay(1, AFTER.date_to, Decimal(35000), 10, None)
+    m = measure_cpa(d, BEFORE, AFTER)
+    assert (m.verdict, m.saved, m.effect["reason"]) == ("insufficient", None, "conversions_unknown")
+
+
+def test_unknown_conversions_before_are_insufficient_too():
+    d = days(50000, 10, 35000, 10)
+    d[0] = CampaignDay(1, BEFORE.date_to, Decimal(50000), 10, None)
+    assert measure_cpa(d, BEFORE, AFTER).verdict == "insufficient"

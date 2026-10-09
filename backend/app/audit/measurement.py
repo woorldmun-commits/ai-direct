@@ -108,6 +108,8 @@ def _builder(b_facts: dict, a_facts: dict):
 
 def measure_cpa(days: Iterable[CampaignDay], before: Window, after: Window, params=PARAMS) -> Measured:
     days = list(days)
+    if not _known(days, before, after):
+        return _builder({}, {})("insufficient", "conversions_unknown")
     b_cost, b_conv, b_facts = _period(days, before)
     a_cost, a_conv, a_facts = _period(days, after)
     result = _builder(b_facts, a_facts)
