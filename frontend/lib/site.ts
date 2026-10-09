@@ -1,5 +1,10 @@
-// Set NEXT_PUBLIC_SITE_URL to the real domain; the fallback is a placeholder, not ours.
-export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://adpilot.ru";
+// The real public origin, e.g. https://example.ru (no trailing slash). Unset = domain not bought yet: sitemap, robots sitemap
+// line and JSON-LD urls are omitted instead of pointing at a domain we do not own. A deploy sets REQUIRE_SITE_URL=1
+// to fail the build when it is missing.
+export const SITE_URL: string | undefined = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || undefined;
+if (process.env.REQUIRE_SITE_URL === "1" && !SITE_URL) throw new Error("NEXT_PUBLIC_SITE_URL is required for this build");
+/** Only for Next's metadataBase (relative canonical/OG); never published as a real address when SITE_URL is unset. */
+export const METADATA_BASE = SITE_URL ?? "http://localhost:3000";
 
 const rubFmt = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 
