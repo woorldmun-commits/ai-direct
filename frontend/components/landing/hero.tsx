@@ -39,7 +39,7 @@ export function Header() {
             Попробовать демо
           </Link>
           <Link href="/signup" className="btn btn-sm bg-[#39BFA0] text-[#04130f] hover:bg-[#52cfb2]">
-            Создать аккаунт
+            Заявка на пилот
           </Link>
         </div>
       </div>
@@ -68,13 +68,13 @@ export function Hero() {
             <span className="text-[#39BFA0]">доказательством</span> на данных.
           </h1>
           <p className="mt-6 max-w-[540px] text-lg text-white/70">
-            AdPilot каждый день проверяет все ваши кабинеты Директа и Метрики, оценивает расход с признаками неэффективности в рублях
-            и показывает формулу и источник каждой цифры. Решение и изменение в кабинете остаются за вами, а AdPilot сверяет его по
-            данным Директа, измеряет эффект и собирает отчёт для клиента.
+            AdPilot проверяет кабинеты Директа и Метрики, оценивает расход с признаками неэффективности в рублях и показывает формулу
+            и источник каждой цифры. Решение и изменение в кабинете остаются за вами. Сейчас — закрытый пилот: аудит выполняем
+            по договору, каждую рекомендацию проверяем вручную.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link href="/signup" className="btn h-12 bg-[#39BFA0] px-6 text-[15px] text-[#04130f] hover:bg-[#52cfb2]">
-              Запустить бесплатный аудит <ArrowRight size={18} />
+              Подать заявку на пилот <ArrowRight size={18} />
             </Link>
             <Link href="/demo" className="btn h-12 border border-white/25 px-6 text-[15px] text-white hover:border-white/60">
               Попробовать демо

@@ -1,5 +1,5 @@
-// ponytail: placeholder domain until the real one is bought
-export const SITE_URL = "https://adpilot.ru";
+// Set NEXT_PUBLIC_SITE_URL to the real domain; the fallback is a placeholder, not ours.
+export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://adpilot.ru";
 
 const rubFmt = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 

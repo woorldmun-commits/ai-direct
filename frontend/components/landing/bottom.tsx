@@ -4,68 +4,40 @@ import { CookieSettingsButton } from "@/components/cookie-banner";
 import { Logo } from "@/components/ui";
 import { LEGAL_DOCS } from "@/lib/site";
 
-const PLANS = [
-  {
-    name: "Аудит",
-    price: "0 ₽",
-    note: "один раз на рекламный аккаунт",
-    cta: "Запустить аудит",
-    features: ["Разовая проверка Директа и Метрики", "Неэффективный расход в ₽ (оценка) с формулой и источником", "Результат только для чтения"],
-    highlight: false,
-  },
-  {
-    name: "Мониторинг",
-    price: "[ЦЕНА] ₽/мес",
-    note: "один рекламный аккаунт",
-    cta: "Продолжить мониторинг",
-    features: ["Ежедневная проверка", "Рекомендации и история решений", "Сверка ручных изменений и замер эффекта через 7 дней", "Уведомления в Telegram"],
-    highlight: false,
-  },
-  {
-    name: "Агентство",
-    price: "[ЦЕНА] ₽/мес",
-    note: "несколько аккаунтов",
-    cta: "Обсудить условия",
-    features: ["Всё из «Мониторинга»", "Несколько кабинетов клиентов", "Общий обзор и приоритеты по всем кабинетам", "Отчёт для клиента с доказательствами", "Роли: кто смотрит, кто принимает решения"],
-    highlight: true,
-  },
-];
+const PILOT = {
+  name: "Закрытый пилот",
+  note: "для агентств и директологов, по договору",
+  features: [
+    "Разовая проверка кабинета Директа и Метрики (только чтение)",
+    "Расход с признаками неэффективности в ₽ (оценка) с формулой и источником",
+    "Каждая рекомендация проверяется специалистом AdPilot до передачи вам",
+    "Отчёт с доказательствами; решение и изменение в кабинете остаются за вами",
+  ],
+};
 
 export function Pricing() {
   return (
     <section id="pricing" aria-labelledby="pricing-title" className="mx-auto max-w-[1360px] scroll-mt-24 px-4 pt-20 md:px-8">
       <h2 id="pricing-title" className="text-[26px] font-bold tracking-tight md:text-[28px]">
-        Тарифы
+        Участие в пилоте
       </h2>
-      <div className="mt-6 grid gap-4 lg:grid-cols-3">
-        {PLANS.map((p) => (
-          <article key={p.name} className={`card flex flex-col p-6 ${p.highlight ? "border-brand ring-1 ring-brand" : ""}`}>
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold">{p.name}</h3>
-              {p.highlight && <span className="badge bg-brand-soft text-brand">Основной</span>}
-            </div>
-            <p className="money mt-4 text-[32px]">{p.price}</p>
-            <p className="text-sm text-muted">{p.note}</p>
-            <ul className="mt-5 flex-1 space-y-2 text-sm">
-              {p.features.map((f) => (
-                <li key={f} className="flex gap-2">
-                  <Check size={16} className="mt-0.5 shrink-0 text-success" /> {f}
-                </li>
-              ))}
-            </ul>
-            <Link href="/signup" className={`btn mt-6 ${p.highlight ? "btn-primary" : "btn-secondary"}`}>
-              {p.cta}
-            </Link>
-          </article>
-        ))}
-      </div>
-      <p className="mt-4 text-xs text-muted">
-        Цены указаны в рублях, [НДС не облагается (УСН / НПД) | включая НДС 20%]. Подписка продлевается автоматически только с
-        вашего явного согласия; о списании предупредим за 3 дня, отменить можно в кабинете в любой момент. Условия — в{" "}
-        <Link href="/legal/offer" className="underline underline-offset-2">
-          Договоре-оферте
+      <article className="card mt-6 flex max-w-[640px] flex-col p-6">
+        <h3 className="text-lg font-bold">{PILOT.name}</h3>
+        <p className="text-sm text-muted">{PILOT.note}</p>
+        <ul className="mt-5 flex-1 space-y-2 text-sm">
+          {PILOT.features.map((f) => (
+            <li key={f} className="flex gap-2">
+              <Check size={16} className="mt-0.5 shrink-0 text-success" /> {f}
+            </li>
+          ))}
+        </ul>
+        <Link href="/signup" className="btn btn-primary mt-6">
+          Подать заявку на пилот
         </Link>
-        .
+      </article>
+      <p className="mt-4 text-xs text-muted">
+        Условия участия, порядок передачи доступа к данным, их хранения и удаления фиксируются в договоре пилота. Тарифы появятся
+        после пилота; автоматической синхронизации, уведомлений и управления рекламой в пилоте нет.
       </p>
     </section>
   );
@@ -74,7 +46,7 @@ export function Pricing() {
 export const FAQ = [
   {
     q: "Безопасно ли передавать доступ к Яндекс Директу?",
-    a: "Вы входите в AdPilot по номеру телефона и одноразовому коду из SMS, а Яндекс Директ и Метрику подключаете уже в кабинете через официальный OAuth Яндекса: пароль от Яндекса мы не видим. Токены доступа хранятся в зашифрованном виде, отключить источник можно в любой момент.",
+    a: "Доступ к Директу и Метрике оформляется через официальный OAuth Яндекса: пароль от Яндекса мы не видим и не запрашиваем. Токены доступа хранятся в зашифрованном виде. Порядок передачи, хранения и удаления данных, а также отзыв доступа фиксируются в договоре пилота.",
   },
   {
     q: "AdPilot сам меняет ставки и кампании?",
@@ -86,7 +58,7 @@ export const FAQ = [
   },
   {
     q: "Подходит ли AdPilot агентству или директологу с несколькими клиентами?",
-    a: "Да, это основной сценарий: несколько кабинетов в одном обзоре, приоритет проблем по сумме, роли в команде и отчёт для клиента, где каждый вывод подкреплён цифрами и источником.",
+    a: "Да, это основной сценарий пилота: проверка кабинетов ваших клиентов и отчёт, где каждый вывод подкреплён цифрами и источником.",
   },
   {
     q: "AdPilot гарантирует снижение CPA или рост заявок?",
@@ -94,15 +66,15 @@ export const FAQ = [
   },
   {
     q: "Сколько времени занимает аудит?",
-    a: "Для небольшого аккаунта — обычно несколько минут. Большие аккаунты с долгой историей проверяются дольше.",
+    a: "Сроки согласуем при подключении: в пилоте результат готовим с ручной проверкой каждой рекомендации, поэтому быстро и без неё не обещаем.",
   },
   {
     q: "Что передаётся в AI?",
     a: "Только обезличенные агрегаты: без названий кампаний, текстов поисковых запросов и персональных данных. Цифры считает код, AI их только объясняет.",
   },
   {
-    q: "Можно ли отменить подписку?",
-    a: "Да, в кабинете в любой момент. Условия описаны в Договоре-оферте.",
+    q: "Как отозвать доступ и удалить данные?",
+    a: "Доступ можно отозвать в любой момент, удаление данных по запросу. Точный порядок и сроки согласуются в договоре пилота.",
   },
 ];
 
@@ -148,16 +120,16 @@ export function FinalCta() {
       <div className="card flex flex-col items-start gap-6 p-8 md:flex-row md:items-center md:justify-between md:p-10">
         <div>
           <h2 id="final-title" className="text-[26px] font-bold tracking-tight md:text-[28px]">
-            Запустите бесплатный аудит
+            Участвуйте в закрытом пилоте
           </h2>
-          <p className="mt-1 text-muted">Без карты. Вход по номеру телефона. Изменения в кабинетах вносите только вы — AdPilot ничего не меняет сам.</p>
+          <p className="mt-1 text-muted">Доступ по договору. Изменения в кабинетах вносите только вы — AdPilot ничего не меняет сам.</p>
         </div>
         <div className="flex flex-wrap gap-3">
           <Link href="/signup" className="btn btn-primary h-12 px-6">
-            Создать аккаунт бесплатно <ArrowRight size={18} />
+            Подать заявку <ArrowRight size={18} />
           </Link>
           <Link href="/demo" className="btn btn-secondary h-12 px-6">
-            Попробовать демо
+            Демо на тестовых данных
           </Link>
         </div>
       </div>
@@ -184,8 +156,7 @@ export function Footer() {
       </div>
       <div className="mx-auto max-w-[1360px] space-y-2 border-t border-line px-4 py-6 text-xs text-muted md:px-8">
         <p>
-          [ИП Фамилия И. О. / ООО «Название»] · ИНН [__________] · ОГРН/ОГРНИП [_____________] · Адрес: [____] · E-mail: [support@…] ·
-          © 2026 AdPilot
+          © 2026 AdPilot. Реквизиты оператора публикуются до начала приёма пользователей.
         </p>
         <p>
           AdPilot — независимый сервис, не является продуктом ООО «ЯНДЕКС» и не аффилирован с ним. «Яндекс», «Яндекс Директ»,
