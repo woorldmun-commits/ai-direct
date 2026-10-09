@@ -50,9 +50,9 @@
 | Фиксация исходного состояния, сверка ручного выполнения по данным Директа | PRD §5 · API_CONTRACT §3 |
 | Замер эффекта через 7 дней, «Сэкономлено ≈» по подтверждённым выполнениям | PRD §1 · ARCHITECTURE §5 |
 | Экран «Сегодня» (ответ за 5 секунд), Рекомендации, Аналитика, Настройки | PRD §5 |
-| Telegram-оповещения без названий клиентов, кампаний, запросов, логинов | PRD §2, §5 · ARCHITECTURE §8 |
+| Оповещения по email и в кабинете без названий клиентов, кампаний, запросов, логинов (Telegram не используется, решение 2026-10-09) | PRD §2, §5 · ARCHITECTURE §8 |
 | Агентства: организация, клиентские workspace, команда, роли | PRD §5 · API_CONTRACT §10 |
-| Бесплатный первый аудит, подписка, честный биллинг | PRD §7 · ARCHITECTURE §7.3 |
+| 7 дней бесплатного доступа, затем подписка; честный биллинг (решение 2026-10-09) | PRD §7 · ARCHITECTURE §7.3 |
 
 Статусы рекомендации v1.0: `new` → `requires_decision` → `accepted` → `applied` (`execution_mode = manual`, сверка `verification_status`) → замер; а также `postponed`, `rejected` и «Проверил» (`applied`, `execution_mode = none`) для `inspect_only`. Подробно — PRD §5.
 
@@ -69,7 +69,7 @@
 | D12 | Evals: golden dataset в `backend/evals/`, гейт выпуска версий правил и политик | AI_GOVERNANCE.md |
 | D13 | Изоляция арендаторов: PostgreSQL RLS как второй барьер | ARCHITECTURE · DATA_MODEL |
 | D14 | Воркер: семейства задач с отдельными ролями БД; `worker_execution` — v1.1 | ARCHITECTURE · EXECUTION_SAFETY §9 |
-| D15 | Telegram без названий клиентов, кампаний, запросов, логинов | PRD §2 · LEGAL.md |
+| D15 | Оповещения (email и в кабинете) без названий клиентов, кампаний, запросов, логинов | PRD §2 · LEGAL.md |
 | D16 | Юридическая доказательность и мандат агентства `agency_client_mandate` | LEGAL.md · DATA_MODEL |
 | D17 | Disaster Recovery: цели RPO ≤ 15 мин, RTO ≤ 4 ч, ежемесячный тест восстановления | DISASTER_RECOVERY.md |
 | D18 | Наблюдаемость: базовый набор метрик; метрики исполнения и отката — с v1.1 | ARCHITECTURE · AI_GOVERNANCE.md |
