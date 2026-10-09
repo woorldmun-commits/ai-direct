@@ -35,7 +35,6 @@ CASES = [
     # --- валидные ---
     ("actual", v(), True),
     ("amount как число", v(amount=12400), True),
-    ("amount дробное число", v(amount=12400.5), True),
     ("отрицательный amount", v(amount="-5.00"), True),
     ("estimated с формулой", v(calculation_type="estimated", formula="a / b"), True),
     ("unavailable", v(**UNAVAILABLE), True),
@@ -191,3 +190,13 @@ def test_unavailable_without_reason_is_legacy_only(rw):
     assert rw.execute("SELECT value_is_valid(%s)", (Jsonb(legacy),)).fetchone()[0] is True
     assert Value.from_stored(legacy).unavailable_reason == LEGACY_UNAVAILABLE_REASON
     assert Value.from_stored(v(**UNAVAILABLE)).unavailable_reason == "volume_insufficient"  # записанная — как есть
+
+
+def test_float_amount_is_rejected_decimal_str_int_accepted():
+    """Деньги — Decimal / str / int: float уже потерял точность (0.1+0.2), через str() он прошёл бы regex.
+    Только pydantic: SQL-проверка jsonb этого не видит, а float в JSON наши сериализаторы не пишут."""
+    for x in (0.1 + 0.2, 12400.5, 100.0):
+        with pytest.raises(ValidationError):
+            Value.model_validate(v(amount=x))
+    for x in (12400, "12400.50", Decimal("12400.50")):
+        assert Value.model_validate(v(amount=x)).amount == Decimal(str(x))

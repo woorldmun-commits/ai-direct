@@ -54,8 +54,8 @@ class Value(BaseModel):
     def _amount(cls, x):
         if x is None:
             return x
-        if isinstance(x, bool) or not isinstance(x, (int, float, str, Decimal)):
-            raise ValueError("amount: ожидается число")
+        if isinstance(x, bool) or not isinstance(x, (int, str, Decimal)):
+            raise ValueError("amount: ожидается Decimal, строка или целое (float теряет точность денег)")
         # Decimal — в позиционной записи: иначе Decimal("1E+2") ушёл бы в jsonb строкой «1E+2», которую SQL отвергнет
         s = format(x, "f") if isinstance(x, Decimal) and x.is_finite() else str(x)
         if not _NUMBER_RE.fullmatch(s):
