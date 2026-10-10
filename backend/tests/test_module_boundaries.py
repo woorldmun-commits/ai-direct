@@ -74,11 +74,19 @@ def test_the_check_has_no_false_positive_on_local_imports():
     assert not forbidden_in("from . import policy\nfrom ..rules.domain import Finding\nimport os\n", ["app", "audit"])
 
 
+def foreign_hits(path: Path, forbidden) -> list[str]:
+    """Нарушения без импортов своего же пакета: chief.py вправе импортировать agents.registry."""
+    own = ".".join(package_of(path))
+    return [h for h in file_hits(path, forbidden) if h != own and not h.startswith(own + ".")]
+
+
 def test_metric_registry_is_pure():
-    files = sorted((APP / "intelligence").rglob("*.py"))
+    # intelligence/llm — шлюз с сетью по назначению; его границы — test_llm_boundaries.py
+    files = [p for p in sorted((APP / "intelligence").rglob("*.py"))
+             if "llm" not in p.relative_to(APP / "intelligence").parts]
     assert files
     for path in files:
-        assert not file_hits(path, REGISTRY_FORBIDDEN), (path.name, file_hits(path, REGISTRY_FORBIDDEN))
+        assert not foreign_hits(path, REGISTRY_FORBIDDEN), (path.name, foreign_hits(path, REGISTRY_FORBIDDEN))
 
 
 @pytest.mark.parametrize("source", ["import requests\n", "import urllib.request\n", "import socket\n"])
@@ -111,7 +119,7 @@ def test_agents_package_is_pure_too():
     files = sorted((APP / "intelligence" / "agents").rglob("*.py"))
     assert files
     for path in files:
-        assert not file_hits(path, V2_FORBIDDEN), (path.name, file_hits(path, V2_FORBIDDEN))
+        assert not foreign_hits(path, V2_FORBIDDEN), (path.name, foreign_hits(path, V2_FORBIDDEN))
 
 
 def test_rules_and_audit_never_import_agents():
