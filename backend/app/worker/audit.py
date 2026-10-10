@@ -12,6 +12,7 @@ from decimal import Decimal
 import psycopg
 from psycopg.types.json import Jsonb
 
+from app.audit.data_health import snapshot_health
 from app.audit.persist import AccountResult, persist_finding, resolve_disappeared, touch_key
 from app.audit.selection import Included, Selection, select_accounts
 from app.rules import RULES
@@ -45,10 +46,11 @@ def _settings(conn: psycopg.Connection, workspace_id: int) -> tuple[AuditSetting
 
 
 def _evaluate(conn: psycopg.Connection, workspace_id: int, inc: Included, settings: AuditSettings,
-              ran: set[str], skipped: list[dict]) -> AccountResult:
+              ran: set[str], skipped: list[dict], now: datetime) -> AccountResult:
     view = load_view(conn, inc.snapshot_id)
     partial_from = conn.execute("SELECT partial_from FROM snapshots WHERE id = %s", (inc.snapshot_id,)).fetchone()[0]
-    result = AccountResult(inc.account_id, inc.snapshot_id, partial_from)
+    result = AccountResult(inc.account_id, inc.snapshot_id, partial_from,
+                           health=snapshot_health(conn, inc.snapshot_id, now))
     campaigns = {d.campaign_id for d in view.campaign_days}
     for rule in RULES:
         if not rule.applies(settings):
@@ -68,10 +70,11 @@ def _evaluate(conn: psycopg.Connection, workspace_id: int, inc: Included, settin
     return result
 
 
-def _write(conn: psycopg.Connection, workspace_id: int, task_key: str, release_id: int, sel: Selection) -> int:
+def _write(conn: psycopg.Connection, workspace_id: int, task_key: str, release_id: int, sel: Selection,
+           now: datetime) -> int:
     settings, frozen = _settings(conn, workspace_id)
     ran, skipped = set(), []
-    results = [_evaluate(conn, workspace_id, inc, settings, ran, skipped) for inc in sel.included]
+    results = [_evaluate(conn, workspace_id, inc, settings, ran, skipped, now) for inc in sel.included]
     audit_run_id = conn.execute(
         """INSERT INTO audit_runs (workspace_id, release_id, kind, task_key, data_cutoff, settings, rules_run,
                                    rules_skipped, excluded_accounts)
@@ -113,7 +116,7 @@ def _run_audit(conn: psycopg.Connection, *, workspace_id: int, task_key: str, da
             sel = select_accounts(conn, workspace_id, data_cutoff, now)
             if not sel.included:
                 return Skipped("no_snapshots_for_cutoff", data_cutoff.isoformat())
-            return Audited(_write(conn, workspace_id, task_key, release_id, sel))
+            return Audited(_write(conn, workspace_id, task_key, release_id, sel, now))
     except psycopg.errors.UniqueViolation:
         if (existing := _existing(conn, workspace_id, task_key)) is None:
             raise

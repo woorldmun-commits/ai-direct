@@ -17,8 +17,8 @@ safety_policy@1:
 safety_policy@2 — всё из @1 и дополнительно (только понижает):
 - конверсии вывода за дни досчёта (evidence_meta.level_reason = conversions_partial) → не выше review;
 - источник данных упал (DataHealth.source_failed) или данные устарели (DataHealth.stale) → inspect_only.
-DataHealth пока не поставляет ни один воркер (в SnapshotView нет ни source_failures, ни свежести): по умолчанию оба поля
-None = «неизвестно» и не понижают уровень — неизвестное не выдаётся ни за хорошее, ни за плохое. Подключение — отдельным шагом."""
+DataHealth снимка считает воркер аудита (audit/data_health.py snapshot_health). Поле None = «неизвестно» и не понижает
+уровень — неизвестное не выдаётся ни за хорошее, ни за плохое."""
 
 from dataclasses import dataclass
 
