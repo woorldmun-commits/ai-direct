@@ -17,7 +17,7 @@ from app.audit.persist import AccountResult, persist_finding, resolve_disappeare
 from app.audit.selection import Included, Selection, select_accounts
 from app.rules import RULES
 from app.rules.domain import AuditSettings, Finding, run
-from app.sync.store import load_view
+from app.sync.store import load_strategies, load_view
 from app.tenancy import workspace_scope
 from app.worker.guard import Skip, Task, guard, load_state
 from app.worker.locks import audit_exclusive, workspace_shared
@@ -50,7 +50,8 @@ def _evaluate(conn: psycopg.Connection, workspace_id: int, inc: Included, settin
     view = load_view(conn, inc.snapshot_id)
     partial_from = conn.execute("SELECT partial_from FROM snapshots WHERE id = %s", (inc.snapshot_id,)).fetchone()[0]
     result = AccountResult(inc.account_id, inc.snapshot_id, partial_from,
-                           health=snapshot_health(conn, inc.snapshot_id, now))
+                           health=snapshot_health(conn, inc.snapshot_id, now),
+                           strategies=load_strategies(conn, inc.snapshot_id))
     campaigns = {d.campaign_id for d in view.campaign_days}
     for rule in RULES:
         if not rule.applies(settings):

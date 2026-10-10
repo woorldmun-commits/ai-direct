@@ -14,9 +14,11 @@ from psycopg.types.json import Jsonb
 
 from app.audit.exposure import basis_meta
 from app.audit.policy import DataHealth, Decision, decide_active
+from app.audit.present import strategy_shown
 from app.audit.templates import explain
 from app.audit.values import to_value
 from app.rules.domain import Finding, issue_key
+from app.sources.strategy import Strategy
 from app.worker.outbox import emit
 
 
@@ -30,14 +32,20 @@ class AccountResult:
     checked: dict[str, set[int]] = field(default_factory=dict)  # семейство → id кампаний, которые правило проверило
     touched: set[bytes] = field(default_factory=set)            # ключи с выводом или «недостаточно данных»
     health: DataHealth = DataHealth()                           # состояние данных снимка (audit/data_health.py)
+    strategies: dict[int, Strategy] = field(default_factory=dict)  # стратегии кампаний из снимка
 
 
-def _finding_row(f: Finding, d: Decision, snapshot_id: int, partial_from: date) -> tuple:
+def _strategy(result: AccountResult, f: Finding) -> Strategy | None:
+    return result.strategies.get(f.object_id) if f.object_type == "campaign" else None
+
+
+def _finding_row(f: Finding, d: Decision, strategy: Strategy | None, snapshot_id: int, partial_from: date) -> tuple:
     def value(fact):
         return to_value(fact, snapshot_id, partial_from, f.rule_version).model_dump(mode="json")
     meta = {**f.evidence_meta, "reason_code": f.reason_code, "metric": f.metric, "reference_type": f.reference_type,
             "actual": str(f.actual), "reference": str(f.reference), "delta_pct": str(f.delta_pct),
-            **basis_meta(f.exposure_basis)}  # основа exposure — для итога без двойного учёта (api/today.py)
+            **basis_meta(f.exposure_basis),  # основа exposure — для итога без двойного учёта (api/today.py)
+            **({"strategy": strategy.value} if strategy else {})}  # рычаги по стратегии при показе (audit/present.py)
     return (f.rule_version, Jsonb(value(f.lost)), Jsonb(value(f.recoverable)), f.current_data_quality,
             Jsonb({k: value(x) for k, x in f.evidence.items()}), Jsonb(meta), Jsonb(dict(f.action)),
             d.version, d.candidate_level, d.level, list(d.reasons))
@@ -55,15 +63,16 @@ def _open_issue(conn: psycopg.Connection, workspace_id: int, account_id: int, f:
 def persist_finding(conn: psycopg.Connection, audit_run_id: int, workspace_id: int, release_id: int,
                     result: AccountResult, f: Finding) -> None:
     issue_id = _open_issue(conn, workspace_id, result.account_id, f)
-    d = decide_active(f, result.health)
+    strategy = _strategy(result, f)
+    d = decide_active(f, result.health, strategy=strategy)
     finding_id = conn.execute(
         """INSERT INTO findings (audit_run_id, issue_id, rule_version, lost, recoverable, data_quality, evidence,
                                  evidence_meta, action, safety_policy, candidate_level, action_level, policy_reasons)
            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
-        (audit_run_id, issue_id, *_finding_row(f, d, result.snapshot_id, result.partial_from))).fetchone()[0]
+        (audit_run_id, issue_id, *_finding_row(f, d, strategy, result.snapshot_id, result.partial_from))).fetchone()[0]
     explanation_id = conn.execute("""INSERT INTO explanations (finding_id, source, text, release_id)
                                      VALUES (%s, 'template', %s, %s) RETURNING id""",
-                                  (finding_id, explain(f, d), release_id)).fetchone()[0]
+                                  (finding_id, explain(f, d, strategy_shown(strategy)), release_id)).fetchone()[0]
     rec = conn.execute("SELECT id FROM recommendations WHERE issue_id = %s", (issue_id,)).fetchone()
     payload = {"issue_id": issue_id, "finding_id": finding_id, "rule_version": f.rule_version}
     if rec is None:

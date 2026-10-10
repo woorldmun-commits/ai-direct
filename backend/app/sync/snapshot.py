@@ -13,6 +13,7 @@ from app.sources.conversion import ConversionDefinition
 from app.sources.direct import (CAMPAIGN_REPORT, PLACEMENT_REPORT, QUERY_REPORT, AccountUnavailable,
                                 ConnectionUnavailable, DirectApiError, DirectSource)
 from app.sources.metrika import MetrikaReportSpec, MetrikaSource, MetrikaUnavailable
+from app.sources.strategy import Strategy
 from app.sync.metrika_parse import GoalRow, parse_bytime, parse_goals
 from app.sync.parse import PlacementRow, ReportFormatError, StatRow, parse_report, placement_id
 
@@ -33,6 +34,8 @@ class Snapshot:
     conversion_definition: ConversionDefinition | None = None  # None: цели не выбраны, конверсий нет
     goal_rows: tuple[GoalRow, ...] = ()
     source_failures: Mapping[str, str] = field(default_factory=lambda: frozen({}))  # источник → код ошибки API
+    # кампания → стратегия (sources/campaigns.py CampaignContext.strategy); нет кампании — стратегия неизвестна
+    campaign_strategies: Mapping[int, Strategy] = field(default_factory=lambda: frozen({}))
 
 
 @dataclass(frozen=True)

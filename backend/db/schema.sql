@@ -550,6 +550,13 @@ CREATE TABLE snapshots (
   CHECK (NOT 'yandex_metrika' = ANY (sources) OR conversion_definition IS NOT NULL),
   status       text NOT NULL DEFAULT 'building' CHECK (status IN ('building', 'complete', 'failed')),
   sealed_at    timestamptz,
+  -- Стратегия кампании на момент синхронизации (Campaigns.get → sources/strategy.py): {"<campaign_id>": "auto_cpa"}.
+  -- Аудит режет по ней уровень действия (STRATEGY_ACTIONS); нет кампании — стратегия неизвестна.
+  campaign_strategies jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(campaign_strategies) = 'object'
+    AND NOT jsonb_path_exists(campaign_strategies, '$.keyvalue() ? (!(@.key like_regex "^[1-9][0-9]{0,18}$")
+      || !(@.value == "manual_bidding" || @.value == "auto_clicks" || @.value == "auto_cpc" || @.value == "auto_cpa"
+           || @.value == "pay_for_conversion" || @.value == "max_conversions" || @.value == "serving_off"
+           || @.value == "unsupported" || @.value == "unknown"))')),
   CHECK ((status = 'complete') = (sealed_at IS NOT NULL)),
   CHECK (period_from <= period_to),
   CHECK (partial_from BETWEEN period_from AND period_to + 1)

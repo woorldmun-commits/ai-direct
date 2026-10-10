@@ -11,6 +11,7 @@ from psycopg.types.json import Jsonb
 
 from app.rules.domain import CampaignDay, PlacementDay, SnapshotView
 from app.sources.conversion import ConversionDefinition
+from app.sources.strategy import Strategy
 from app.sync.parse import PlacementRow, placement_id, query_hash
 from app.sync.sanitize import MASK
 from app.sync.snapshot import Snapshot, SyncFailure, capabilities
@@ -82,12 +83,14 @@ def write_snapshot(conn: psycopg.Connection, *, sync_run_id: int, workspace_id: 
                 raise SyncRunStateError(f"sync_run {sync_run_id}: нельзя записать снимок")
             snapshot_id = conn.execute(
                 """INSERT INTO snapshots (workspace_id, sync_run_id, release_id, period_from, period_to, data_until,
-                                          partial_from, sources, conversion_definition, source_failures)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                                          partial_from, sources, conversion_definition, source_failures,
+                                          campaign_strategies)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
                 (workspace_id, sync_run_id, release_id, snapshot.period_from, snapshot.period_to, data_until,
                  snapshot.partial_from, sorted(snapshot.sources),
                  Jsonb(snapshot.conversion_definition.to_json()) if snapshot.conversion_definition else None,
-                 Jsonb(dict(snapshot.source_failures)))).fetchone()[0]
+                 Jsonb(dict(snapshot.source_failures)),
+                 Jsonb({str(c): s for c, s in snapshot.campaign_strategies.items()}))).fetchone()[0]
             last_seen: dict[str, date] = {}
             for r in snapshot.rows:
                 if r.query is not None:
@@ -138,6 +141,15 @@ def record_failure(conn: psycopg.Connection, sync_run_id: int, failure: SyncFail
                         (failure.error_code, failure.reason, failure.request_id, sync_run_id))
     if done.rowcount != 1:
         raise SyncRunStateError(f"sync_run {sync_run_id}: уже завершён")
+
+
+def load_strategies(conn: psycopg.Connection, snapshot_id: int) -> dict[int, Strategy]:
+    """Стратегии кампаний из снимка — отдельно от SnapshotView: правилам они не нужны, нужны политике (аудит)."""
+    row = conn.execute("SELECT campaign_strategies FROM snapshots WHERE id = %s AND status = 'complete'",
+                       (snapshot_id,)).fetchone()
+    if row is None:
+        raise SnapshotNotComplete(snapshot_id)
+    return {int(c): Strategy(s) for c, s in row[0].items()}
 
 
 def load_view(conn: psycopg.Connection, snapshot_id: int) -> SnapshotView:
