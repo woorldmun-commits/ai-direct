@@ -13,6 +13,7 @@ from typing import Protocol
 import httpx
 
 from app.sources.conversion import ConversionDefinition
+from app.sources.http import RateLimiter, ResponseTooLarge, read_limited, user_key
 
 # Ошибки уровня API: синхронизация Метрики не удалась. Недостаток данных (0 конверсий) — не ошибка.
 ERROR_CODES = frozenset({"access_denied", "counter_not_found", "goal_not_found", "invalid_request",
@@ -81,6 +82,10 @@ class MetrikaFixture:
 API_URL = "https://api-metrika.yandex.net"
 # HTTP-статус → код источника. Токен — тот же API-приложения, что у Директа (права metrika:read).
 _STATUS_CODES = {400: "invalid_request", 401: "access_denied", 403: "access_denied", 404: "counter_not_found"}
+MAX_RESPONSE_BYTES = 16 * 1024 * 1024  # bytime: ≤ 10 метрик × 37 дней; список счётчиков и целей — килобайты
+# Квоты Метрики на пользователя (ПРОВЕРИТЬ по документации квот API): берём не больше 10 запросов в секунду —
+# синхронизация делает 2 запроса на счётчик, предел нужен на случай множества счётчиков одного токена.
+METRIKA_RATE = RateLimiter(10, 1)
 
 
 @dataclass(frozen=True)
@@ -89,13 +94,17 @@ class MetrikaApi:
     Ошибки → MetrikaUnavailable с кодом; сеть, 429 и 5xx — report_unavailable (повторит следующая синхронизация)."""
     http: httpx.Client
     access_token: str = field(repr=False)
+    limiter: RateLimiter = field(default=METRIKA_RATE, repr=False, compare=False)
 
     def _get(self, path: str, params: dict, counter_id: int) -> str:
+        self.limiter.acquire(user_key(self.access_token))
         try:
-            r = self.http.get(f"{API_URL}{path}", params=params, timeout=60,
-                              headers={"Authorization": f"OAuth {self.access_token}"})
+            r = read_limited(self.http, "GET", f"{API_URL}{path}", max_bytes=MAX_RESPONSE_BYTES, params=params,
+                             timeout=60, headers={"Authorization": f"OAuth {self.access_token}"})
         except httpx.TransportError:
             raise MetrikaUnavailable(counter_id, "report_unavailable") from None
+        except ResponseTooLarge:  # повтор не поможет: такой ответ — ошибка запроса, а не временный сбой
+            raise MetrikaUnavailable(counter_id, "invalid_request") from None
         if r.status_code == 200:
             return r.text
         raise MetrikaUnavailable(counter_id, _STATUS_CODES.get(r.status_code, "report_unavailable"))
