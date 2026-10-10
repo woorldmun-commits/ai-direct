@@ -46,7 +46,8 @@ def test_every_rule_version_has_expected_findings():
 
 
 def test_required_scenarios_for_v1_rules():
-    for family in ("high_cpa", "zero_conv_campaign", "zero_conv_placements"):
+    for family in ("high_cpa", "zero_conv_campaign", "zero_conv_placements", "zero_conv_queries", "anomaly",
+                   "budget_underuse"):
         tags = set().union(*(c.tags for c in CASES if c.name.startswith(family + "/")))
         assert {"problem", "clean", "boundary", "partial", "autostrategy", "not_enough_data"} <= tags, family
 

@@ -6,7 +6,7 @@ from app import flags
 
 ON = ("intelligence_v2", "source_of_truth_v2", "evidence_bundle_v2", "safety_engine_v2", "capability_registry_v2")
 OFF = ("chief_analyst", "search_intelligence", "rsya_intelligence", "root_cause", "opportunity_engine",
-       "creative_intelligence", "llm_enabled")
+       "creative_intelligence", "llm_enabled", "audit_rules_candidates")
 
 
 def test_defaults_follow_owner_decisions():

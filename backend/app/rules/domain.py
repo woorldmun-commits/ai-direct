@@ -28,6 +28,12 @@ DIRECT_CONVERSIONS = "direct_conversions"
 # Возможность «в снимке есть отчёт площадок РСЯ» (синхронизация запросила его и он пришёл). Без неё площадок в
 # снимке нет не потому, что нет расхода в сетях, а потому, что их не смотрели: правило площадок не вычисляется.
 DIRECT_PLACEMENTS = "direct_placements"
+# «В снимке есть отчёт поисковых запросов» (строки уровня query в stat_rows вместе с конверсиями). Без неё запросов
+# в снимке нет не потому, что расхода без конверсий нет, — их не смотрели: правило запросов не вычисляется.
+DIRECT_QUERIES = "direct_queries"
+# «В снимке есть бюджеты кампаний» (Campaigns.get: дневной бюджет или недельный лимит автостратегии). Пока синхронизация
+# их не читает — правило недоиспользования бюджета не вычисляется (SOURCE_MISSING), а не гадает.
+DIRECT_BUDGETS = "direct_budgets"
 
 BID_OR_BUDGET_ACTIONS = frozenset({"decrease_bid", "increase_bid", "change_budget", "pause"})
 
@@ -61,6 +67,27 @@ class PlacementDay:
 
 
 @dataclass(frozen=True)
+class QueryDay:
+    """Поисковый запрос внутри кампании за день. query_id — stat_rows.object_id (id в search_query_texts). Текста
+    запроса здесь нет намеренно: правила, выводы, шаблоны и LLM видят только id."""
+    campaign_id: int
+    query_id: int
+    date: date
+    cost: Decimal
+    clicks: int
+    conversions: Decimal | None
+
+
+@dataclass(frozen=True)
+class CampaignBudget:
+    """Ограничение расхода кампании на момент снимка (Campaigns.get), в рублях. None — у кампании такого ограничения
+    нет. Оба None — ограничения нет вовсе: недоиспользовать нечего."""
+    campaign_id: int
+    daily_budget: Decimal | None = None   # DailyBudget.Amount (ручные стратегии)
+    weekly_budget: Decimal | None = None  # WeeklySpendLimit автостратегии
+
+
+@dataclass(frozen=True)
 class SnapshotView:
     snapshot_id: int
     workspace_id: int
@@ -73,6 +100,8 @@ class SnapshotView:
     partial_from: date | None = None  # даты >= partial_from досчитываются; None — неизвестно, считать всё partial
     # цели и атрибуция, по которым посчитаны конверсии снимка; None — определения нет (правила @2 не вычисляются)
     conversion_definition: ConversionDefinition | None = None
+    query_days: tuple[QueryDay, ...] = ()  # пусто: отчёта запросов нет (DIRECT_QUERIES) или поиска нет
+    budgets: tuple[CampaignBudget, ...] = ()  # пусто: бюджетов в снимке нет (DIRECT_BUDGETS)
 
 
 @dataclass(frozen=True)
