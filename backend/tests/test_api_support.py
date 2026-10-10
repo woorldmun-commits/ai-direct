@@ -68,7 +68,7 @@ def cookie(token: str) -> dict:
 
 
 def recommendation(rw, ws: int, login: str, amount: str, *, audited: bool = True, action=None,
-                   same_audit: dict | None = None) -> dict:
+                   same_audit: dict | None = None, level: str = "review") -> dict:
     """Минимальная доказательная цепочка до рекомендации в данном workspace (как chain в test_schema).
     audited — кабинет вошёл в аудит своим снимком (audit_run_snapshots): рекомендация активна (app/api/active.py)."""
     n = next(_n)
@@ -101,11 +101,11 @@ def recommendation(rw, ws: int, login: str, amount: str, *, audited: bool = True
     finding = one(rw, """INSERT INTO findings (audit_run_id, issue_id, rule_version, lost, recoverable, data_quality,
                                                evidence, action, safety_policy, candidate_level, action_level)
                          VALUES (%s, %s, 'high_cpa_target@1', %s, %s, 'medium', %s, %s, 'safety_policy@1',
-                                 'review', 'review') RETURNING id""",
+                                 %s, %s) RETURNING id""",
                   audit, issue, Jsonb(lost),
                   Jsonb(value(amount=None, calculation_type="unavailable", data_sufficiency="insufficient")),
                   Jsonb({"clicks": value(unit="count", amount=487)}),
-                  Jsonb(action or {"type": "decrease_bid", "change_pct": -15}))
+                  Jsonb(action or {"type": "decrease_bid", "change_pct": -15}), level, level)
     explanation = one(rw, """INSERT INTO explanations (finding_id, source, text, release_id)
                              VALUES (%s, 'template', 'CPA выше цели', %s) RETURNING id""", finding, release)
     rec = one(rw, "INSERT INTO recommendations (issue_id, finding_id, explanation_id) VALUES (%s, %s, %s) RETURNING id",

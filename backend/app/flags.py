@@ -22,6 +22,7 @@ DEFAULTS: Mapping[str, bool] = {
     "creative_intelligence": False,
     "llm_enabled": False,
     "audit_rules_candidates": False,  # правила 4, 5 и бюджет (rules.FLAGGED) — до проверки на живых кабинетах
+    "sms_login": False,           # вход по SMS: юридический HOLD (ст. 10 149-ФЗ), маршруты /auth/code/* выключены
 }
 SAFETY_FLAGS = ("safety_engine_v2", "source_of_truth_v2")  # их выключение возвращает старое, менее строгое поведение
 _TRUE = {"1", "true", "yes", "on"}
