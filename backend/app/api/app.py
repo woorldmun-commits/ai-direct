@@ -9,6 +9,7 @@ from psycopg_pool import ConnectionPool
 
 from app.api import errors
 from app.api.db import create_pool
+from app.api.decisions import router as decisions_router
 from app.api.integrations import router as integrations_router
 from app.api.middleware import BoundaryMiddleware
 from app.api.ratelimit import RateLimitMiddleware
@@ -44,6 +45,7 @@ def create_app(settings: Settings | None = None, pool: ConnectionPool | None = N
     app.include_router(today_router, prefix=PREFIX)
     app.include_router(sessions_router, prefix=PREFIX)
     app.include_router(integrations_router, prefix=PREFIX)
+    app.include_router(decisions_router, prefix=PREFIX)
     if flag("sms_login"):  # юридический HOLD: без флага маршрутов /auth/code/* нет (404)
         app.include_router(phone_router, prefix=PREFIX)
     # Порядок: последний добавленный — внешний. Boundary снаружи: 429 лимита получает request_id и заголовки.
