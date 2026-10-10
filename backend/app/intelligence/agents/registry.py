@@ -49,7 +49,7 @@ class AgentSpec:
         return flag(self.flag_name)
 
 
-_NO_WRITE = dict(workspace_scope="current_workspace", write_scope=(), version="0", knowledge_pack_version=None,
+_NO_WRITE = dict(workspace_scope="current_workspace", write_scope=(), version="1", knowledge_pack_version=None,
                  model_policy="llm_gateway_only", max_runtime_s=60, max_tool_calls=0, flag_name="chief_analyst",
                  provider_scope=("yandex_direct", "yandex_metrika"), forbidden_claims=("FACT", "DERIVED_FACT"),
                  optional_data=(), object_scope=("campaign",), data_scope=("aggregates",),
