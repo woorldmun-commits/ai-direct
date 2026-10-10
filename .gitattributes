@@ -1,2 +1,4 @@
 # Released migrations are checksummed byte-for-byte; keep LF on every OS.
 backend/migrations/** text eol=lf
+# Скрипты для контейнеров Linux: CRLF ломает shebang и sh.
+deploy/*.sh text eol=lf
