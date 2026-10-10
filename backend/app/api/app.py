@@ -10,14 +10,17 @@ from psycopg_pool import ConnectionPool
 from app.api import errors
 from app.api.db import create_pool
 from app.api.middleware import BoundaryMiddleware
+from app.api.ratelimit import RateLimitMiddleware
 from app.api.routes import router
+from app.api.sessions import router as sessions_router
 from app.api.today import router as today_router
 from app.api.settings import Settings
 
 PREFIX = "/api/v1"
 
 
-def create_app(settings: Settings | None = None, pool: ConnectionPool | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, pool: ConnectionPool | None = None, **services) -> FastAPI:
+    """services — подмена внешних зависимостей (app/api/services.py: login_app, api_app, http, token_keys, …)."""
     settings = settings or Settings.from_env()
     pool = pool or create_pool(settings)
 
@@ -32,8 +35,12 @@ def create_app(settings: Settings | None = None, pool: ConnectionPool | None = N
     app = FastAPI(lifespan=lifespan, openapi_url=None, docs_url=None, redoc_url=None)
     app.state.settings = settings
     app.state.pool = pool
+    app.state.services = dict(services)
     errors.install(app)
     app.include_router(router, prefix=PREFIX)
     app.include_router(today_router, prefix=PREFIX)
+    app.include_router(sessions_router, prefix=PREFIX)
+    # Порядок: последний добавленный — внешний. Boundary снаружи: 429 лимита получает request_id и заголовки.
+    app.add_middleware(RateLimitMiddleware, trusted=settings.trusted_proxies)
     app.add_middleware(BoundaryMiddleware, settings=settings)
     return app
