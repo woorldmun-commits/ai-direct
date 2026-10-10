@@ -56,7 +56,7 @@ def test_secret_as_object_never_reaches_payload(secret):
     assert secret not in canonical_json(p.payload)
 
 
-@pytest.mark.parametrize("key", ["campaign_title", "search_text", "placement", "site_domain", "phone_number",
+@pytest.mark.parametrize("key", ["campaign_title", "search_text", "site_url", "comment_body", "phone_number",
                                  "email_hash", "keyword"])
 def test_denied_keys_are_rejected_even_if_not_allowlisted(key):
     with pytest.raises(PrivacyError):

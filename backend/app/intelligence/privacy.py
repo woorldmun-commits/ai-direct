@@ -17,7 +17,7 @@ from app.intelligence.contracts.evidence import EvidenceBundle
 _SLUG = re.compile(r"[a-z][a-z0-9_]{0,63}(?:[:@][a-z0-9_]{1,64}){0,4}")
 _EVIDENCE_ID = re.compile(r"[a-z][a-z0-9_]{0,31}")
 _DENIED = ("name", "title", "text", "query", "keyword", "login", "email", "phone", "token", "secret", "password",
-           "address", "url", "domain", "placement", "comment", "oauth", "api_key")
+           "address", "url", "comment", "oauth", "api_key")
 _NUMERIC = frozenset({"exposure", "from", "to"})
 _SLUG_KEYS = frozenset({"id", "kind", "rule", "metric", "action_type", "action_level", "data_sufficiency", "reason",
                         "finding", "level"})
