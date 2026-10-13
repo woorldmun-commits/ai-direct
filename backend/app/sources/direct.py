@@ -3,7 +3,10 @@
 
 Реализации: DirectFixture (тесты, разработка) и DirectApi (Reports API v501, api или sandbox)."""
 
+import math
 import re
+import threading
+import time
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -12,6 +15,7 @@ from typing import NoReturn, Protocol
 import httpx
 
 from app.sources.conversion import ConversionDefinition
+from app.sources.http import RateLimiter, ResponseTooLarge, read_limited, user_key
 
 # Заголовки запроса Reports API: деньги десятичными рублями, без строки заголовка отчёта и итоговой строки.
 # Строка с именами столбцов остаётся — по ней парсер проверяет, что API вернул ровно запрошенное.
@@ -48,8 +52,9 @@ QUERY_REPORT = ReportSpec("SEARCH_QUERY_PERFORMANCE_REPORT", "query",
 # CUSTOM_REPORT вместе с Goals/AttributionModels (Conversions_<цель>_<модель>), и формат значений Placement
 # для приложений (bundle id или название магазина). Нагрузка: отчёт по площадкам × дни × кампании на 37 дней —
 # самый объёмный из трёх; Reports API не списывает баллы, но держит общий для пользователя лимит офлайн-отчётов
-# в очереди (5) и запросов (20 за 10 с) — отчёты одного аккаунта запрашиваются последовательно; предел размера
-# отчёта — ПРОВЕРИТЬ (при превышении API отвечает ошибкой запроса → invalid_request; тогда — дробить период).
+# в очереди (5) и запросов (20 за 10 с) — DIRECT_RATE и REPORT_QUEUE ниже; предел размера отчёта у API —
+# ПРОВЕРИТЬ (при превышении API отвечает ошибкой запроса → invalid_request; тогда — дробить период), наш предел
+# чтения — MAX_REPORT_BYTES.
 PLACEMENT_REPORT = ReportSpec("CUSTOM_REPORT", "placement",
                               ("Date", "CampaignId", "AdNetworkType", "Placement", "Impressions", "Clicks", "Cost"),
                               filters=(("AdNetworkType", "EQUALS", ("AD_NETWORK",)),), name="PLACEMENT_REPORT")
@@ -138,7 +143,65 @@ class DirectFixture:
 # --- Reports API ----------------------------------------------------------------------------------------------
 
 API_URL = {"api": "https://api.direct.yandex.com/json", "sandbox": "https://api-sandbox.direct.yandex.com/json"}
-DEFAULT_RETRY_IN = 60  # если сервер не прислал retryIn
+DEFAULT_RETRY_IN = 60  # если сервер не прислал retryIn или прислал не число
+MAX_RETRY_IN = 3600  # потолок: ошибочный retryIn не откладывает синхронизацию на сутки
+# ponytail: ответ целиком в памяти воркера; отчёт больше предела — дробить период или читать потоком в парсер.
+MAX_REPORT_BYTES = 256 * 1024 * 1024
+MAX_JSON_BYTES = 1024 * 1024  # Campaigns.get на 1 объект и ответ-ошибка
+TOO_LARGE = 413  # код DirectApiError для ответа больше предела (HTTP 413): повтор с тем же периодом не поможет
+REPORT_QUEUE_TTL = 3 * 3600  # = MAX_REPORT_WAIT синхронизации: дольше отчёт не ждут, слот освобождается
+
+
+def retry_in(headers: httpx.Headers) -> int:
+    """retryIn — секунды до повтора. Не число, ≤ 0, NaN, ∞ → DEFAULT_RETRY_IN; больше потолка → MAX_RETRY_IN."""
+    try:
+        value = math.ceil(float(headers.get("retryIn") or ""))
+    except (ValueError, OverflowError):
+        return DEFAULT_RETRY_IN
+    return min(value, MAX_RETRY_IN) if value > 0 else DEFAULT_RETRY_IN
+
+
+def _error_code(err: dict) -> int:
+    try:
+        return int(err.get("error_code") or 0)
+    except (TypeError, ValueError):  # шлюз или сбойный ответ: код не число — считаем, что кода нет
+        return 0
+
+
+class ReportQueue:
+    """Офлайн-отчёты пользователя, которые Директ ещё строит (ответ 201/202): не больше limit одновременно —
+    лимит API на пользователя. Новый отчёт сверх лимита в Директ не уходит (RetryLater), опрос уже стоящего
+    в очереди разрешён. Брошенный отчёт (синхронизация отказалась ждать) забывается через ttl.
+    ponytail: память одного процесса, как RateLimiter."""
+
+    def __init__(self, limit: int = 5, ttl: float = REPORT_QUEUE_TTL, clock=time.monotonic):
+        self.limit, self.ttl, self.clock = limit, ttl, clock
+        self._pending: dict[str, dict[str, float]] = {}
+        self._lock = threading.Lock()
+
+    def _live(self, user: str) -> dict[str, float]:
+        now = self.clock()
+        pending = {name: until for name, until in self._pending.get(user, {}).items() if until > now}
+        self._pending[user] = pending
+        return pending
+
+    def admit(self, user: str, name: str) -> bool:
+        with self._lock:
+            pending = self._live(user)
+            return name in pending or len(pending) < self.limit
+
+    def waiting(self, user: str, name: str) -> None:
+        with self._lock:
+            self._live(user)[name] = self.clock() + self.ttl
+
+    def done(self, user: str, name: str) -> None:
+        with self._lock:
+            self._live(user).pop(name, None)
+
+
+# Общие на процесс: DirectApi создаётся на каждый sync_run, а лимиты — у пользователя Яндекса (токена).
+DIRECT_RATE = RateLimiter(20, 10)
+REPORT_QUEUE = ReportQueue()
 
 # Коды ошибок Директа (concepts/errors-list) → классы источника. Не перечисленные — DirectApiError (повтор не поможет).
 _ERRORS = {
@@ -165,12 +228,11 @@ def raise_for_direct_error(r: httpx.Response, login: str) -> NoReturn:
     """Ответ не 200 → исключение источника. Тело ошибки — JSON {"error": {error_code, request_id, …}}."""
     err = json_body(r).get("error")
     err = err if isinstance(err, dict) else {}
-    code = int(err.get("error_code") or 0)
-    retry_in = int(r.headers.get("retryIn") or DEFAULT_RETRY_IN)
+    code = _error_code(err)
     if code in _ERRORS:
         raise _ERRORS[code](login)
     if code in _TEMPORARY or (not code and r.status_code >= 500):
-        raise RetryLater(retry_in, "api_unavailable")
+        raise RetryLater(retry_in(r.headers), "api_unavailable")
     raise DirectApiError(code or r.status_code, err.get("request_id") or r.headers.get("RequestId"))
 
 
@@ -179,12 +241,22 @@ class DirectApi:
     """Reports API v501 — только чтение. Один объект на запуск синхронизации: run_key (id sync_run) даёт стабильный
     ReportName — повтор после 201/202 приходит с тем же именем и теми же параметрами, как требует офлайн-режим,
     а новая синхронизация того же дня не получит из очереди старый отчёт.
-    ponytail: лимиты пользователя Яндекса (20 запросов / 10 с, 5 офлайн-отчётов) — общий ограничитель на Redis
-    вместе с очередью задач; сейчас их превышение приходит временной ошибкой API → RetryLater."""
+    Лимиты пользователя Яндекса (20 запросов / 10 с, 5 офлайн-отчётов) — limiter и queue, общие на процесс."""
     http: httpx.Client
     access_token: str = field(repr=False)
     run_key: str
     env: str = "api"  # api · sandbox
+    limiter: RateLimiter = field(default=DIRECT_RATE, repr=False, compare=False)
+    queue: ReportQueue = field(default=REPORT_QUEUE, repr=False, compare=False)
+
+    def _post(self, path: str, *, max_bytes: int, **kwargs) -> httpx.Response:
+        self.limiter.acquire(user_key(self.access_token))
+        try:
+            return read_limited(self.http, "POST", f"{API_URL[self.env]}{path}", max_bytes=max_bytes, **kwargs)
+        except httpx.TransportError:
+            raise RetryLater(DEFAULT_RETRY_IN, "api_unavailable") from None
+        except ResponseTooLarge:
+            raise DirectApiError(TOO_LARGE, None) from None
 
     def _headers(self, login: str) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.access_token}", "Client-Login": login, "Accept-Language": "ru"}
@@ -214,25 +286,24 @@ class DirectApi:
 
     def fetch_report(self, login: str, spec: ReportSpec, conversions: ConversionDefinition | None,
                      date_from: date, date_to: date) -> str:
-        try:
-            r = self.http.post(f"{API_URL[self.env]}/v501/reports", timeout=60,
-                               json=self.report_body(spec, conversions, date_from, date_to),
-                               headers={**self._headers(login), **REPORT_HEADERS})
-        except httpx.TransportError:
-            raise RetryLater(DEFAULT_RETRY_IN, "api_unavailable") from None
+        body = self.report_body(spec, conversions, date_from, date_to)
+        user, name = user_key(self.access_token), body["params"]["ReportName"]
+        if not self.queue.admit(user, name):  # 5 отчётов пользователя уже строятся — шестой Директ отклонит
+            raise RetryLater(DEFAULT_RETRY_IN, "reports_queue_full")
+        r = self._post("/v501/reports", max_bytes=MAX_REPORT_BYTES, timeout=60, json=body,
+                       headers={**self._headers(login), **REPORT_HEADERS})
+        if r.status_code in (201, 202):  # поставлен в очередь / ещё строится — повторить с теми же параметрами
+            self.queue.waiting(user, name)
+            raise RetryLater(retry_in(r.headers), "report_not_ready")
+        self.queue.done(user, name)
         if r.status_code == 200:
             return r.text
-        if r.status_code in (201, 202):  # поставлен в очередь / ещё строится — повторить с теми же параметрами
-            raise RetryLater(int(r.headers.get("retryIn") or DEFAULT_RETRY_IN), "report_not_ready")
         raise_for_direct_error(r, login)
 
     def check_access(self, login: str) -> None:
         """Лёгкий авторизованный запрос: одна кампания, только Id."""
         body = {"method": "get", "params": {"SelectionCriteria": {}, "FieldNames": ["Id"], "Page": {"Limit": 1}}}
-        try:
-            r = self.http.post(f"{API_URL[self.env]}/v5/campaigns", json=body, headers=self._headers(login), timeout=30)
-        except httpx.TransportError:
-            raise RetryLater(DEFAULT_RETRY_IN, "api_unavailable") from None
+        r = self._post("/v5/campaigns", max_bytes=MAX_JSON_BYTES, json=body, headers=self._headers(login), timeout=30)
         if r.status_code == 200 and "error" not in json_body(r):
             return
         raise_for_direct_error(r, login)

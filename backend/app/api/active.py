@@ -22,11 +22,11 @@ import psycopg
 from app.audit.exposure import (ACCOUNT_LEVEL, CAMPAIGN_LEVEL, ExposureFinding, ExposureTotal, StatUnit,
                                 basis_from_meta, exposure_total)
 from app.contract import Value
-from app.rules import RULES
+from app.rules import ALL_RULES
 from app.rules.domain import UNAVAILABLE_REASON_OF, Reason, windows
 
 MSK = timezone(timedelta(hours=3), "MSK")  # пояс данных Директа (как DATA_TIMEZONE воркеров; без перехода на летнее)
-FAMILY_OF = {r.rule_version: r.family for r in RULES}
+FAMILY_OF = {r.rule_version: r.family for r in ALL_RULES}  # старые выводы (@1) тоже
 _REASONS = {r.value: r for r in Reason}
 
 _CANDIDATES = """

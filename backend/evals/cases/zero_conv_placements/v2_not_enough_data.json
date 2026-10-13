@@ -1,0 +1,133 @@
+{
+  "description": "@2: площадки без конверсий, но ниже порогов — «недостаточно данных».",
+  "tags": [
+    "not_enough_data"
+  ],
+  "settings": {},
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "partial_from": "2026-09-28",
+    "sources": [
+      "yandex_direct",
+      "direct_conversions",
+      "direct_placements"
+    ],
+    "campaigns": [
+      {
+        "id": 404,
+        "strategy": "manual",
+        "days": [
+          {
+            "date": "2026-09-10",
+            "cost": "8000.00",
+            "clicks": 400,
+            "conversions": "4"
+          },
+          {
+            "date": "2026-09-25",
+            "cost": "4000.00",
+            "clicks": 200,
+            "conversions": "0"
+          }
+        ]
+      },
+      {
+        "id": 405,
+        "strategy": "manual",
+        "days": [
+          {
+            "date": "2026-09-10",
+            "cost": "3000.00",
+            "clicks": 100,
+            "conversions": "0"
+          },
+          {
+            "date": "2026-09-25",
+            "cost": "4000.00",
+            "clicks": 200,
+            "conversions": "0"
+          }
+        ]
+      },
+      {
+        "id": 406,
+        "strategy": "manual",
+        "days": [
+          {
+            "date": "2026-09-10",
+            "cost": "8000.00",
+            "clicks": 400,
+            "conversions": "5"
+          }
+        ]
+      }
+    ],
+    "placements": [
+      {
+        "campaign_id": 404,
+        "id": 1,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "4000.00",
+            "clicks": 200,
+            "conversions": "0"
+          }
+        ]
+      },
+      {
+        "campaign_id": 405,
+        "id": 1,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "4000.00",
+            "clicks": 200,
+            "conversions": "0"
+          }
+        ]
+      },
+      {
+        "campaign_id": 406,
+        "id": 1,
+        "days": [
+          {
+            "date": "2026-09-10",
+            "cost": "5000.00",
+            "clicks": 200,
+            "conversions": "0"
+          }
+        ]
+      }
+    ],
+    "conversion_definition": {
+      "goal_ids": [
+        111,
+        222
+      ],
+      "attribution": "last"
+    }
+  },
+  "expected": [],
+  "expected_not_enough_data": [
+    {
+      "rule_version": "zero_conv_placements@2",
+      "reason": "baseline_data_insufficient",
+      "object_type": "campaign",
+      "object_id": 404
+    },
+    {
+      "rule_version": "zero_conv_placements@2",
+      "reason": "no_conversions",
+      "object_type": "campaign",
+      "object_id": 405
+    },
+    {
+      "rule_version": "zero_conv_campaign@2",
+      "reason": "volume_insufficient",
+      "object_type": "campaign",
+      "object_id": 405
+    }
+  ],
+  "rules_version": 2
+}

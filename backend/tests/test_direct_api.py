@@ -16,6 +16,7 @@ from test_metrika_sync import metrika  # noqa: F401 — фикстура
 from test_schema import chain, one  # noqa: F401 — фикстура
 from test_worker_sync import new_run, work, ws  # noqa: F401 — фикстура
 from app.worker.sync import Done, RetryAt
+from test_sources_limits import fresh_limits  # noqa: F401 — фикстура: общие лимиты с чистого листа
 
 FROM = TO - timedelta(36)
 

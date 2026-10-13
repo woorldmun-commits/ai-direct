@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from app.audit.policy import Decision
 from app.rules.domain import Finding
+from app.rules.evidence import PARTIAL_REASON
 
 
 def _rub(x: Decimal) -> str:
@@ -21,8 +22,12 @@ def _rub(x: Decimal) -> str:
     return sign + grouped + ("," + frac if frac else "")
 
 
-def _bid_advice(f: Finding, d: Decision) -> str:
+def _bid_advice(f: Finding, d: Decision, strategy: str) -> str:
     change = abs(f.action["change_pct"])
+    if d.level != "inspect_only" and strategy != "manual":
+        # рычаг «ставка» есть только у ручной стратегии; у автоматической или неизвестной ставку не советуем
+        return ("Проверьте рычаги кампании для снижения CPA: какие из них доступны, зависит от стратегии "
+                "(целевой CPA, цели конверсий).")
     if d.level == "inspect_only":
         conv = f.evidence["conversions"].amount
         return (f"Конверсий за период пока мало ({_rub(conv)}) для безопасного изменения ставки — продолжаем "
@@ -73,7 +78,7 @@ def _placements(f: Finding, d: Decision) -> str:
             f"{_PLACEMENT_REFERENCE.get(f.evidence_meta.get('reference_mode'), 'CPA')} {_rub(f.reference)} ₽.")
     if names := _placement_names(f):
         text += " Площадки: " + ", ".join(names[:NAMES_SHOWN]) + (" и другие." if len(names) > NAMES_SHOWN else ".")
-    if f.evidence_meta.get("level_reason") == "conversions_partial":
+    if f.evidence_meta.get("level_reason") == PARTIAL_REASON:
         text += " Конверсии последних дней ещё досчитываются — проверьте площадки перед исключением."
     if d.level == "inspect_only":
         text += (" Расхода пока мало для уверенного вывода: проверьте, что это за площадки и подходит ли их аудитория, "
@@ -84,14 +89,57 @@ def _placements(f: Finding, d: Decision) -> str:
     return text
 
 
-def explain(f: Finding, d: Decision) -> str:
+def _queries(f: Finding) -> str:
+    """Тексты запросов в объяснение не попадают никогда (их нет и в выводе): только число, расход и клики."""
+    ev = f.evidence
+    text = (f"В кампании {f.object_id} поисковых запросов без конверсий: {_rub(ev['queries'].amount)}. За период они "
+            f"потратили {_rub(f.actual)} ₽ ({_rub(ev['clicks'].amount)} кликов), конверсий не было ни за период, ни "
+            f"раньше в истории снимка. Каждый потратил не меньше двух ориентиров CPA "
+            f"({_PLACEMENT_REFERENCE.get(f.evidence_meta.get('reference_mode'), 'CPA')} {_rub(f.reference)} ₽).")
+    if f.evidence_meta.get("level_reason") == PARTIAL_REASON:
+        text += " Конверсии последних дней ещё досчитываются."
+    return text + (" Проверьте запросы в отчёте Директа: подходящие нерелевантные — кандидаты в минус-фразы. "
+                   "Минус-фраза отсекает и похожие будущие запросы — решение за вами.")
+
+
+def _anomaly(f: Finding) -> str:
+    """Только «проверить причину»: ставок и бюджета не советуем."""
+    ev = f.evidence
+    if f.reason_code == "spend_spike":
+        text = (f"Расход кампании {f.object_id} за период — {_rub(f.actual)} ₽, это на {f.delta_pct}% выше её "
+                f"обычного уровня {_rub(f.reference)} ₽ (по прошлым 30 дням). Оценка расхода сверх нормы, не "
+                f"объяснённого ростом конверсий, ≈ {_rub(f.lost.amount)} ₽.")
+    else:
+        text = (f"Конверсий кампании {f.object_id} за завершённые дни периода — {_rub(f.actual)}, ожидалось около "
+                f"{_rub(f.reference)} по прошлым 30 дням, а расход не снизился ({_rub(ev['complete_cost'].amount)} ₽). "
+                f"Оценка расхода сверх обычного CPA ≈ {_rub(f.lost.amount)} ₽.")
+    return text + (" Проверьте причину: изменения стратегии, бюджета или ставок, учёт целей, работу сайта, "
+                   "сезонность. Это сигнал для проверки, а не совет что-то менять.")
+
+
+def _budget_underuse(f: Finding) -> str:
+    ev = f.evidence
+    return (f"Кампания {f.object_id} потратила за период {_rub(ev['cost'].amount)} ₽ — {_rub(f.actual)}% своего "
+            f"ограничения {_rub(ev['budget_limit'].amount)} ₽, при этом CPA {_rub(ev['cpa'].amount)} ₽ ниже "
+            "ориентира. Проверьте, что сдерживает расход: стратегию и её цель CPA, ставки, охват. Сколько конверсий "
+            "это добавит, не оцениваем.")
+
+
+def explain(f: Finding, d: Decision, strategy: str = "unknown") -> str:
+    """strategy — как в audit/present.py: manual · auto · unknown. Сейчас в снимке стратегии нет — тогда unknown."""
     if f.reason_code == "zero_conversions":
         return _zero_conv(f)
     if f.reason_code == "placements_without_conversions":
         return _placements(f, d)
+    if f.reason_code == "queries_without_conversions":
+        return _queries(f)
+    if f.reason_code in ("spend_spike", "conversion_drop"):
+        return _anomaly(f)
+    if f.reason_code == "budget_underused_good_cpa":
+        return _budget_underuse(f)
     head = f"CPA кампании {f.object_id} — {_rub(f.actual)} ₽"
     if f.reason_code == "cpa_above_target":
-        return f"{head}, это на {f.delta_pct}% выше целевого CPA {_rub(f.reference)} ₽. {_bid_advice(f, d)}"
+        return f"{head}, это на {f.delta_pct}% выше целевого CPA {_rub(f.reference)} ₽. {_bid_advice(f, d, strategy)}"
     if f.reason_code == "cpa_above_baseline":
         return (f"{head}, это на {f.delta_pct}% выше исторического базового уровня {_rub(f.reference)} ₽. "
                 "Проверьте причину роста и укажите целевой CPA — оценка станет точнее.")

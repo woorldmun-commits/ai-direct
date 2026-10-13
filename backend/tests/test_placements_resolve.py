@@ -60,7 +60,7 @@ def test_placements_report_missing_does_not_resolve(rw, ws):
     snap_with(rw, ws, base, placements=False)
     audit(rw, ws, "p2")
     assert placement_issue(rw, ws) == [(True, None)]
-    assert {"account": ws["account"], "rule": "zero_conv_placements@1", "reason": "source_missing",
+    assert {"account": ws["account"], "rule": "zero_conv_placements@2", "reason": "source_missing",
             "object_type": None, "object_id": None} in skipped(rw, ws, "p2")
 
 
@@ -70,7 +70,7 @@ def test_placement_below_threshold_keeps_issue_open(rw, ws):
     snap_with(rw, ws, base, placements=True, cost="10", clicks=1)
     audit(rw, ws, "p2")
     assert placement_issue(rw, ws) == [(True, None)]
-    assert any(s["rule"] == "zero_conv_placements@1" and s["reason"] == "volume_insufficient"
+    assert any(s["rule"] == "zero_conv_placements@2" and s["reason"] == "volume_insufficient"
                for s in skipped(rw, ws, "p2"))
 
 

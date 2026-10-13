@@ -1,0 +1,104 @@
+{
+  "description": "Запрос 5 потратил 5 000 ₽ (40 кликов) без конверсий за весь снимок при пороге 2 × CPA кампании 1 500 ₽ = 3 000 ₽ и 30 кликах; запрос 6 ниже порога на копейку, у запроса 7 есть конверсия. Вывод — только «проверить» (кандидат в минус-фразы).",
+  "tags": [
+    "problem"
+  ],
+  "rules_version": 2,
+  "flags": [
+    "audit_rules_candidates"
+  ],
+  "settings": {},
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "sources": [
+      "yandex_direct",
+      "direct_conversions",
+      "direct_queries"
+    ],
+    "conversion_definition": {
+      "goal_ids": [
+        111
+      ],
+      "attribution": "last"
+    },
+    "campaigns": [
+      {
+        "id": 101,
+        "strategy": "manual",
+        "days": [
+          {
+            "date": "2026-09-10",
+            "cost": "30000.00",
+            "clicks": 1200,
+            "conversions": "20"
+          },
+          {
+            "date": "2026-09-25",
+            "cost": "12000.00",
+            "clicks": 400,
+            "conversions": "8"
+          }
+        ]
+      }
+    ],
+    "queries": [
+      {
+        "campaign_id": 101,
+        "id": 5,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "5000.00",
+            "clicks": 40,
+            "conversions": "0"
+          }
+        ]
+      },
+      {
+        "campaign_id": 101,
+        "id": 6,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "2999.99",
+            "clicks": 100,
+            "conversions": "0"
+          }
+        ]
+      },
+      {
+        "campaign_id": 101,
+        "id": 7,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "6000.00",
+            "clicks": 50,
+            "conversions": "1"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": [
+    {
+      "rule_version": "zero_conv_queries@1",
+      "object_type": "campaign",
+      "object_id": 101,
+      "candidate_level": "inspect_only",
+      "action_level": "inspect_only",
+      "action": {
+        "type": "investigate_zero_conversions",
+        "check": [
+          "search_queries_negative_keywords"
+        ],
+        "query_ids": [
+          5
+        ]
+      },
+      "exposure": "5000.00",
+      "can_save": "unavailable"
+    }
+  ],
+  "exposure_total": "5000.00"
+}
