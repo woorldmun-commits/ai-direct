@@ -97,3 +97,27 @@ def test_without_key_marks_every_claim_is_key():
 
 def test_empty_claims_go_to_template():
     assert judge({"summary": "x", "claims": []}, PACKET, ALLOWED).reason == "no_claims_left"
+
+
+# --- проценты и процентные пункты ----------------------------------------------------------------
+# CR 5% → 4,3%: относительное изменение −14%, абсолютное −0,7 п.п. Одно и то же число в другой единице — другой смысл.
+UNITS = build_packet(EvidenceBundle(
+    facts=({"id": "e4", "kind": "metric_change", "object": "c1", "metric": "cr",
+            "values": {"cr_delta_pct": Decimal("-14"), "cr_delta_pp": Decimal("-0.7"), "clicks": Decimal("14")}},),
+    findings=(), metrics=(), constraints=(), data_health={}, capabilities={}, period={"from": date(2026, 9, 1)},
+    source_registry={}))
+
+
+@pytest.mark.parametrize("text, ok", [
+    ("CR obj_1 снизился на 14%", True),
+    ("CR obj_1 снизился на 0,7 п.п.", True),
+    ("CR obj_1 снизился на 0.7 pp", True),
+    ("CR obj_1 снизился на 14 п.п.", False),       # относительное изменение выдано за абсолютное
+    ("CR obj_1 снизился на 0,7%", False),          # абсолютное выдано за относительное
+    ("Кликов obj_1: 14", True),                    # число без единицы — прежняя проверка по значению
+])
+def test_percent_and_percentage_points_are_not_interchangeable(text, ok):
+    v = judge(answer(claim(text=text, ids=("e4",)), summary="CR obj_1 снизился"), UNITS, ALLOWED)
+    assert v.accepted is ok
+    if not ok:
+        assert v.dropped == ((0, "unit_mismatch"),)

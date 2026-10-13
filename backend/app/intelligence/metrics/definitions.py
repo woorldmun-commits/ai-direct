@@ -48,6 +48,7 @@ class MetricDefinition:
     channel_scope: str = "all"       # search | network | all; поиск и сеть в один KPI не смешиваются
     value_type: str = "actual"       # actual | calculated | estimated
     unavailable_reasons: tuple[str, ...] = ()  # подмножество contract.UNAVAILABLE_REASONS
+    vat: str | None = None           # денежные метрики: "included" — с НДС (запрос Директа IncludeVAT берёт отсюда)
 
 
 # «--» в столбце Conversions_* = 0 конверсий — принятое решение парсера AdPilot (зафиксировано тестом), не гарантия
@@ -57,25 +58,26 @@ _DASH_IS_ZERO = ("'--' в столбце конверсий = 0 конверси
 
 
 def _direct(metric: str, formula: str, fields: tuple[str, ...], reasons: tuple[str, ...], *,
-            conversion: bool = False, calculated: bool = False, min_conversions: int | None = None) -> MetricDefinition:
+            conversion: bool = False, calculated: bool = False, min_conversions: int | None = None,
+            vat: str | None = None) -> MetricDefinition:
     return MetricDefinition(metric, "yandex_direct", _LEVELS, "yandex_direct",
                             "yandex_metrika" if conversion else "yandex_direct",
                             _ATTRIBUTION if conversion else None, _GOALS if conversion else None, formula,
                             _DASH_IS_ZERO if metric == "conversions" else None,
                             metric_version=f"{metric}@1", required_fields=fields,
                             minimum_data=MinimumData(min_conversions),
-                            value_type="calculated" if calculated else "actual", unavailable_reasons=reasons)
+                            value_type="calculated" if calculated else "actual", unavailable_reasons=reasons, vat=vat)
 
 
 _MISSING = ("source_missing", "no_data")
 DEFINITIONS: dict[str, MetricDefinition] = {d.metric: d for d in (
-    _direct("cost", "sum(Cost) за период", ("cost",), _MISSING),
+    _direct("cost", "sum(Cost) за период", ("cost",), _MISSING, vat="included"),
     _direct("clicks", "sum(Clicks) за период", ("clicks",), _MISSING),
     _direct("impressions", "sum(Impressions) за период", ("impressions",), _MISSING),
     _direct("conversions", "sum(Conversions_<goal>_<attribution>) по goal_ids снимка", ("conversions",), _MISSING,
             conversion=True),
     _direct("cpa", "cost / conversions", ("cost", "conversions"), ("source_missing", "no_conversions", "no_data"),
-            conversion=True, calculated=True, min_conversions=1),
+            conversion=True, calculated=True, min_conversions=1, vat="included"),
     _direct("cr", "conversions / clicks * 100", ("conversions", "clicks"), _MISSING, conversion=True,
             calculated=True),
 )}

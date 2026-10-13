@@ -3,7 +3,9 @@
 Утверждение отбрасывается, если: нарушает контракт Claim (FACT / DERIVED_FACT от ИИ, недопустимый статус
 причинности); ссылается на несуществующий evidence_id; содержит число, которого нет в процитированных фактах
 (сравнение точное, по значению: «4 820» = 4820.00; округление не допускается — открытый вопрос §6.1); упоминает
-неизвестную ссылку obj_N; похоже на инъекцию или ссылку; причинно («из-за») без HYPOTHESIS и причинного факта.
+неизвестную ссылку obj_N; похоже на инъекцию или ссылку; причинно («из-за») без HYPOTHESIS и причинного факта;
+число со знаком «%» не из *_pct процитированных фактов или с «п.п.» не из *_pp (unit_mismatch: относительное
+изменение и процентные пункты не взаимозаменяемы).
 Отброшено ключевое утверждение, не осталось ни одного или не прошёл summary → весь ответ на шаблон."""
 
 import re
@@ -20,6 +22,8 @@ _NUMBER = re.compile(r"(?<![\w@.,])\d{1,3}(?:[   ]\d{3})+(?:[.,]\d+)?(?!\w)|(
 # ponytail: закрытые списки маркеров (§6 п.4); причинность без маркеров не ловится
 _CAUSAL = re.compile(r"из-за|потому что|вследствие|в результате|привел|привёл|приводит|вызва|because|due to|caus",
                      re.IGNORECASE)
+_UNIT_NUMBER = {"pct": re.compile(r"(\d[\d   ]*(?:[.,]\d+)?)\s*%"),
+                "pp": re.compile(r"(\d[\d   ]*(?:[.,]\d+)?)\s*(?:п\.\s?п\.?|pp)", re.IGNORECASE)}
 _INJECTION = re.compile(r"ignore|игнорир|инструкц|instruction|system|промпт|prompt|https?://|www\.|\S+@\S+\.\w+|<\s*/?"
                         r"\s*[a-z]", re.IGNORECASE)
 
@@ -38,6 +42,14 @@ def numbers_in(text: str) -> set[Decimal]:
     for match in _NUMBER.findall(text):
         found.add(abs(Decimal(re.sub(r"[   ]", "", match).replace(",", "."))))
     return found
+
+
+def _unit_problem(text: str, packet: Packet, evidence_ids) -> bool:
+    for unit, pattern in _UNIT_NUMBER.items():
+        cited = {n for e in evidence_ids for n in packet.units.get(e, {}).get(unit, ())}
+        if any(numbers_in(m) - cited for m in pattern.findall(text)):
+            return True
+    return False
 
 
 def _text_problem(text: str, packet: Packet, allowed: set[Decimal]) -> str | None:
@@ -64,6 +76,8 @@ def _claim_problem(raw: Mapping, packet: Packet, allowed_types: frozenset) -> tu
     problem = _text_problem(claim.text, packet, allowed)
     if problem:
         return None, problem
+    if _unit_problem(claim.text, packet, claim.evidence_ids):
+        return None, "unit_mismatch"
     if _CAUSAL.search(claim.text) and (claim.type is not ClaimType.HYPOTHESIS
                                        or not any(packet.kinds[e] in CAUSAL_KINDS for e in claim.evidence_ids)):
         return None, "causal_without_basis"

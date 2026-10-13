@@ -14,8 +14,12 @@ from typing import NoReturn, Protocol
 
 import httpx
 
+from app.intelligence.metrics.definitions import DEFINITIONS
 from app.sources.conversion import ConversionDefinition
 from app.sources.http import RateLimiter, ResponseTooLarge, read_limited, user_key
+
+# С НДС или без — часть определения расхода (реестр метрик), а не настройка запроса.
+INCLUDE_VAT = {"included": "YES", "excluded": "NO"}[DEFINITIONS["cost"].vat]
 
 # Заголовки запроса Reports API: деньги десятичными рублями, без строки заголовка отчёта и итоговой строки.
 # Строка с именами столбцов остаётся — по ней парсер проверяет, что API вернул ровно запрошенное.
@@ -277,7 +281,7 @@ class DirectApi:
             "ReportType": spec.report_type,
             "DateRangeType": "CUSTOM_DATE",
             "Format": "TSV",
-            "IncludeVAT": "YES",  # фактические расходы клиента
+            "IncludeVAT": INCLUDE_VAT,  # фактические расходы клиента
         }
         if conversions:  # цели и модель выбирает ConversionDefinition, не клиент API
             params["Goals"] = [str(g) for g in conversions.goal_ids]

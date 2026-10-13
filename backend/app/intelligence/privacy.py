@@ -6,7 +6,7 @@
 Объекты заменяются непрозрачными ссылками obj_1… на один запрос; таблица соответствия остаётся на сервере."""
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import Enum
 from types import MappingProxyType
@@ -35,6 +35,8 @@ class Packet:
     refs: Mapping[str, Any]    # obj_N → исходный объект; только на сервере, не сохраняется
     numbers: Mapping[str, frozenset]  # evidence_id → числа факта (для Judge)
     kinds: Mapping[str, str]          # evidence_id → kind
+    # evidence_id → {"pct": числа ключей *_pct, "pp": числа ключей *_pp}: относительное изменение и процентные пункты
+    units: Mapping[str, Mapping[str, frozenset]] = field(default_factory=dict)
 
 
 def _check_key(key: Any) -> str:
@@ -72,6 +74,15 @@ def _numbers(item: Mapping) -> frozenset:
         if d.is_finite():  # «nan» и «inf» — слаги, а не числа
             out.add(d)
     return frozenset(out)
+
+
+UNIT_SUFFIX = {"pct": "_pct", "pp": "_pp"}
+
+
+def _units(item: Mapping) -> Mapping[str, frozenset]:
+    values = item.get("values", {})
+    return MappingProxyType({unit: frozenset(abs(Decimal(v)) for k, v in values.items() if k.endswith(suffix))
+                             for unit, suffix in UNIT_SUFFIX.items()})
 
 
 class _Refs:
@@ -132,4 +143,5 @@ def build_packet(bundle: EvidenceBundle, plan: tuple[Mapping, ...] = ()) -> Pack
                "plan": [clean_item(p, refs) for p in plan]}
     return Packet(payload=payload, refs=refs.table(),
                   numbers=MappingProxyType({f["id"]: _numbers(f) for f in facts}),
-                  kinds=MappingProxyType({f["id"]: f.get("kind", "fact") for f in facts}))
+                  kinds=MappingProxyType({f["id"]: f.get("kind", "fact") for f in facts}),
+                  units=MappingProxyType({f["id"]: _units(f) for f in facts}))

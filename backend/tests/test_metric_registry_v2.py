@@ -71,3 +71,12 @@ def test_reasons_returned_are_declared_by_the_metric():
 def test_unknown_metric_raises():
     with pytest.raises(KeyError):
         can_compute("roas", {"cost"}, None)
+
+
+def test_money_metrics_fix_vat_and_the_direct_request_follows_the_registry():
+    """Расход с НДС и без отличается на 20%: признак — часть определения, запрос к Директу берёт его из реестра."""
+    from app.intelligence.metrics.definitions import DEFINITIONS
+    from app.sources.direct import INCLUDE_VAT
+    assert {m for m, d in DEFINITIONS.items() if d.vat is not None} == {"cost", "cpa"}
+    assert {d.vat for d in DEFINITIONS.values() if d.vat} == {"included"}
+    assert INCLUDE_VAT == "YES"
