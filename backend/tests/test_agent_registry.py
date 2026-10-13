@@ -14,8 +14,9 @@ T0 = datetime(2026, 10, 8, 10, 0, tzinfo=timezone.utc)
 HASH = "a" * 64
 
 
-def test_only_the_two_placeholders_are_registered():
-    assert set(AGENTS) == {"evidence_judge", "chief_analyst"}
+def test_registered_agents_are_chief_judge_and_specialists():
+    assert set(AGENTS) == {"evidence_judge", "chief_analyst", "data_quality", "campaign_performance",
+                           "search_queries", "rsya_placements", "anomaly", "budget"}
 
 
 def test_spec_fields_match_59_and_116():
@@ -26,7 +27,7 @@ def test_spec_fields_match_59_and_116():
             "write_scope"} <= names
 
 
-@pytest.mark.parametrize("agent_id", ["evidence_judge", "chief_analyst"])
+@pytest.mark.parametrize("agent_id", sorted(AGENTS))
 def test_no_agent_can_write_or_assert_facts(agent_id):
     spec = get_agent(agent_id)
     assert spec.write_scope == ()

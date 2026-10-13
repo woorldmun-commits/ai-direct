@@ -16,6 +16,7 @@ from app.flags import flag
 from app.intelligence.actions.capabilities import CapabilityResult, CapabilityStatus, resolve_action
 from app.intelligence.agents.registry import get_agent
 from app.intelligence.agents.run_record import AgentRunRecord
+from app.intelligence.agents.specialists import SpecialistReport, route
 from app.intelligence.contracts.action_types import ActionCandidate, ActionType
 from app.intelligence.contracts.claims import CausalStatus, Claim, ClaimType
 from app.intelligence.contracts.evidence import EvidenceBundle, canonical_json
@@ -70,6 +71,7 @@ class ChiefResult:
     refusal: str | None
     missing_data: tuple[str, ...]
     run: AgentRunRecord
+    specialists: tuple[SpecialistReport, ...] = ()
 
 
 @dataclass
@@ -182,9 +184,10 @@ def llm_explanation(bundle: EvidenceBundle, plan: tuple[PlanItem, ...], gateway,
 # --- Запуск -------------------------------------------------------------------------------------------------------
 
 def _record(ctx: RunContext, bundle: EvidenceBundle, plan, explanation: Explanation, refusal: str | None,
-            trace: _LLMTrace, started: datetime, t0: float) -> AgentRunRecord:
+            trace: _LLMTrace, started: datetime, t0: float, specialists=()) -> AgentRunRecord:
     output = {"plan": [{**row, "exposure": it.exposure} for row, it in zip(_plan_rows(plan), plan)],
-              "summary": explanation.summary, "claims": [c.text for c in explanation.claims], "refusal": refusal}
+              "summary": explanation.summary, "claims": [c.text for c in explanation.claims], "refusal": refusal,
+              "specialists": [[r.agent_id, r.status.value, list(r.finding_ids)] for r in specialists]}
     return AgentRunRecord(
         run_id=ctx.run_id, workspace_id=ctx.workspace_id, started_at=started,
         completed_at=datetime.now(timezone.utc), status="refused" if refusal else "completed",
@@ -211,14 +214,17 @@ def run(bundle: EvidenceBundle, ctx: RunContext, gateway=None, env: Mapping[str,
     if not flag("chief_analyst", env):
         return None
     started, t0, trace = datetime.now(timezone.utc), time.monotonic(), _LLMTrace()
+    specialists = route(bundle)
     plan = build_plan(bundle)
     if _insufficient(bundle, plan):
         missing = missing_data(bundle)
         explanation = Explanation(INSUFFICIENT_TEXT, (), "template")
         return ChiefResult((), explanation, INSUFFICIENT_TEXT, missing,
-                           _record(ctx, bundle, (), explanation, INSUFFICIENT_TEXT, trace, started, t0))
+                           _record(ctx, bundle, (), explanation, INSUFFICIENT_TEXT, trace, started, t0, specialists),
+                           specialists)
     explanation = None
     if plan and gateway is not None and flag("llm_enabled", env):
         explanation = llm_explanation(bundle, plan, gateway, trace)
     explanation = explanation or template_explanation(plan)
-    return ChiefResult(plan, explanation, None, (), _record(ctx, bundle, plan, explanation, None, trace, started, t0))
+    return ChiefResult(plan, explanation, None, (),
+                       _record(ctx, bundle, plan, explanation, None, trace, started, t0, specialists), specialists)
