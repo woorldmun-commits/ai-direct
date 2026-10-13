@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown, X } from "lucide-react";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { ValueView } from "@/components/value-view";
 import { ACTION_LEVEL_LABEL, REJECT_LABEL, resultLabel } from "@/lib/contract";
 import { CALCULATION_LABEL, formatPeriod, sourceLabel } from "@/lib/value";
@@ -25,14 +25,13 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
 
 /** Passport «Почему AdPilot так решил». Works without an LLM: the text is a template over the finding's facts. */
 export function WhyDrawer() {
+  const dialog = useRef<HTMLDialogElement>(null);
   const { get, whyId, closeWhy } = useDemo();
   const r = whyId ? get(whyId) : undefined;
 
   useEffect(() => {
     if (!r) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && closeWhy();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    dialog.current?.showModal();
   }, [r, closeWhy]);
 
   if (!r) return null;
@@ -40,11 +39,8 @@ export function WhyDrawer() {
   const lowered = r.safety.candidate_level !== r.action_level;
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black/25" onClick={closeWhy}>
+    <dialog ref={dialog} aria-labelledby="why-title" onCancel={closeWhy} className="fixed inset-0 m-0 h-dvh w-full max-h-none max-w-none bg-transparent p-0 text-text" onClick={closeWhy}>
       <aside
-        role="dialog"
-        aria-modal
-        aria-labelledby="why-title"
         onClick={(e) => e.stopPropagation()}
         className="glass anim-slide absolute inset-0 overflow-y-auto p-5 md:inset-y-3 md:right-3 md:left-auto md:w-[500px] md:rounded-3xl md:p-6"
       >
@@ -163,6 +159,6 @@ export function WhyDrawer() {
           </dl>
         </details>
       </aside>
-    </div>
+    </dialog>
   );
 }

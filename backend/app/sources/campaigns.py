@@ -10,7 +10,7 @@ safety_policy@2 — после проверки на реальных ответ
 Деньги в Campaigns.get — в микро-единицах валюты (× 1 000 000), в отличие от Reports API (returnMoneyInMicros: false)."""
 
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from enum import Enum
 
 import httpx
@@ -149,4 +149,10 @@ def get_campaign_contexts(http: httpx.Client, access_token: str, client_login: s
     # коды ошибок — те же, что у Reports (sources/direct.py); 200 без объекта result — тоже ошибка API, не сбой разбора
     if r.status_code != 200 or "error" in data or not isinstance(data.get("result"), dict):
         raise_for_direct_error(r, client_login or "")
-    return {ctx.campaign_id: ctx for ctx in map(parse_campaign, data["result"].get("Campaigns", []))}
+    campaigns = data["result"].get("Campaigns", [])
+    if not isinstance(campaigns, list) or any(not isinstance(c, dict) for c in campaigns):
+        raise_for_direct_error(r, client_login or "")
+    try:
+        return {ctx.campaign_id: ctx for ctx in map(parse_campaign, campaigns)}
+    except (KeyError, TypeError, ValueError, AttributeError, InvalidOperation):
+        raise_for_direct_error(r, client_login or "")

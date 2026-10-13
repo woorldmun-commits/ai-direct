@@ -12,7 +12,7 @@ VIA_PARENT = {"direct_accounts", "metrika_counters", "stat_rows", "search_query_
               "findings", "explanations", "recommendations", "recommendation_events", "recommendation_results",
               "measurements", "subscription_events", "payments"}
 # Сознательно без RLS (schema.sql «Изоляция арендаторов»): данные пользователя и глобальные таблицы.
-NO_RLS = {"users", "yandex_identities", "sessions", "telegram_links", "organizations", "organization_memberships",
+NO_RLS = {"users", "yandex_identities", "phone_identities", "sessions", "telegram_links", "organizations", "organization_memberships",
           "releases", "free_audit_claims",
           # вход по телефону: не данные workspace; рабочим ролям таблицы недоступны вовсе — только функции
           "phone_auth_codes", "phone_auth_events"}
@@ -55,6 +55,11 @@ def test_every_table_is_classified(rw):
 def test_without_workspace_app_role_sees_nothing(app, rw, chain, other):
     """Ни одной строки ни одного workspace — по всем таблицам под RLS (в БД есть данные многих тестов)."""
     for table in sorted(rls_tables(rw)):
+        if table == "integration_oauth_states":
+            # Stronger than RLS visibility: application code has no table access, only bounded functions.
+            with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                one(app, "SELECT count(*) FROM integration_oauth_states")
+            continue
         cols = "workspace_id" if table in ("direct_connections", "metrika_connections") else "*"
         # оферта и согласия — документы пользователя, не workspace (как users); мандаты агентства — под RLS
         where = " WHERE workspace_id IS NOT NULL" if table == "legal_acceptances" else ""
@@ -63,6 +68,8 @@ def test_without_workspace_app_role_sees_nothing(app, rw, chain, other):
 
 def test_with_workspace_only_own_rows(app, rw, chain, other):
     with workspace_scope(app, chain["ws"]):
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            one(app, "SELECT count(*) FROM integration_oauth_states")
         # «забыли фильтр» — всё равно только свой клиент
         assert {r[0] for r in app.execute("SELECT id FROM recommendations")} == {chain["rec"]}
         assert {r[0] for r in app.execute("SELECT workspace_id FROM direct_connections")} == {chain["ws"]}

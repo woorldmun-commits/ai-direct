@@ -1,4 +1,9 @@
+"use client";
+
 import { AlertTriangle, BarChart3, CheckCircle2, KeyRound, Loader2, Megaphone, PlugZap, ShieldAlert, Wallet } from "lucide-react";
+import Link from "next/link";
+import Image from "next/image";
+import { useState } from "react";
 import { PageHeader, StateBox } from "@/components/ui";
 import { integrations } from "@/lib/demo-backend";
 import { formatMoment } from "@/lib/value";
@@ -16,6 +21,7 @@ const STATES = [
 ];
 
 function Source({ icon: Icon, name, time, scope, rows }: { icon: typeof Megaphone; name: string; time: string; scope: string; rows: [string, string][] }) {
+  const [checked, setChecked] = useState(false);
   return (
     <article className="card p-5">
       <div className="flex items-start gap-4">
@@ -26,7 +32,7 @@ function Source({ icon: Icon, name, time, scope, rows }: { icon: typeof Megaphon
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="font-bold">{name}</h2>
             <span className="badge bg-success-bg text-success">
-              <span className="size-1.5 rounded-full bg-success" /> Подключено
+              <Image src="/figma/liquid/6-41099-img2.svg" alt="" width={20} height={13} unoptimized/> Подключено
             </span>
           </div>
           <p className="mt-1 text-xs text-muted">{scope}</p>
@@ -41,9 +47,10 @@ function Source({ icon: Icon, name, time, scope, rows }: { icon: typeof Megaphon
         ))}
       </dl>
       <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4">
-        <button className="btn btn-secondary btn-sm">Управлять</button>
-        <button className="btn btn-ghost btn-sm">Проверить синхронизацию</button>
+        <Link href="/demo/settings#integrations" className="btn btn-secondary btn-sm">Управлять</Link>
+        <button className="btn btn-ghost btn-sm" onClick={() => setChecked(true)}>Проверить синхронизацию</button>
       </div>
+      {checked && <p role="status" className="mt-3 rounded-xl bg-brand-soft p-3 text-xs text-brand">Демо: показано сохранённое состояние {name}. Последняя синхронизация: {time}. Реальный запрос к Яндексу не выполнялся.</p>}
     </article>
   );
 }
@@ -70,6 +77,8 @@ export default function Integrations() {
         />
       </div>
 
+      <h2 className="mt-10 text-xl font-bold">Другие источники</h2>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">{["VK Реклама","Telegram Ads","Avito","CRM"].map(name=><article key={name} className="card p-5"><h3 className="font-semibold">{name}</h3><p className="text-sm text-muted mt-2">Скоро. Интеграция пока не реализована.</p><button className="btn btn-secondary mt-4" disabled>Подключение недоступно</button></article>)}</div>
       <h2 className="mt-10 text-xl font-bold">Как выглядят состояния подключения</h2>
       <p className="text-sm text-muted">Примеры для демо: так AdPilot сообщает о проблемах с доступом.</p>
       <ul className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -81,7 +90,7 @@ export default function Integrations() {
             <div className="min-w-0">
               <p className="font-semibold">{s.title}</p>
               <p className="text-sm text-muted">{s.text}</p>
-              {s.action && <button className="btn btn-secondary btn-sm mt-3">{s.action}</button>}
+              {s.action && <Link href="/demo/settings#integrations" className="btn btn-secondary btn-sm mt-3">{s.action}</Link>}
             </div>
           </li>
         ))}

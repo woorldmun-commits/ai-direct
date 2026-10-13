@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { backendOrigin } from "./lib/backend-origin";
 
 // Static security headers for every response. The Content-Security-Policy needs a fresh nonce
 // per request, so it is set in proxy.ts (frame-ancestors 'none' there backs up X-Frame-Options).
@@ -13,6 +14,10 @@ const SECURITY_HEADERS = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  async rewrites() {
+    const origin = backendOrigin();
+    return origin ? [{ source: "/api/v1/:path*", destination: origin + "/api/v1/:path*" }] : [];
+  },
   async headers() {
     return [{ source: "/:path*", headers: SECURITY_HEADERS }];
   },

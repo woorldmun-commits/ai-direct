@@ -85,5 +85,6 @@ def test_security_definer_functions_have_fixed_search_path(rw):
                                           "set_workspace_member", "remove_workspace_member",
                                           # вход по телефону (D2): таблицы кодов и журнала — только функциями
                                           "phone_code_request", "phone_code_for_check", "phone_code_record",
-                                          "phone_auth_log", "phone_auth_last_hour", "purge_phone_auth"}
+                                          "phone_auth_log", "phone_auth_last_hour", "purge_phone_auth",
+                                          "remember_oauth_state", "claim_oauth_state"}
     assert all(cfg and any(c.startswith("search_path=") for c in cfg) for _, cfg in rows)

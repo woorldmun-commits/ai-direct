@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { BudgetInput } from "@/components/landing/budget";
 import { Faq, FAQ, FinalCta, Footer, Pricing } from "@/components/landing/bottom";
 import { Header, Hero } from "@/components/landing/hero";
-import { DemoCta, HowItWorks, Pains, Transparency } from "@/components/landing/sections";
+import { HowItWorks, Pains, Transparency } from "@/components/landing/sections";
+import { ProductPreview } from "@/components/landing/product";
 import { SITE_URL } from "@/lib/site";
+import "./landing.css";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
@@ -32,21 +33,19 @@ const jsonLd = {
 
 export default function Home() {
   return (
-    <>
+    <div className="landing-page">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
-      <Header />
-      <main>
-        <Hero />
-        <BudgetInput />
+      <main id="main-content">
+        <div className="liquid-reference"><div className="liquid-canvas"><Header /><Hero /></div></div>
         <Pains />
         <HowItWorks />
         <Transparency />
-        <DemoCta />
+        <ProductPreview />
         <Pricing />
         <Faq />
         <FinalCta />
       </main>
       <Footer />
-    </>
+    </div>
   );
 }

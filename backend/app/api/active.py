@@ -8,11 +8,11 @@
    удержал её через «недостаточно данных» (rules_skipped по её кабинету и семейству: объект проблемы или всё
    правило). Удержанная — активна, но `data_sufficiency = insufficient`: её exposure и can_save — unavailable с
    причиной, в итог exposure не входят (coverage.unavailable + 1), действие — «проверить» (inspect_only);
-4. нет решения человека: последнее событие статуса — нет или unpostponed; postponed — не активна до даты until
+4. решение ещё не выполнено: последнее событие — нет, unpostponed или accepted; postponed — не активна до даты until
    (по МСК), после неё — снова активна.
 
-status (v1.0, из существующих событий): new · postponed · rejected · applied (done / checked / measured).
-Событий просмотра и принятия ещё нет (неделя 4), поэтому requires_decision / accepted не выдаются."""
+status: new · accepted · postponed · rejected · applied (done / checked / measured).
+Принятие не подтверждает выполнение и не уменьшает оценку неэффективного расхода."""
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
@@ -50,14 +50,14 @@ SELECT cur.id, cur.finding_id, cur.direct_account_id, coalesce(da.client_login, 
        cur.object_type, cur.object_id, f.action_level, f.lost, f.recoverable, f.data_quality, f.evidence_meta,
        f.action, f.created_at, cur.created_at, greatest(cur.created_at, f.created_at, cur.last_event_at),
        f.audit_run_id = last.id, last.data_cutoff, last.rules_skipped, included.snapshot_id, included.partial_from,
-       d.type, d.payload->>'until'
+       d.type, d.payload->>'until', d.finding_id
 FROM cur
 CROSS JOIN last
 JOIN included ON included.direct_account_id = cur.direct_account_id
 JOIN findings f ON f.id = cur.finding_id
 JOIN direct_accounts da ON da.id = cur.direct_account_id AND da.is_selected
 JOIN direct_connections dc ON dc.id = da.direct_connection_id
-LEFT JOIN LATERAL (SELECT e.type, e.payload FROM recommendation_events e
+LEFT JOIN LATERAL (SELECT e.type, e.payload, e.finding_id FROM recommendation_events e
                    WHERE e.recommendation_id = cur.id AND e.type NOT IN ('seen_again', 'measurement_skipped')
                    ORDER BY e.id DESC LIMIT 1) d ON true
 ORDER BY cur.id
@@ -100,6 +100,8 @@ def status_of(decided: str | None, until: str | None, today: date) -> str:
         return "postponed" if until is None or date.fromisoformat(until[:10]) > today else "new"
     if decided == "rejected":
         return "rejected"
+    if decided == "accepted":
+        return "accepted"
     if decided in ("done", "checked", "measured"):
         return "applied"
     return "new"  # resolved закрывает проблему — сюда не доходит
@@ -126,15 +128,17 @@ def _unavailable(like: Value, held: dict, cutoff: date, snapshot_id: int, partia
 
 
 def active_cards(conn: psycopg.Connection, ws: int, account: int | None = None,
-                 today: date | None = None) -> list[Card]:
+                 today: date | None = None, *, include_decided: bool = False) -> list[Card]:
     today = today or today_msk()
     cards = []
     for row in conn.execute(_CANDIDATES, {"ws": ws, "account": account}).fetchall():
         (rec, finding, acc, login, issue_type, object_type, object_id, level, lost, recoverable, quality, meta,
          action_raw, computed_at, created_at, updated_at, current, cutoff, skipped, snapshot, partial_from,
-         decided, until) = row
+         decided, until, decided_finding) = row
+        if decided == "accepted" and decided_finding != finding:
+            decided = None  # изменившееся действие требует нового решения человека
         status = status_of(decided, until, today)
-        if status != "new":
+        if not include_decided and status not in ("new", "accepted"):
             continue
         lost_v, recoverable_v = Value.from_stored(lost), Value.from_stored(recoverable)
         insufficient = False

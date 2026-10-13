@@ -3,6 +3,7 @@
 тексты запросов. Этого достаточно, чтобы найти запрос в поддержке Яндекса по RequestId."""
 
 import logging
+import re
 import time
 
 import httpx
@@ -23,7 +24,10 @@ def api_client(provider: str, transport: httpx.BaseTransport | None = None) -> h
         req = response.request
         ms = round((time.monotonic() - req.extensions.get("started", time.monotonic())) * 1000)
         request_id = response.headers.get("RequestId") or response.headers.get("X-Request-Id")
+        if request_id is not None and not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", request_id):
+            request_id = None
         log.info("%s %s %s status=%s request_id=%s duration_ms=%s", provider, req.method, req.url.path,
                  response.status_code, request_id, ms)
 
-    return httpx.Client(transport=transport, event_hooks={"request": [started], "response": [finished]})
+    return httpx.Client(transport=transport, follow_redirects=False,
+                        event_hooks={"request": [started], "response": [finished]})

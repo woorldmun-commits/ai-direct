@@ -139,6 +139,23 @@ class DirectFixture:
 
 API_URL = {"api": "https://api.direct.yandex.com/json", "sandbox": "https://api-sandbox.direct.yandex.com/json"}
 DEFAULT_RETRY_IN = 60  # если сервер не прислал retryIn
+MAX_RETRY_IN = 3600  # повреждённый заголовок не может отложить синхронизацию на годы
+
+
+def retry_interval(value: str | None) -> int:
+    """Reports retryIn: положительное число секунд, иначе безопасный интервал по умолчанию."""
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9]{1,100}", value):
+        return DEFAULT_RETRY_IN
+    seconds = int(value)
+    return min(seconds, MAX_RETRY_IN) if seconds > 0 else DEFAULT_RETRY_IN
+
+
+def _error_code(value: object) -> int:
+    if type(value) is int:
+        return value if value > 0 else 0
+    if isinstance(value, str) and re.fullmatch(r"[0-9]{1,10}", value):
+        return int(value)
+    return 0
 
 # Коды ошибок Директа (concepts/errors-list) → классы источника. Не перечисленные — DirectApiError (повтор не поможет).
 _ERRORS = {
@@ -165,8 +182,8 @@ def raise_for_direct_error(r: httpx.Response, login: str) -> NoReturn:
     """Ответ не 200 → исключение источника. Тело ошибки — JSON {"error": {error_code, request_id, …}}."""
     err = json_body(r).get("error")
     err = err if isinstance(err, dict) else {}
-    code = int(err.get("error_code") or 0)
-    retry_in = int(r.headers.get("retryIn") or DEFAULT_RETRY_IN)
+    code = _error_code(err.get("error_code"))
+    retry_in = retry_interval(r.headers.get("retryIn"))
     if code in _ERRORS:
         raise _ERRORS[code](login)
     if code in _TEMPORARY or (not code and r.status_code >= 500):
@@ -223,7 +240,7 @@ class DirectApi:
         if r.status_code == 200:
             return r.text
         if r.status_code in (201, 202):  # поставлен в очередь / ещё строится — повторить с теми же параметрами
-            raise RetryLater(int(r.headers.get("retryIn") or DEFAULT_RETRY_IN), "report_not_ready")
+            raise RetryLater(retry_interval(r.headers.get("retryIn")), "report_not_ready")
         raise_for_direct_error(r, login)
 
     def check_access(self, login: str) -> None:
@@ -233,6 +250,12 @@ class DirectApi:
             r = self.http.post(f"{API_URL[self.env]}/v5/campaigns", json=body, headers=self._headers(login), timeout=30)
         except httpx.TransportError:
             raise RetryLater(DEFAULT_RETRY_IN, "api_unavailable") from None
-        if r.status_code == 200 and "error" not in json_body(r):
-            return
+        data = json_body(r)
+        result = data.get("result")
+        if r.status_code == 200 and "error" not in data and isinstance(result, dict):
+            campaigns = result.get("Campaigns", [])
+            if isinstance(campaigns, list) and all(
+                isinstance(c, dict) and type(c.get("Id")) is int and c["Id"] > 0 for c in campaigns
+            ):
+                return
         raise_for_direct_error(r, login)

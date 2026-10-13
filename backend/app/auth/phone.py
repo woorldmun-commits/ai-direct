@@ -1,8 +1,8 @@
 """Вход по номеру телефона: выдача и проверка одноразового SMS-кода с лимитами (D2, API_CONTRACT §11).
 
 Юридически вход по SMS на HOLD (LEGAL.md, ст. 10 149-ФЗ): модуль работает только при PHONE_AUTH_ENABLED=1, по
-умолчанию выключен. Вход через Яндекс ID (login.py) не затрагивается. Реального SMS-провайдера нет — интерфейс
-SmsSender (провайдер только российский); капча — CaptchaVerifier (Yandex SmartCaptcha позже).
+умолчанию выключен. Вход через Яндекс ID (login.py) не затрагивается. Интерфейс SmsSender реализует SMS.ru
+(providers.py); капча — CaptchaVerifier с production-адаптером Yandex SmartCaptcha, без fake fallback.
 
 Что где:
 - номер → E.164, только российские мобильные (phone_number.py) — иначе отказ без отправки и без записи кода;
@@ -170,6 +170,17 @@ def verify_code(conn: psycopg.Connection, *, config: PhoneAuthConfig, phone: str
     consume=False — код верный, но вход ещё не завершён (нужно принять оферту): код остаётся живым."""
     _enabled(config)
     _idle(conn)
+    with conn.transaction():
+        return verify_code_in_transaction(conn, config=config, phone=phone, code=code, ip=ip,
+                                          now=now, consume=consume)
+
+
+def verify_code_in_transaction(conn: psycopg.Connection, *, config: PhoneAuthConfig, phone: str,
+                               code: str, ip: str, now: datetime, consume: bool = True) -> str | None:
+    """Caller owns the transaction: code consumption and session creation can commit together."""
+    _enabled(config)
+    if conn.info.transaction_status != TransactionStatus.INTRANS:
+        raise RuntimeError("verification requires a transaction")
     try:
         e164 = normalize_phone(phone)
     except InvalidPhone:

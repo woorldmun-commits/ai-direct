@@ -9,9 +9,10 @@ function scale(values: number[], h: number, pad = 8) {
 }
 
 export function Sparkline({ values, color = "var(--brand)", height = 36 }: { values: number[]; color?: string; height?: number }) {
+  if (!values.length || !values.every(Number.isFinite)) return null;
   const w = 120;
   const y = scale(values, height, 4);
-  const step = w / (values.length - 1);
+  const step = w / Math.max(1, values.length - 1);
   const d = values.map((v, i) => `${i ? "L" : "M"}${i * step},${y(v)}`).join("");
   return (
     <svg viewBox={`0 0 ${w} ${height}`} className="w-full" style={{ height }} preserveAspectRatio="none" aria-hidden>
@@ -25,18 +26,21 @@ export function LineChart({
   series,
   labels,
   height = H,
+  bars = false,
   format = (v: number) => String(v),
 }: {
   series: { name: string; values: number[]; color: string; dashed?: boolean }[];
   labels: string[];
   height?: number;
+  bars?: boolean;
   format?: (v: number) => string;
 }) {
   const w = 600;
   const all = series.flatMap((s) => s.values);
+  if (!labels.length || !all.length || !all.every(Number.isFinite) || series.some(s => s.values.length !== labels.length)) return <p role="status" className="py-8 text-center text-sm text-muted">Недостаточно данных для графика</p>;
   const y = scale(all, height - 20);
-  const step = w / (labels.length - 1);
-  const ticks = [Math.max(...all), Math.round((Math.max(...all) + Math.min(0, ...all)) / 2), Math.min(0, ...all)];
+  const step = w / Math.max(1, labels.length - 1);
+  const ticks = [...new Set([Math.max(...all), Math.round((Math.max(...all) + Math.min(0, ...all)) / 2), Math.min(0, ...all)])];
   return (
     <figure className="anim-fade">
       <svg viewBox={`0 0 ${w} ${height}`} className="w-full overflow-visible" style={{ height }} role="img" aria-label={series.map((s) => s.name).join(", ")}>
@@ -48,9 +52,12 @@ export function LineChart({
             </text>
           </g>
         ))}
+        {bars && series[0]?.values.map((v, i) => <rect key={`bar-${i}`} className="chart-bar" x={i * step - 12} y={y(v)} width={24} height={Math.max(0, height - 28 - y(v))} rx={3} fill={series[0].color} opacity={0.22} />)}
         {series.map((s) => (
           <path
             key={s.name}
+            className={s.dashed ? undefined : "chart-line-draw"}
+            pathLength={s.dashed ? undefined : 1}
             d={s.values.map((v, i) => `${i ? "L" : "M"}${i * step},${y(v)}`).join("")}
             fill="none"
             stroke={s.color}
@@ -85,11 +92,12 @@ export function LineChart({
 
 /** Stacked bars: `a` is the base (other spend), `b` sits on top (estimated inefficient spend). */
 export function Bars({ a, b, labels, height = H }: { a: number[]; b: number[]; labels: string[]; height?: number }) {
+  if (!a.length || a.length !== b.length || a.length !== labels.length || ![...a,...b].every(v => Number.isFinite(v) && v >= 0)) return <p role="status" className="py-8 text-center text-sm text-muted">Недостаточно данных для графика</p>;
   const w = 600;
   const totals = a.map((v, i) => v + b[i]);
   const max = Math.max(...totals);
   const bw = w / a.length;
-  const k = (height - 20) / max;
+  const k = (height - 20) / (max || 1);
   return (
     <svg viewBox={`0 0 ${w} ${height}`} className="anim-fade w-full" style={{ height }} role="img" aria-label="Расход и неэффективный расход по дням">
       {a.map((v, i) => {
@@ -117,13 +125,13 @@ export function Bars({ a, b, labels, height = H }: { a: number[]; b: number[]; l
 export function Donut({ parts, size = 132 }: { parts: { label: string; value: number; color: string }[]; size?: number }) {
   const total = parts.reduce((s, p) => s + p.value, 0);
   const r = 15.9155; // circumference = 100
-  const arcs = parts.map((p, i) => {
+  const arcs = total > 0 && parts.every(p => Number.isFinite(p.value) && p.value >= 0) ? parts.map((p, i) => {
     const pct = (p.value / total) * 100;
     const before = parts.slice(0, i).reduce((s, q) => s + (q.value / total) * 100, 0);
     return { ...p, pct, offset: 25 - before };
-  });
+  }) : [];
   return (
-    <svg viewBox="0 0 36 36" width={size} height={size} role="img" aria-label="Структура расходов">
+    <svg viewBox="0 0 36 36" width={size} height={size} role="img" aria-label={arcs.length ? "Структура расходов" : "Структура расходов: недостаточно данных"}>
       <circle cx={18} cy={18} r={r} fill="none" stroke="var(--surface-2)" strokeWidth={4} />
       {arcs.map((p) => (
         <circle
@@ -134,7 +142,7 @@ export function Donut({ parts, size = 132 }: { parts: { label: string; value: nu
           fill="none"
           stroke={p.color}
           strokeWidth={4}
-          strokeDasharray={`${p.pct - 0.8} ${100 - p.pct + 0.8}`}
+          strokeDasharray={`${Math.max(0, p.pct - 0.8)} ${100 - Math.max(0, p.pct - 0.8)}`}
           strokeDashoffset={p.offset}
         />
       ))}

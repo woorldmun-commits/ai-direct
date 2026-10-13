@@ -50,7 +50,7 @@ export function LevelBadge({ level }: { level: Recommendation["action_level"] })
 export function RecommendationCard({ r }: { r: Recommendation }) {
   const { openWhy } = useDemo();
   return (
-    <article className="card anim-fade flex flex-col p-5">
+    <article className="recommendation-card card anim-fade flex flex-col p-5">
       <div className="flex flex-wrap items-center gap-2">
         <StatusBadge r={r} />
         <LevelBadge level={r.action_level} />

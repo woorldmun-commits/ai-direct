@@ -63,7 +63,7 @@ def persist_finding(conn: psycopg.Connection, audit_run_id: int, workspace_id: i
     explanation_id = conn.execute("""INSERT INTO explanations (finding_id, source, text, release_id)
                                      VALUES (%s, 'template', %s, %s) RETURNING id""",
                                   (finding_id, explain(f, decide(f)), release_id)).fetchone()[0]
-    rec = conn.execute("SELECT id FROM recommendations WHERE issue_id = %s", (issue_id,)).fetchone()
+    rec = conn.execute("SELECT id FROM recommendations WHERE issue_id = %s FOR UPDATE", (issue_id,)).fetchone()
     payload = {"issue_id": issue_id, "finding_id": finding_id, "rule_version": f.rule_version}
     if rec is None:
         rec_id = conn.execute("""INSERT INTO recommendations (issue_id, finding_id, explanation_id)
@@ -92,6 +92,8 @@ def resolve_disappeared(conn: psycopg.Connection, workspace_id: int, result: Acc
         for issue_id, key, object_id, rec_id in open_issues:
             if bytes(key) in result.touched or object_id not in campaigns:
                 continue  # подтвердилась, не хватило данных или объект не проверялся — не «исчезла»
+            if rec_id is not None:
+                conn.execute("SELECT id FROM recommendations WHERE id = %s FOR UPDATE", (rec_id,))
             if rec_id is not None and _current_status(conn, rec_id) == "done":
                 continue  # ждёт замера: закроет measured, не resolved
             if rec_id is not None:

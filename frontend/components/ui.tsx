@@ -1,14 +1,12 @@
 import { AlertTriangle, CircleSlash, Database, LayoutGrid, Search } from "lucide-react";
+import Image from "next/image";
 import type { ReactNode } from "react";
 import type { Platform } from "@/lib/demo";
 
 export function Logo({ light = false, size = 28 }: { light?: boolean; size?: number }) {
   return (
-    <span className="inline-flex items-center gap-2 font-bold tracking-tight" style={{ fontSize: size * 0.68 }}>
-      <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden>
-        <path d="M4 26 13 6h5L9 26z" fill={light ? "#39BFA0" : "#0D6B5B"} />
-        <path d="M14 26 23 6h5l-9 20z" fill={light ? "#7FE0C6" : "#39BFA0"} />
-      </svg>
+    <span className="inline-flex items-center gap-[7px] font-semibold" style={{ fontSize: size * 15 / 23 }}>
+      <Image src="/figma/liquid/6-40562-img2.svg" alt="" width={size * 22 / 23} height={size} unoptimized className="shrink-0" />
       <span className={light ? "text-white" : "text-text"}>AdPilot</span>
     </span>
   );

@@ -353,13 +353,16 @@ def _read_bids(client: DirectReadClient, campaign_id: int) -> tuple[BidsSummary 
             "FieldNames": ["KeywordId"], "SearchFieldNames": ["Bid"], "NetworkFieldNames": ["Bid"],
             "Page": {"Limit": PAGE_LIMIT, "Offset": offset},
         })
-        page = result.get("KeywordBids") or []
+        page = result.get("KeywordBids", [])
         if not isinstance(page, list):
             raise ParamsFormatError("KeywordBids не список")
         rows += page
         if result.get("LimitedBy") is None:
             return summarize_bids(rows), None
-        offset = int(result["LimitedBy"])
+        limit = result["LimitedBy"]
+        if type(limit) is not int or limit < 0:
+            raise ParamsFormatError("LimitedBy не целое неотрицательное число")
+        offset = limit
     return None, "too_many_keywords"
 
 
@@ -369,7 +372,9 @@ def read_object_params(client: DirectReadClient, campaign_id: int, action: dict,
     площадке и действии про ставки. Любая ошибка чтения → ParamsUnavailable (сверка останется pending)."""
     try:
         result = client.call("campaigns", "get", _campaign_body(campaign_id))
-        campaigns = result.get("Campaigns") or []
+        campaigns = result.get("Campaigns", [])
+        if not isinstance(campaigns, list) or any(not isinstance(c, dict) for c in campaigns):
+            raise ParamsFormatError("Campaigns не список объектов")
         found = [c for c in campaigns if isinstance(c, dict) and str(c.get("Id")) == str(campaign_id)]
         if not found:
             return ParamsUnavailable("campaign_not_found")
