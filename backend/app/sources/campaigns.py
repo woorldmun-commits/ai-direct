@@ -11,7 +11,6 @@ safety_policy@2 режет уровень действия. Запись (Campai
 
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
-from enum import Enum
 
 import httpx
 
