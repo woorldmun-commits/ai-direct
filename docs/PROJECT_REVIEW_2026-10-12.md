@@ -25,6 +25,12 @@
 
 ## Критический существующий блокер API
 
+> **Решено 13.10 (PR #18).** Работа сведена поверх Intelligence 2.0: `agents.py` переписан поверх реестра
+> специалистов, `onboarding_routes.py` перенесён (миграция `0008_business_profiles`), а `recommendation_detail.py`,
+> `auth_routes.py` и `integration_routes.py` заменены версиями v2 (`decisions.py`, `sessions.py`, `phone_login.py`,
+> `integrations.py`). Миграция `0006_live_onboarding` не используется. `from app.api import create_app` проходит,
+> backend-тесты зелёные. Текст ниже — исходная запись от 12.10.
+
 Импорт приложения подтверждённо завершается ошибкой `ModuleNotFoundError: No module named 'app.api.agents'`.
 
 `backend/app/api/app.py` импортирует пять отсутствующих модулей:

@@ -51,6 +51,8 @@ export function PhoneAuth() {
       setPhone(normalized); setCode(""); setStep("code"); setCaptchaToken(""); setCaptchaRevision((v) => v + 1);
     } catch (e) {
       if (e instanceof ApiError && (e.code === "captcha_required" || e.reason === "captcha_required")) { setCaptchaRequired(true); setCaptchaToken(""); setError("Для повторного SMS пройдите проверку от роботов."); }
+      // 404: вход по SMS выключен на сервере (флаг sms_login, юридическая проверка) — не «ошибка сети»
+      else if (e instanceof ApiError && e.status === 404) setError("Вход по номеру телефона пока недоступен. Посмотрите демо-кабинет — подключение откроем после юридической проверки.");
       else setError(errorText(e));
     } finally { setBusy(false); if (captchaToken) { setCaptchaToken(""); setCaptchaRevision((v) => v + 1); } }
   }

@@ -419,6 +419,20 @@ CPA (`high_cpa`: `high_cpa_target@N` / `high_cpa_baseline@N`), площадки 
 AI в v1.0 — только `explanation` рекомендации (§5): утверждения → доказательства, непрозрачные ссылки вместо ID
 Яндекса (AI_GOVERNANCE.md §2). Эндпоинта вопросов к AI нет; «Спросить AI» — v1.1.
 
+`GET /workspaces/{ws}/agents` — команда анализа (Chief Analyst и детерминированные специалисты из реестра,
+`intelligence/agents`), любая роль. Статус области — по последнему аудиту workspace:
+
+```json
+{"mode": "recommendations_only",
+ "coordinator": {"id": "chief_analyst", "name": "Chief Analyst", "enabled": false},
+ "specialists": [{"id": "rsya_placements", "name": "РСЯ и площадки", "domain": "network",
+                  "status": "issue_found", "findings": 2, "missing_data": []}],
+ "limitations": ["Изменения в рекламных кабинетах не выполняются", "…"]}
+```
+
+`status`: `issue_found` · `no_material_issue` · `insufficient_data` · `not_supported` (правила области не запускались —
+это не «проблем нет»). Чисел, кроме количества находок, ответ не содержит.
+
 ## 10. Организация, команда, роли
 
 `GET /me` — пользователь, организации и доступные workspace с ролями:
@@ -432,6 +446,15 @@ AI в v1.0 — только `explanation` рекомендации (§5): утв
 
 `owner` / `admin` получают все workspace организации с `ws_role: null` (полные права по `org_role`); `member` — только
 те, где есть `ws_role`. Агентство переключает клиентов сменой `{workspace_id}` в пути — «активного workspace» в сессии нет.
+Дополнительно `/me` отдаёт плоский список `workspaces` (те же элементы, что внутри `organizations`) для экрана выбора.
+Сейчас `user.phone` всегда `null`: номер телефона AdPilot не хранит (вход по SMS на юридическом HOLD, §11).
+
+Онбординг собственника бизнеса:
+- `POST /workspaces` `{name}` → `201 {id, name, organization_id}` — личный workspace в организации `business`;
+  повторный вызов возвращает уже созданный (идемпотентно по пользователю).
+- `GET · PUT /workspaces/{ws}/business-profile` — отрасль, модель бизнеса, сайт (только хранится, не загружается),
+  регион, цели, `budget` и `target_cpa` (десятичные строки, ₽); `target_cpa` пишется и в настройки workspace.
+  Изменять — `owner` / `admin` (иначе `403`); чужой workspace — `404`; лишние поля и не-строковые суммы — `422`.
 
 | Роль | Смотреть | decide (`accept`, `mark_done_manually`, `check`, `postpone`, `reject`) | Команда, интеграции, биллинг |
 |---|---|---|---|

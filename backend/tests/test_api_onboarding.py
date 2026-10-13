@@ -1,5 +1,5 @@
 """Перенесено из ветки онбординга поверх v2: личный workspace, профиль бизнеса, выход со всех устройств, выбор
-кабинета Директа, команда специалистов /agents."""
+кабинета Директа (PATCH …/integrations/ad-accounts/{id}, API_CONTRACT §8), команда специалистов /agents."""
 
 import pytest
 
@@ -63,19 +63,19 @@ def test_logout_all_ends_every_own_session_only(c, rw):
 
 def test_select_direct_account(c, rw, world):
     acc = world_account(rw, world["a1"])
-    url = f"/api/v1/workspaces/{ws(world, 'a1')}/accounts/acc_{acc}"
-    r = c.put(url, json={"is_selected": False}, headers=auth(session(rw, world["owner"])))
-    assert r.status_code == 200 and r.json() == {"id": f"acc_{acc}", "is_selected": False}
+    url = f"/api/v1/workspaces/{ws(world, 'a1')}/integrations/ad-accounts/acc_{acc}"
+    r = c.patch(url, json={"selected": False}, headers=auth(session(rw, world["owner"])))
+    assert r.status_code == 200 and r.json() == {"id": f"acc_{acc}", "selected": False}
     assert one(rw, "SELECT is_selected FROM direct_accounts WHERE id = %s", acc) is False
 
 
 def test_account_of_another_workspace_is_404_and_viewer_403(c, rw, world):
     foreign = world_account(rw, world["b1"])
     owner = auth(session(rw, world["owner"]))
-    assert c.put(f"/api/v1/workspaces/{ws(world, 'a1')}/accounts/acc_{foreign}", json={"is_selected": False},
+    assert c.patch(f"/api/v1/workspaces/{ws(world, 'a1')}/integrations/ad-accounts/acc_{foreign}", json={"selected": False},
                  headers=owner).status_code == 404
     own = world_account(rw, world["a1"])
-    assert c.put(f"/api/v1/workspaces/{ws(world, 'a1')}/accounts/acc_{own}", json={"is_selected": False},
+    assert c.patch(f"/api/v1/workspaces/{ws(world, 'a1')}/integrations/ad-accounts/acc_{own}", json={"selected": False},
                  headers=auth(session(rw, world["viewer"]))).status_code == 403
 
 

@@ -6,7 +6,7 @@ POST /workspaces/{ws}/integrations/{provider}/connect       — {redirect_url} �
 GET  /integrations/{provider}/callback                      — state → обмен кода → токен в БД → редирект в UI
 POST /workspaces/{ws}/integrations/{provider}/disconnect    — токен удаляется, статус disconnected (owner / admin)
 GET  /workspaces/{ws}/integrations/yandex_metrika/goals     — счётчики и выбранные цели
-PUT  /workspaces/{ws}/accounts/{acc_id} {is_selected}        — включить / исключить кабинет Директа (owner / admin)
+PATCH /workspaces/{ws}/integrations/ad-accounts/{id} {selected} — включить / исключить кабинет (owner / admin)
 
 state привязан к workspace, провайдеру и пользователю: всё это — в httpOnly cookie рядом со state. Callback сверяет
 state до обращения к Яндексу; HTTP к Яндексу — вне транзакции БД; затем одна транзакция: пользователь сессии = тот,
@@ -225,16 +225,17 @@ def metrika_goals(conn: Conn, ws: CurrentWorkspace):
 
 class AccountSelection(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    is_selected: bool
+    selected: bool
 
 
-@router.put("/workspaces/{workspace_id}/accounts/{account_id}")
+@router.patch("/workspaces/{workspace_id}/integrations/ad-accounts/{account_id}")
 def select_account(conn: Conn, ws: CurrentWorkspace, account_id: str, body: AccountSelection):
-    """Чужой кабинет не виден через RLS (direct_accounts → direct_connections текущего workspace) — 404."""
+    """API_CONTRACT §8. Чужой кабинет не виден через RLS (direct_accounts → direct_connections текущего workspace) —
+    404. Лимит тарифа max_ad_accounts не проверяется: тарифов в схеме ещё нет."""
     require_manager(ws)
     m = re.fullmatch(r"acc_([1-9][0-9]{0,18})", account_id)
     row = m and conn.execute("UPDATE direct_accounts SET is_selected = %s WHERE id = %s RETURNING id",
-                             (body.is_selected, int(m.group(1)))).fetchone()
+                             (body.selected, int(m.group(1)))).fetchone()
     if not row:
         raise not_found()
-    return {"id": account_id, "is_selected": body.is_selected}
+    return {"id": account_id, "selected": body.selected}
