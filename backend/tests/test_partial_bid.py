@@ -35,12 +35,11 @@ def test_partial_days_never_give_bid_change(days, strategy):
     assert present_action(dict(f.action), d.level, "high_cpa", meta)["type"] != "decrease_bid"
 
 
-@pytest.mark.xfail(strict=True, reason="дыра: на review при ручной стратегии показ предлагает снизить ставку на N% "
-                                       "(рычаг lower_cpa.decrease_bid и текст объяснения), хотя конверсии досчитываются")
 def test_partial_days_do_not_suggest_bid_at_review_with_manual_strategy():
     f = partial_finding(NOT_SOLID)
     d = decide_v2(f, strategy=Strategy.MANUAL_BIDDING)
     assert d.level == "review"
-    shown = present_action(dict(f.action), d.level, "high_cpa", {"strategy": "manual_bidding"})
+    shown = present_action(dict(f.action), d.level, "high_cpa", {**f.evidence_meta, "strategy": "manual_bidding"})
+    assert shown["type"] == "investigate"
     assert all(lever["lever"] != "decrease_bid" for lever in shown.get("levers", ()))
     assert "снизить ставку" not in explain(f, d, "manual")

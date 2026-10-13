@@ -9,12 +9,15 @@
   по стратегии: ручные ставки → снизить ставку на N%; автостратегия → снизить целевую цену конверсии / проверить цели
   (стратегия — из снимка, её кладёт в evidence_meta.strategy аудит: audit/persist.py; нет — unknown);
 - decrease_bid при известной ручной стратегии и уровне change → {type: decrease_bid, change_pct};
-- exclude_placements на review → {type: exclude_placements, placements_count, placements}.
+- exclude_placements на review → {type: exclude_placements, placements_count, placements};
+- decrease_bid у вывода на днях досчёта конверсий (meta.level_reason = conversions_partial) → «проверить» на любом
+  уровне: ставку по недосчитанным конверсиям не предлагаем ни как изменение, ни как рычаг.
 Неизвестная форма → ValueError: вызывающий решает, что показать вместо неё (API — action = null)."""
 
 from decimal import Decimal
 
 from app.audit.templates import _rub
+from app.rules.evidence import PARTIAL_REASON
 from app.sources.strategy import Strategy
 
 CENT = Decimal("0.01")
@@ -100,7 +103,7 @@ def present_action(raw: dict, level: str, topic: str, meta: dict, strategy: str 
     kind = raw.get("type")
     if kind not in ("decrease_bid", "investigate_zero_conversions", "investigate_cpa_growth", "exclude_placements"):
         raise ValueError(f"action.type {kind!r} вне контракта v1.0")
-    if level == "inspect_only":
+    if level == "inspect_only" or (kind == "decrease_bid" and meta.get("level_reason") == PARTIAL_REASON):
         if kind == "decrease_bid":
             _pct(raw["change_pct"])  # кандидат обязан быть корректным, даже если показывается «проверить»
         return investigate(topic, raw, meta)
