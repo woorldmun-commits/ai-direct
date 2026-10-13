@@ -6,6 +6,7 @@ POST /workspaces/{ws}/integrations/{provider}/connect       — {redirect_url} �
 GET  /integrations/{provider}/callback                      — state → обмен кода → токен в БД → редирект в UI
 POST /workspaces/{ws}/integrations/{provider}/disconnect    — токен удаляется, статус disconnected (owner / admin)
 GET  /workspaces/{ws}/integrations/yandex_metrika/goals     — счётчики и выбранные цели
+PUT  /workspaces/{ws}/integrations/yandex_metrika/goals {counter_id, goal_ids} — выбрать счётчик и цели (owner / admin)
 PATCH /workspaces/{ws}/integrations/ad-accounts/{id} {selected} — включить / исключить кабинет (owner / admin)
 
 state привязан к workspace, провайдеру и пользователю: всё это — в httpOnly cookie рядом со state. Callback сверяет
@@ -26,6 +27,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.deps import Conn, CurrentWorkspace, current_actor, require_manager
+from app.api.entitlements import ad_accounts_left
 from app.api.errors import ApiError, not_found
 from app.api.serialize import ext, moment
 from app.api.services import service
@@ -223,6 +225,39 @@ def metrika_goals(conn: Conn, ws: CurrentWorkspace):
                       for counter, selected, goals in rows], "candidates": None}
 
 
+ProviderId = Annotated[str, Field(pattern=r"^[1-9][0-9]{0,18}$")]
+
+
+class GoalSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    counter_id: ProviderId
+    goal_ids: Annotated[list[ProviderId], Field(max_length=10)]  # предел Goals Директа (CHECK в metrika_counters)
+
+
+@router.put("/workspaces/{workspace_id}/integrations/yandex_metrika/goals")
+def select_goals(conn: Conn, ws: CurrentWorkspace, body: GoalSelection):
+    """Выбрать счётчик и цели (owner / admin): на подключение Метрики выбран один счётчик, пустой goal_ids снимает
+    выбор. Есть ли такие цели у счётчика, API проверить не может (токен читает только воркер): синхронизация сверяет
+    их с Метрикой и при расхождении отмечает источник goal_not_found (sync/snapshot.py), а не считает конверсии нулём."""
+    require_manager(ws)
+    if len(set(body.goal_ids)) != len(body.goal_ids):
+        raise ApiError(400, "invalid_request", "duplicate_goal_ids")
+    row = conn.execute("""SELECT c.id, c.metrika_connection_id FROM metrika_counters c
+                          JOIN metrika_connections m ON m.id = c.metrika_connection_id
+                          WHERE m.workspace_id = %s AND c.counter_id = %s FOR UPDATE OF c""",
+                       (ws.id, int(body.counter_id))).fetchone()
+    if row is None:
+        raise not_found()
+    counter, connection = row
+    goals = [int(g) for g in body.goal_ids]
+    if goals:  # один выбранный счётчик на подключение (metrika_counters_one_selected)
+        conn.execute("UPDATE metrika_counters SET is_selected = false WHERE metrika_connection_id = %s AND id <> %s",
+                     (connection, counter))
+    conn.execute("UPDATE metrika_counters SET is_selected = %s, goal_ids = %s WHERE id = %s",
+                 (bool(goals), goals, counter))
+    return {"counter_id": body.counter_id, "selected": bool(goals), "goal_ids": body.goal_ids}
+
+
 class AccountSelection(BaseModel):
     model_config = ConfigDict(extra="forbid")
     selected: bool
@@ -231,11 +266,17 @@ class AccountSelection(BaseModel):
 @router.patch("/workspaces/{workspace_id}/integrations/ad-accounts/{account_id}")
 def select_account(conn: Conn, ws: CurrentWorkspace, account_id: str, body: AccountSelection):
     """API_CONTRACT §8. Чужой кабинет не виден через RLS (direct_accounts → direct_connections текущего workspace) —
-    404. Лимит тарифа max_ad_accounts не проверяется: тарифов в схеме ещё нет."""
+    404. Включить сверх тарифа (entitlements.MAX_AD_ACCOUNTS) — 422 action_unavailable / entitlement_exceeded;
+    выключить можно всегда. Блокировка workspace: два параллельных выбора не обходят лимит."""
     require_manager(ws)
     m = re.fullmatch(r"acc_([1-9][0-9]{0,18})", account_id)
-    row = m and conn.execute("UPDATE direct_accounts SET is_selected = %s WHERE id = %s RETURNING id",
-                             (body.selected, int(m.group(1)))).fetchone()
-    if not row:
+    if not m:
         raise not_found()
+    account = int(m.group(1))
+    conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (f"ad_accounts:{ws.id}",))
+    if conn.execute("SELECT 1 FROM direct_accounts WHERE id = %s", (account,)).fetchone() is None:
+        raise not_found()
+    if body.selected and ad_accounts_left(conn, ws.id, account) < 1:
+        raise ApiError(422, "action_unavailable", "entitlement_exceeded")
+    conn.execute("UPDATE direct_accounts SET is_selected = %s WHERE id = %s", (body.selected, account))
     return {"id": account_id, "selected": body.selected}

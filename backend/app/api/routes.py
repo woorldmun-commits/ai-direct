@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.deps import Conn, CurrentActor, CurrentWorkspace, require_manager
 from app.api.errors import not_found
-from app.api.active import active_cards, today_msk, with_exposure
+from app.api.active import active_cards, budgeted, today_msk, with_exposure
 from app.api.serialize import ext, recommendation_item
 from app.tenancy import set_local_workspace
 
@@ -94,11 +94,12 @@ def recommendations(conn: Conn, ws: CurrentWorkspace, q: Annotated[Recommendatio
     last_cutoff = conn.execute("SELECT max(data_cutoff) FROM audit_runs WHERE workspace_id = %s",
                                (ws.id,)).fetchone()[0]
     _, overlaps = with_exposure(conn, cards, last_cutoff or today_msk())
-    shown = sorted((c for c in cards if account is None or c.account_id == account), key=_order)
+    in_budget, beyond = budgeted([c for c in cards if account is None or c.account_id == account], _order)
+    shown = in_budget + beyond  # сверх 10 на кабинет — в конце списка, не скрыты
     page = shown[offset:offset + q.limit]
     more = len(shown) > offset + q.limit
     return {"items": [recommendation_item(c, overlaps[c.rec_id]) for c in page],
-            "next_cursor": f"o{offset + q.limit}" if more else None}
+            "next_cursor": f"o{offset + q.limit}" if more else None, "beyond_budget": len(beyond)}
 
 
 @router.get("/workspaces/{workspace_id}/members")
