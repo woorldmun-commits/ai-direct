@@ -403,12 +403,6 @@ CREATE TABLE workspace_settings (
   updated_at           timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE telegram_links (
-  user_id   bigint PRIMARY KEY REFERENCES users,
-  chat_id   bigint NOT NULL UNIQUE,
-  linked_at timestamptz NOT NULL DEFAULT now()
-);
-
 -- ============================================================================
 -- Подключения  [O]
 -- ============================================================================
@@ -972,7 +966,7 @@ CREATE TRIGGER recommendation_results_done BEFORE INSERT ON recommendation_resul
 -- ============================================================================
 -- Транзакционный outbox
 -- ============================================================================
--- Доменное событие пишется в той же транзакции, что и бизнес-изменение; доставка наружу (Telegram, email, UI) —
+-- Доменное событие пишется в той же транзакции, что и бизнес-изменение; доставка наружу (email, UI) —
 -- отдельным воркером после COMMIT. Никаких HTTP внутри транзакции БД.
 -- Состояние — из полей доставки, без изменяемого status: delivered_at задан → доставлено; locked_until в будущем
 -- → в работе (аренда воркера); last_error → ошибка, повтор не раньше available_at. Доставка at-least-once:
@@ -1013,7 +1007,7 @@ CREATE TABLE notifications (  -- [O]
   id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   workspace_id bigint NOT NULL REFERENCES workspaces,
   kind         text NOT NULL CHECK (kind IN ('digest', 'correction', 'new_problem', 'critical', 'billing')),
-  channel      text NOT NULL CHECK (channel IN ('telegram', 'email')),
+  channel      text NOT NULL CHECK (channel IN ('in_app', 'email')),
   dedup_key    text NOT NULL UNIQUE,
   digest_id    bigint REFERENCES digests,
   snapshot_id  bigint REFERENCES snapshots,
@@ -1206,7 +1200,6 @@ BEGIN
   END IF;
 
   DELETE FROM sessions WHERE user_id = ANY (sole_users);
-  DELETE FROM telegram_links WHERE user_id = ANY (sole_users);
   DELETE FROM yandex_identities WHERE user_id = ANY (sole_users);
   -- принятия документов — доказательство: не удаляются, а обезличиваются (срок хранения — вопрос юристу, LEGAL.md)
   PERFORM set_config('app.anonymizing', 'on', true);
@@ -1541,13 +1534,13 @@ REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 
 -- Приложение: читать всё, добавлять везде, изменять — только операционные таблицы. Без DELETE, без DDL.
 GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA public TO app_rw;
-GRANT UPDATE ON users, workspace_settings, telegram_links,
+GRANT UPDATE ON users, workspace_settings,
                 direct_accounts, metrika_counters,
                 sync_runs, snapshots, issues, notifications, outbox_events, subscriptions, payments,
                 deletion_requests
              TO app_rw;
--- Сессии и привязки Telegram — служебные, не доказательные: выход из аккаунта удаляет строку.
-GRANT DELETE ON sessions, telegram_links TO app_rw;
+-- Сессии — служебные, не доказательные: выход из аккаунта удаляет строку.
+GRANT DELETE ON sessions TO app_rw;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO app_rw;
 
 -- Организации и команда (D3): только чтение; создание и изменение — функциями с проверкой actor (owner/admin).
@@ -1635,7 +1628,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE app_migrator IN SCHEMA public GRANT USAGE ON S
 --   Функции SECURITY DEFINER (удаление, ретеншн, токены, проверка доступа, управление командой) работают от
 --                владельца таблиц (app_migrator) и RLS не подчиняются; workspace / организация у них — явный
 --                параметр, actor — пользователь сессии, которого передаёт API.
--- Без RLS: users, yandex_identities, sessions, telegram_links (данные пользователя, не workspace; приложение
+-- Без RLS: users, yandex_identities, sessions (данные пользователя, не workspace; приложение
 -- фильтрует по пользователю сессии), organizations и organization_memberships (нужны до выбора workspace;
 -- изменять — только функциями), releases и free_audit_claims (глобальные, без данных клиента).
 -- placement_names — под RLS, его политика — в разделе таблицы (создаётся ниже этого блока).
