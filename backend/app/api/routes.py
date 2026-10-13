@@ -38,9 +38,6 @@ def health(request: Request):
 @router.get("/me")
 def me(conn: Conn, actor: CurrentActor):
     email = conn.execute("SELECT email FROM users WHERE id = %s", (actor.user_id,)).fetchone()[0]
-    phone_row = conn.execute("SELECT last_four FROM phone_identities WHERE user_id=%s", (actor.user_id,)).fetchone()
-    suffix = phone_row[0] if phone_row else None
-    masked_phone = f"+7 ••• ••• {suffix[:2]} {suffix[2:]}" if suffix else None
     orgs = conn.execute("""SELECT o.id, o.name, o.kind, m.org_role FROM organization_memberships m
                            JOIN organizations o ON o.id = m.organization_id
                            WHERE m.user_id = %s ORDER BY o.id""", (actor.user_id,)).fetchall()
@@ -55,7 +52,9 @@ def me(conn: Conn, actor: CurrentActor):
         # owner / admin — полные права по org_role, ws_role: null (API_CONTRACT.md §10)
         by_org[org_id].append({"id": ext("ws", ws), "name": name,
                                "ws_role": None if role in ("owner", "admin") else role})
-    return {"user": {"id": ext("u", actor.user_id), "phone": masked_phone, "email": email},
+    # phone: номер в AdPilot не хранится (вход по SMS — только хэш в журнале кодов), поэтому null.
+    # workspaces — плоский список для экрана выбора бизнеса; тот же набор, что внутри organizations.
+    return {"user": {"id": ext("u", actor.user_id), "phone": None, "email": email},
             "workspaces": [w for items in by_org.values() for w in items],
             "organizations": [{"id": ext("org", org_id), "name": name, "kind": kind, "org_role": org_role,
                                "workspaces": by_org[org_id]} for org_id, name, kind, org_role in orgs]}

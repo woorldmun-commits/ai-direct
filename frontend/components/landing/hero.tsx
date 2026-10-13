@@ -9,7 +9,7 @@ export function Hero() {
     <div className="liquid-copy">
       <h1 id="hero-title">AI-директор<br /><span>вашей рекламы</span></h1>
       <p>AdPilot анализирует ваш бюджет. Находит точки роста. Даёт понятные рекомендации. Контролирует ваш бюджет.</p>
-      <div className="liquid-platforms"><span>◈ <b>Яндекс Директ</b></span><span>◈ <b>VK Реклама</b></span><span>◈ <b>Telegram Ads</b></span><span>◈ <b>Avito</b></span></div>
+      <div className="liquid-platforms"><span>◈ <b>Яндекс Директ</b></span><span>◈ <b>VK Реклама</b></span><span>◈ <b>Avito</b></span></div>
       <div className="liquid-actions"><Link href="/signup">Попробовать бесплатно →</Link><Link href="/demo/analytics">▶　Смотреть как это работает</Link></div>
     </div>
     <div className="liquid-assistant"><Logo size={23} /><Link className="liquid-advice" href="/demo/recommendations" title="Пример рекомендации на демонстрационных данных"><strong>🔴　Вчера потеряно ≈ 23 000 ₽</strong><span>Причина: кампания «РСЯ — Новая»</span><small>Рекомендация: снизить ставку на 15%　→</small></Link></div>

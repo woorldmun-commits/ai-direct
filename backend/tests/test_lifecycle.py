@@ -125,7 +125,7 @@ def test_workspace_lifecycle(db):
     digest = one(rw, """INSERT INTO digests (workspace_id, kind, snapshot_id, audit_run_id, payload)
                         VALUES (%s, 'daily', %s, %s, %s) RETURNING id""", ws, snap1, audit1, Jsonb({"recommendations": [rec]}))
     rw.execute("""INSERT INTO notifications (workspace_id, kind, channel, dedup_key, digest_id)
-                  VALUES (%s, 'digest', 'telegram', %s, %s)""", (ws, f"digest:{ws}:2026-09-29", digest))
+                  VALUES (%s, 'digest', 'in_app', %s, %s)""", (ws, f"digest:{ws}:2026-09-29", digest))
     query = one(rw, """INSERT INTO search_query_texts (workspace_id, text_hash, text_sanitized)
                        VALUES (%s, %s, 'купить квартиру ***') RETURNING id""", ws, hashlib.sha256(b"q").digest())
     rw.execute("INSERT INTO search_query_sightings (query_id, seen_on) VALUES (%s, %s)", (query, D0))

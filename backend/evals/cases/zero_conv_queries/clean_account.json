@@ -1,0 +1,78 @@
+{
+  "description": "У запросов с расходом есть конверсии (в окне или раньше в снимке): кандидатов нет.",
+  "tags": [
+    "clean"
+  ],
+  "rules_version": 2,
+  "flags": [
+    "audit_rules_candidates"
+  ],
+  "settings": {},
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "sources": [
+      "yandex_direct",
+      "direct_conversions",
+      "direct_queries"
+    ],
+    "conversion_definition": {
+      "goal_ids": [
+        111
+      ],
+      "attribution": "last"
+    },
+    "campaigns": [
+      {
+        "id": 101,
+        "strategy": "manual",
+        "days": [
+          {
+            "date": "2026-09-10",
+            "cost": "30000.00",
+            "clicks": 1200,
+            "conversions": "20"
+          },
+          {
+            "date": "2026-09-25",
+            "cost": "12000.00",
+            "clicks": 400,
+            "conversions": "8"
+          }
+        ]
+      }
+    ],
+    "queries": [
+      {
+        "campaign_id": 101,
+        "id": 5,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "5000.00",
+            "clicks": 40,
+            "conversions": "1"
+          }
+        ]
+      },
+      {
+        "campaign_id": 101,
+        "id": 6,
+        "days": [
+          {
+            "date": "2026-09-01",
+            "cost": "100.00",
+            "clicks": 3,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-25",
+            "cost": "4000.00",
+            "clicks": 60,
+            "conversions": "0"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": []
+}

@@ -88,3 +88,18 @@ def test_unknown_conversions_before_are_insufficient_too():
     d = days(50000, 10, 35000, 10)
     d[0] = CampaignDay(1, BEFORE.date_to, Decimal(50000), 10, None)
     assert measure_cpa(d, BEFORE, AFTER).verdict == "insufficient"
+
+
+def test_measure_cpa_unknown_conversions_are_insufficient_not_zero():
+    """Нет данных о конверсиях за день окна — это не «0 конверсий» и не вывод «эффекта нет»."""
+    rows = days(50000, 10, 35000, 10)
+    rows[0] = CampaignDay(1, BEFORE.date_to, Decimal(50000), 10, None)
+    m = measure_cpa(rows, BEFORE, AFTER)
+    assert (m.verdict, m.effect["reason"], m.saved) == ("insufficient", "conversions_unknown", None)
+
+
+def test_measurement_labels_conversions_and_cpa_as_yandex_direct():
+    m = measure_cpa(days(50000, 10, 35000, 10), BEFORE, AFTER)
+    assert m.saved is not None and m.saved.source == "yandex_direct"
+    for facts in (m.before, m.after):
+        assert {f.source for f in facts.values()} == {"yandex_direct"}

@@ -7,12 +7,15 @@
 {
   "description": "что проверяет кейс",
   "tags": ["problem" | "clean" | "boundary" | "partial" | "autostrategy" | "not_enough_data", ...],
+  "rules_version": 2,                                     // необязательно: версии правил и политики (1 — по умолчанию)
+  "flags": ["audit_rules_candidates"],                    // необязательно: включить правила за флагом (rules.FLAGGED)
   "settings": {"target_cpa": "3000"},                    // замороженные настройки workspace; {} — target не задан
   "snapshot": {
     "period_to": "2026-09-30",                            // последний день снимка
     "history_days": 37,                                   // необязательно: глубина снимка (period_from)
     "partial_from": "2026-09-28",                         // необязательно: с этого дня данные досчитываются
     "sources": ["yandex_direct", "direct_conversions"],
+    "conversion_definition": {"goal_ids": [111], "attribution": "last"},  // нужно правилам @2; counter_id необязателен
     "campaigns": [{
       "id": 101,
       "strategy": "manual",                               // необязательно, только для гейта: manual · auto_cpa · …
@@ -23,13 +26,15 @@
       "campaign_id": 101, "id": 7,                        // id — синтетический object_id площадки, не имя
       "masked": true,                                     // необязательно: имя не прошло allowlist (sync/sanitize.py)
       "days": [{"date": "2026-09-25", "cost": "3000", "clicks": 90, "conversions": "0"}]  // только дни с данными
-    }]
+    }],
+    "queries": [{"campaign_id": 101, "id": 5, "days": [...]}],  // необязательно: поисковые запросы (id, без текста)
+    "budgets": [{"campaign_id": 101, "daily_budget": "5000", "weekly_budget": null}]  // необязательно: бюджеты
   },
   "exposure_total": "42000.00",                           // необязательно: ожидаемый итог exposure_total@1
   "expected": [{                                          // ровно эти выводы, не больше и не меньше
     "rule_version": "zero_conv_campaign@1", "object_type": "campaign", "object_id": 101,
     "candidate_level": "inspect_only", "action_level": "inspect_only",
-    "action": {"type": "investigate_zero_conversions", ...}, "exposure": "42000.00",
+    "action": {"type": "investigate_zero_conversions", ...}, "exposure": "42000.00",  // или "unavailable"
     "can_save": "unavailable"                             // необязательно: «Можно сэкономить» — сумма или unavailable
   }],
   "expected_not_enough_data": [{"rule_version": "...", "reason": "...", "object_type": "campaign", "object_id": 101}]
@@ -39,11 +44,12 @@
   regression       — ожидаемый вывод пропал или изменились действие / уровень / exposure;
   level_raised     — уровень действия выше ожидаемого;
   false_positive   — вывод, которого нет в ожидаемых (на «чистом» кейсе — любой вывод);
-  invariant        — данные partial → уровень не выше review; не ручная стратегия → ставка/бюджет не на change;
+  invariant        — данные partial → уровень не выше review; не ручная стратегия → ставка/бюджет не на change и
+                     в тексте объяснения нет совета «снизить ставку»;
                      действие для человека (app/audit/present.py, как его отдаёт API; стратегия в продукте неизвестна)
                      на неизвестной / не ручной стратегии — не «только ставка», и форма есть в контракте;
   not_enough_data  — ожидаемое «недостаточно данных» не выдано;
-  exposure         — итог exposure_total@1 по выводам кейса (строки уровней campaign и placement из снимка) вне
+  exposure         — итог exposure_total@1 по выводам кейса (строки уровней campaign, placement и query из снимка) вне
                      границ max(карточка) ≤ total ≤ Σ карточек (ECONOMICS §3.5) или не равен ожидаемому exposure_total.
 Намеренное изменение ожидаемого вывода — правка кейса в том же PR с объяснением."""
 
@@ -55,24 +61,30 @@ from pathlib import Path
 from typing import Callable
 
 from app.audit.exposure import ExposureFinding, StatUnit, exposure_total
-from app.audit.policy import LEVELS, decide
+from app.audit.policy import LEVELS, decide, decide_v2
 from app.audit.present import present_action
+from app.audit.templates import explain
 from app.audit.values import to_value
-from app.rules import RULES
-from app.rules.domain import (BID_OR_BUDGET_ACTIONS, AuditSettings, CampaignDay, Finding, NotEnoughData, PlacementDay,
-                              SnapshotView, run)
+from app.rules import ALL_RULES, FLAGGED
+from app.rules.domain import (BID_OR_BUDGET_ACTIONS, AuditSettings, CampaignBudget, CampaignDay, Finding, NotEnoughData,
+                              PlacementDay, QueryDay, SnapshotView, run)
 from app.rules.zero_conv_placements import MASK
+from app.sources.conversion import ConversionDefinition
 
 CASES_DIR = Path(__file__).parent / "cases"
 SNAPSHOT_ID, WORKSPACE_ID, ACCOUNT_ID = 1, 1, 1  # синтетические: на выводы влияют только через issue_key
 PARTIAL_DAYS = 3  # по умолчанию досчитываются последние 3 дня — как окно досчёта синхронизации
 MAX_LEVEL_WHEN_PARTIAL = "review"
 
-_CASE_KEYS = {"description", "tags", "settings", "snapshot", "expected", "expected_not_enough_data", "exposure_total"}
-_SNAPSHOT_KEYS = {"period_to", "history_days", "partial_from", "sources"}
+_CASE_KEYS = {"description", "tags", "settings", "snapshot", "expected", "expected_not_enough_data", "exposure_total",
+              "rules_version", "flags"}
+_SNAPSHOT_KEYS = {"period_to", "history_days", "partial_from", "sources", "conversion_definition"}
+_DEFINITION_KEYS = {"counter_id", "goal_ids", "attribution"}
 _CAMPAIGN_KEYS = {"id", "strategy", "history_days", "days"}
 _DAY_KEYS = {"date", "cost", "clicks", "conversions"}
 _PLACEMENT_KEYS = {"campaign_id", "id", "masked", "days"}
+_QUERY_KEYS = {"campaign_id", "id", "days"}
+_BUDGET_KEYS = {"campaign_id", "daily_budget", "weekly_budget"}
 _REQUIRED_EXPECTED = {"rule_version", "object_type", "object_id", "candidate_level", "action_level", "action",
                       "exposure"}
 _EXPECTED_KEYS = _REQUIRED_EXPECTED | {"can_save"}
@@ -119,10 +131,34 @@ def _placement_days(period_to: date, placements: list[dict]) -> tuple[PlacementD
     return tuple(sorted(out, key=lambda x: (x.campaign_id, x.date, x.placement_id)))
 
 
+def _query_days(period_to: date, queries: list[dict]) -> tuple[QueryDay, ...]:
+    """Только дни с данными. id — синтетический object_id запроса: текста в кейсе нет и быть не может."""
+    out = []
+    for q in queries:
+        _keys(q, _QUERY_KEYS, f"query {q.get('id')}", _QUERY_KEYS)
+        for d in q["days"]:
+            _keys(d, _DAY_KEYS, f"query {q['id']} day", _DAY_KEYS)
+            conv = None if d["conversions"] is None else Decimal(d["conversions"])
+            out.append(QueryDay(int(q["campaign_id"]), int(q["id"]), date.fromisoformat(d["date"]),
+                                Decimal(d["cost"]), int(d["clicks"]), conv))
+    return tuple(sorted(out, key=lambda x: (x.campaign_id, x.date, x.query_id)))
+
+
+def _budgets(period_to: date, budgets: list[dict]) -> tuple[CampaignBudget, ...]:
+    out = []
+    for b in budgets:
+        _keys(b, _BUDGET_KEYS, f"budget {b.get('campaign_id')}", {"campaign_id"})
+        amount = {k: None if b.get(k) is None else Decimal(b[k]) for k in ("daily_budget", "weekly_budget")}
+        out.append(CampaignBudget(int(b["campaign_id"]), **amount))
+    return tuple(out)
+
+
 # Раздел снимка → (поле SnapshotView, построитель). Новое правило с новыми данными добавляет сюда свой раздел
 # (ключ раздела — допустимый ключ snapshot; неизвестные ключи загрузчик по-прежнему отвергает).
 SECTIONS: dict[str, tuple[str, Callable]] = {"campaigns": ("campaign_days", _campaign_days),
-                                             "placements": ("placement_days", _placement_days)}
+                                             "placements": ("placement_days", _placement_days),
+                                             "queries": ("query_days", _query_days),
+                                             "budgets": ("budgets", _budgets)}
 
 
 @dataclass(frozen=True)
@@ -139,6 +175,34 @@ class Case:
         _keys(s, {"target_cpa"}, f"{self.name}: settings")
         return AuditSettings(target_cpa=Decimal(s["target_cpa"]) if s.get("target_cpa") is not None else None)
 
+    @property
+    def rules_version(self) -> int:
+        version = self.data.get("rules_version", 1)
+        if version not in (1, 2):
+            raise ValueError(f"{self.name}: rules_version 1 или 2")
+        return version
+
+    @property
+    def flags(self) -> set[str]:
+        flags = set(self.data.get("flags", ()))
+        if unknown := flags - set(FLAGGED):
+            raise ValueError(f"{self.name}: неизвестные флаги {sorted(unknown)}")
+        return flags
+
+    def rules(self) -> list:
+        """Как аудит: версия правил кейса + правила за включёнными флагами (у них своя версия)."""
+        flagged = [r for name, rules in FLAGGED.items() for r in rules]
+        return ([r for r in ALL_RULES if r.version == self.rules_version and r not in flagged]
+                + [r for name in sorted(self.flags) for r in FLAGGED[name]])
+
+    def definition(self) -> ConversionDefinition | None:
+        raw = self.data["snapshot"].get("conversion_definition")
+        if raw is None:
+            return None
+        _keys(raw, _DEFINITION_KEYS, f"{self.name}: conversion_definition", {"goal_ids"})
+        return ConversionDefinition(int(raw.get("counter_id", 1)), tuple(raw["goal_ids"]),
+                                    raw.get("attribution", "cross_device_last_significant"))
+
     def view(self) -> tuple[SnapshotView, date]:
         s = self.data["snapshot"]
         _keys(s, _SNAPSHOT_KEYS | set(SECTIONS), f"{self.name}: snapshot", {"period_to", "sources"})
@@ -148,7 +212,8 @@ class Case:
         partial_from = date.fromisoformat(raw) if raw else period_to - timedelta(PARTIAL_DAYS - 1)
         view = SnapshotView(snapshot_id=SNAPSHOT_ID, workspace_id=WORKSPACE_ID, direct_account_id=ACCOUNT_ID,
                             period_from=period_to - timedelta(s.get("history_days", 37) - 1), period_to=period_to,
-                            sources=frozenset(s["sources"]), partial_from=partial_from, **fields)
+                            sources=frozenset(s["sources"]), partial_from=partial_from,
+                            conversion_definition=self.definition(), **fields)
         return view, partial_from
 
     def units(self) -> list[StatUnit]:
@@ -157,7 +222,8 @@ class Case:
         return ([StatUnit(ACCOUNT_ID, d.campaign_id, "campaign", d.campaign_id, d.date, d.cost)
                  for d in view.campaign_days]
                 + [StatUnit(ACCOUNT_ID, p.campaign_id, "placement", p.placement_id, p.date, p.cost)
-                   for p in view.placement_days])
+                   for p in view.placement_days]
+                + [StatUnit(ACCOUNT_ID, q.campaign_id, "query", q.query_id, q.date, q.cost) for q in view.query_days])
 
     def strategies(self) -> dict[int, str]:
         return {int(c["id"]): c.get("strategy", "unknown") for c in self.data["snapshot"].get("campaigns", [])}
@@ -169,6 +235,7 @@ def load_cases(root: Path = CASES_DIR) -> list[Case]:
         data = json.loads(path.read_text(encoding="utf-8"))
         name = path.relative_to(root).with_suffix("").as_posix()
         _keys(data, _CASE_KEYS, name, {"description", "snapshot", "expected"})
+        Case(name, data).flags  # неизвестный флаг — ошибка загрузки, а не молча выключенное правило
         if unknown := set(data.get("tags", ())) - TAGS:
             raise ValueError(f"{name}: неизвестные теги {sorted(unknown)}")
         if "clean" in data.get("tags", ()) and data["expected"]:
@@ -196,11 +263,12 @@ class Outcome:
     candidate_level: str
     action_level: str
     action: dict
-    exposure: Decimal
+    exposure: Decimal | None  # None: у вывода нет суммы (lost unavailable) — в кейсе "unavailable"
     can_save: str  # recoverable: сумма строкой или "unavailable"
     partial: bool  # хотя бы одно число вывода — за дни, которые ещё досчитываются
     shown: dict | str  # действие, которое увидит человек (форма API §5), или текст ошибки формы
     card: ExposureFinding  # вход exposure_total@1: lost как Value и декларированная основа
+    text: str      # шаблонное объяснение (audit/templates.py) для стратегии кампании кейса
 
     @property
     def key(self) -> tuple:
@@ -208,17 +276,19 @@ class Outcome:
 
 
 def evaluate(case: Case) -> tuple[list[Outcome], list[NotEnoughData]]:
-    """Как аудит: все зарегистрированные правила → политика безопасности → Value (data_status)."""
+    """Как аудит: правила версии кейса (rules_version) → политика безопасности той же версии → Value (data_status)."""
     view, partial_from = case.view()
     settings = case.settings()
     findings, skipped = [], []
-    for rule in RULES:
+    policy = decide_v2 if case.rules_version == 2 else decide
+    strategies = case.strategies()
+    for rule in case.rules():
         for out in run(rule, view, settings):
             if isinstance(out, NotEnoughData):
                 skipped.append(out)
                 continue
             assert isinstance(out, Finding)
-            d = decide(out)
+            d = policy(out)
             values = [to_value(f, SNAPSHOT_ID, partial_from, out.rule_version)
                       for f in (out.lost, *out.evidence.values())]
             card = ExposureFinding(ACCOUNT_ID, out.issue_type, out.object_type, out.object_id, values[0],
@@ -231,8 +301,14 @@ def evaluate(case: Case) -> tuple[list[Outcome], list[NotEnoughData]]:
             findings.append(Outcome(out.rule_version, out.object_type, out.object_id, d.candidate_level, d.level,
                                     _json(dict(out.action)), values[0].amount,
                                     "unavailable" if out.recoverable.amount is None else str(out.recoverable.amount),
-                                    any(v.data_status == "partial" for v in values), shown, card))
+                                    any(v.data_status == "partial" for v in values), shown, card,
+                                    explain(out, d, _text_strategy(strategies.get(out.object_id, "unknown")))))
     return findings, skipped
+
+
+def _text_strategy(strategy: str) -> str:
+    """Стратегия кейса → вид для текста (audit/present.py: manual · auto · unknown)."""
+    return strategy if strategy in ("manual", "unknown") else "auto"
 
 
 def _rank(level: str) -> int:
@@ -255,7 +331,8 @@ def gate(case: Case) -> list[tuple[str, str]]:
         for name, got, want in (("candidate_level", o.candidate_level, e["candidate_level"]),
                                 ("action_level", o.action_level, e["action_level"]),
                                 ("action", o.action, e["action"]),
-                                ("exposure", o.exposure, Decimal(e["exposure"]))):
+                                ("exposure", o.exposure,
+                                 None if e["exposure"] == "unavailable" else Decimal(e["exposure"]))):
             if got != want:
                 violations.append(("regression", f"{key}: {name} {want!r} → {got!r}"))
         if "can_save" in e and o.can_save != e["can_save"]:
@@ -270,6 +347,8 @@ def gate(case: Case) -> list[tuple[str, str]]:
         if (strategies.get(o.object_id, "unknown") != "manual" and o.action["type"] in BID_OR_BUDGET_ACTIONS
                 and o.action_level == "change"):
             violations.append(("invariant", f"{o.key}: ставка/бюджет на change без ручной стратегии"))
+        if strategies.get(o.object_id, "unknown") != "manual" and "снизить ставку" in o.text:
+            violations.append(("invariant", f"{o.key}: в тексте совет снизить ставку без ручной стратегии"))
         if isinstance(o.shown, str):
             violations.append(("invariant", f"{o.key}: действие не в форме контракта: {o.shown}"))
         elif strategies.get(o.object_id, "unknown") != "manual" and o.shown["type"] in BID_OR_BUDGET_ACTIONS:

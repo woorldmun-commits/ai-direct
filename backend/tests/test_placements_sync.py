@@ -22,6 +22,7 @@ from test_direct_sync import CID, CONV, GOALS, TO, campaign_tsv, query_tsv, root
 from app.tenancy import workspace_scope
 from test_schema import chain, new_workspace, one  # noqa: F401 — chain: фикстура
 from test_snapshot_store import DATA_UNTIL, sync_run
+from test_sources_limits import fresh_limits  # noqa: F401 — фикстура: общие лимиты с чистого листа
 
 FROM = TO - timedelta(36)
 

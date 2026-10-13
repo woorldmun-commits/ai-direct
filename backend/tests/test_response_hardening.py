@@ -7,8 +7,7 @@ import pytest
 
 from app.auth.yandex_oauth import MAX_TOKEN_LIFETIME, OAuthError, refresh
 from app.sources.campaigns import get_campaign_contexts
-from app.sources.direct import (DEFAULT_RETRY_IN, MAX_RETRY_IN, DirectApiError, RetryLater, raise_for_direct_error,
-                                retry_interval)
+from app.sources.direct import DEFAULT_RETRY_IN, DirectApiError, RetryLater, raise_for_direct_error
 from test_direct_api import FakeReports, api
 from test_login import APP, NOW
 
@@ -17,15 +16,7 @@ def client(status, json=None, headers=None):
     return httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(status, json=json, headers=headers)))
 
 
-# --- Директ: retryIn и код ошибки ------------------------------------------------------------------------
-
-@pytest.mark.parametrize("raw, expected", [
-    ("17", 17), (None, DEFAULT_RETRY_IN), ("", DEFAULT_RETRY_IN), ("0", DEFAULT_RETRY_IN), ("-5", DEFAULT_RETRY_IN),
-    ("1.5", DEFAULT_RETRY_IN), ("abc", DEFAULT_RETRY_IN), ("9" * 50, MAX_RETRY_IN), (str(MAX_RETRY_IN + 1), MAX_RETRY_IN),
-])
-def test_retry_interval_is_positive_and_bounded(raw, expected):
-    assert retry_interval(raw) == expected
-
+# --- Директ: код ошибки (retryIn — тесты retry_in в test_direct_api) ------------------------------------------------------------------------
 
 @pytest.mark.parametrize("code", ["oops", -1, None, 1.5, {"x": 1}])
 def test_malformed_error_code_is_not_a_crash(code):

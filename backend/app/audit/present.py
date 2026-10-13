@@ -7,14 +7,18 @@
   ставки и без исключения площадок — даже если кандидат был «снизить ставку» или «исключить площадки»;
 - review / change и decrease_bid при неизвестной (или не ручной) стратегии кампании → не «только ставка», а рычаги
   по стратегии: ручные ставки → снизить ставку на N%; автостратегия → снизить целевую цену конверсии / проверить цели
-  (SnapshotView стратегию не знает — в v1.0 она всегда unknown);
+  (стратегия — из снимка, её кладёт в evidence_meta.strategy аудит: audit/persist.py; нет — unknown);
 - decrease_bid при известной ручной стратегии и уровне change → {type: decrease_bid, change_pct};
-- exclude_placements на review → {type: exclude_placements, placements_count, placements}.
+- exclude_placements на review → {type: exclude_placements, placements_count, placements};
+- decrease_bid у вывода на днях досчёта конверсий (meta.level_reason = conversions_partial) → «проверить» на любом
+  уровне: ставку по недосчитанным конверсиям не предлагаем ни как изменение, ни как рычаг.
 Неизвестная форма → ValueError: вызывающий решает, что показать вместо неё (API — action = null)."""
 
 from decimal import Decimal
 
 from app.audit.templates import _rub
+from app.rules.evidence import PARTIAL_REASON
+from app.sources.strategy import Strategy
 
 CENT = Decimal("0.01")
 EXECUTION = "manual"  # v1.0 не изменяет кабинеты: всё, что предлагается, человек делает сам
@@ -31,6 +35,14 @@ CHECKS_BY_TOPIC = {
 DEFAULT_CHECKS = ("conversion_goals", "strategy")
 # Рычаги снижения CPA по стратегии кампании (decrease_bid, когда ручная ставка может быть недоступна).
 LEVERS = ("decrease_bid", "lower_target_cpa", "check_conversion_goals")
+_AUTO = {Strategy.AUTO_CLICKS, Strategy.AUTO_CPC, Strategy.AUTO_CPA, Strategy.PAY_FOR_CONVERSION,
+         Strategy.MAX_CONVERSIONS}
+
+
+def strategy_shown(strategy: Strategy | str | None) -> str:
+    """Стратегия кампании (sources/strategy.py) → форма показа: manual · auto · unknown."""
+    s = Strategy(strategy) if strategy in Strategy._value2member_map_ else None
+    return "manual" if s is Strategy.MANUAL_BIDDING else "auto" if s in _AUTO else "unknown"
 
 
 def _pct(raw) -> str:
@@ -81,14 +93,17 @@ def lower_cpa(change_pct: str, strategy: str) -> dict:
     return {"type": "lower_cpa", "strategy": strategy, "levers": levers, "execution": EXECUTION}
 
 
-def present_action(raw: dict, level: str, topic: str, meta: dict, strategy: str = "unknown") -> dict:
-    """Кандидат правила + уровень политики → действие для человека (одна из форм API_CONTRACT §5)."""
+def present_action(raw: dict, level: str, topic: str, meta: dict, strategy: str | None = None) -> dict:
+    """Кандидат правила + уровень политики → действие для человека (одна из форм API_CONTRACT §5).
+    strategy не передана — из вывода (meta.strategy)."""
+    if strategy is None:
+        strategy = strategy_shown(meta.get("strategy"))
     if strategy not in STRATEGIES:
         raise ValueError(f"strategy {strategy!r}")
     kind = raw.get("type")
     if kind not in ("decrease_bid", "investigate_zero_conversions", "investigate_cpa_growth", "exclude_placements"):
         raise ValueError(f"action.type {kind!r} вне контракта v1.0")
-    if level == "inspect_only":
+    if level == "inspect_only" or (kind == "decrease_bid" and meta.get("level_reason") == PARTIAL_REASON):
         if kind == "decrease_bid":
             _pct(raw["change_pct"])  # кандидат обязан быть корректным, даже если показывается «проверить»
         return investigate(topic, raw, meta)

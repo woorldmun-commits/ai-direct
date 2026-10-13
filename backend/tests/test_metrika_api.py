@@ -13,6 +13,7 @@ from app.sources.metrika_discovery import (MetrikaGoal, parse_counters, parse_go
 from app.sync.snapshot import SyncFailure, sync_metrika
 from test_direct_sync import FROM, GOALS, TO
 from test_metrika_sync import SPEC, bytime, goals_json
+from test_sources_limits import fresh_limits  # noqa: F401 — фикстура: общие лимиты с чистого листа
 
 
 def api(handler):

@@ -1,6 +1,7 @@
 """Настройки API — только из окружения (секреты в репозитории не хранятся). Строка подключения — роль app_rw:
 API работает прикладной ролью под RLS; суперпользователь или роль с BYPASSRLS отвергаются при подключении (db.py)."""
 
+import ipaddress
 import os
 from dataclasses import dataclass, field
 from typing import Mapping
@@ -22,6 +23,14 @@ def _origin(value: str) -> str:
     return f"{parts.scheme}://{parts.netloc}".lower()
 
 
+def _networks(value: str) -> frozenset:
+    """API_TRUSTED_PROXIES: адреса или подсети через запятую — только от них берётся X-Forwarded-For."""
+    try:
+        return frozenset(ipaddress.ip_network(v.strip(), strict=False) for v in value.split(",") if v.strip())
+    except ValueError:
+        raise SettingsError("API_TRUSTED_PROXIES: не адрес и не подсеть") from None
+
+
 def _flag(value: str | None) -> bool:
     return (value or "").strip().lower() in ("1", "true", "yes", "on")
 
@@ -36,6 +45,9 @@ class Settings:
     pool_min_size: int = 1
     pool_max_size: int = 10
     pool_timeout: float = 5.0
+    production: bool = False  # API_ENV=production: только https-источники
+    trusted_proxies: frozenset = frozenset()  # ip_network; пусто — адрес клиента = адрес соединения
+    app_url: str = ""  # куда вернуть браузер после OAuth (API_APP_URL); пусто — корень того же хоста
 
     def __post_init__(self):
         if not self.database_url:
@@ -43,6 +55,8 @@ class Settings:
         if not self.allowed_origins:
             raise SettingsError("API_ALLOWED_ORIGINS пуст: без списка изменяющие запросы принять нельзя")
         object.__setattr__(self, "allowed_origins", frozenset(_origin(o) for o in self.allowed_origins))
+        if self.production and any(not o.startswith("https://") for o in self.allowed_origins):
+            raise SettingsError("API_ALLOWED_ORIGINS: в production только https")
         if self.max_body_bytes <= 0:
             raise SettingsError("API_MAX_BODY_BYTES: нужно положительное число")
 
@@ -57,4 +71,7 @@ class Settings:
             session_cookie=env.get("API_SESSION_COOKIE", SESSION_COOKIE),
             pool_min_size=int(env.get("API_POOL_MIN", 1)),
             pool_max_size=int(env.get("API_POOL_MAX", 10)),
+            production=env.get("API_ENV", "").strip().lower() == "production",
+            trusted_proxies=_networks(env.get("API_TRUSTED_PROXIES", "")),
+            app_url=env.get("API_APP_URL", "").rstrip("/"),
         )

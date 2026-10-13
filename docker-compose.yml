@@ -1,0 +1,98 @@
+# Локальный и пилотный запуск: postgres 16 → migrate (один раз) → api, worker, frontend.
+# Секреты — только из .env рядом с этим файлом (в .gitignore; образец переменных — в шапке ниже), в образах их нет.
+#   docker compose up --build
+# Обязательные переменные .env:
+#   POSTGRES_PASSWORD, APP_MIGRATOR_PASSWORD, APP_RW_PASSWORD, APP_TOKEN_PASSWORD, APP_SYSTEM_PASSWORD,
+#   APP_DELETER_PASSWORD, RELEASE_COMMIT_SHA (40 hex, git rev-parse HEAD), OPS_TOKEN
+# По мере подключения функций: TOKEN_ENCRYPTION_KEY_VERSION, TOKEN_ENCRYPTION_KEY_<v>, YANDEX_LOGIN_*, YANDEX_API_*.
+# HTTPS (Caddy) и Managed PostgreSQL продакшена — ARCHITECTURE.md §10, здесь не описаны.
+
+x-backend: &backend
+  build:
+    context: .
+    dockerfile: Dockerfile.backend
+    args:
+      RELEASE_COMMIT_SHA: ${RELEASE_COMMIT_SHA:?}
+      RELEASE_BUILD_ID: ${RELEASE_BUILD_ID:-compose}
+  image: adpilot-backend:${RELEASE_BUILD_ID:-compose}
+  restart: unless-stopped
+  env_file:
+    - path: .env
+      required: false
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      APP_DB: ai_direct
+      APP_MIGRATOR_PASSWORD: ${APP_MIGRATOR_PASSWORD:?}
+      APP_RW_PASSWORD: ${APP_RW_PASSWORD:?}
+      APP_TOKEN_PASSWORD: ${APP_TOKEN_PASSWORD:?}
+      APP_SYSTEM_PASSWORD: ${APP_SYSTEM_PASSWORD:?}
+      APP_DELETER_PASSWORD: ${APP_DELETER_PASSWORD:?}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/postgres-init.sh:/docker-entrypoint-initdb.d/10-roles.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ai_direct"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    <<: *backend
+    restart: "no"
+    command: ["python", "-m", "migrations"]
+    environment:
+      MIGRATION_DATABASE_URL: postgresql://app_migrator:${APP_MIGRATOR_PASSWORD:?}@db:5432/ai_direct
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *backend
+    environment:
+      API_DATABASE_URL: postgresql://app_rw:${APP_RW_PASSWORD:?}@db:5432/ai_direct
+      API_ALLOWED_ORIGINS: ${API_ALLOWED_ORIGINS:-http://localhost:3000}
+      OPS_DATABASE_URL: postgresql://app_system:${APP_SYSTEM_PASSWORD:?}@db:5432/ai_direct
+      OPS_TOKEN: ${OPS_TOKEN:?}
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    <<: *backend
+    command: ["python", "-m", "app.worker.main"]
+    stop_grace_period: 60s  # SIGTERM: текущая задача дорабатывает, новая не начинается
+    environment:
+      WORKER_DATABASE_URL: postgresql://app_token:${APP_TOKEN_PASSWORD:?}@db:5432/ai_direct
+      WORKER_SYSTEM_DATABASE_URL: postgresql://app_system:${APP_SYSTEM_PASSWORD:?}@db:5432/ai_direct
+      WORKER_DELETER_DATABASE_URL: postgresql://app_deleter:${APP_DELETER_PASSWORD:?}@db:5432/ai_direct
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        NEXT_PUBLIC_YM_ID: ${NEXT_PUBLIC_YM_ID:-}
+        NEXT_PUBLIC_YANDEX_VERIFICATION: ${NEXT_PUBLIC_YANDEX_VERIFICATION:-}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:

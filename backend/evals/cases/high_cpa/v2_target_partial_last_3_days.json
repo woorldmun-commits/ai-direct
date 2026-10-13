@@ -1,0 +1,59 @@
+{
+  "description": "@2: все конверсии окна — в последних 3 днях досчёта: завершённых конверсий нет, данные low — только «проверить», change невозможен.",
+  "tags": [
+    "problem",
+    "partial"
+  ],
+  "rules_version": 2,
+  "settings": {
+    "target_cpa": "3000"
+  },
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "sources": [
+      "yandex_direct",
+      "direct_conversions"
+    ],
+    "campaigns": [
+      {
+        "id": 101,
+        "strategy": "manual",
+        "days": [
+          {
+            "date": "2026-09-23",
+            "cost": "115200",
+            "clicks": 300,
+            "conversions": "30"
+          },
+          {
+            "date": "2026-09-30",
+            "cost": "63000",
+            "clicks": 200,
+            "conversions": "12"
+          }
+        ]
+      }
+    ],
+    "conversion_definition": {
+      "goal_ids": [
+        111,
+        222
+      ],
+      "attribution": "last"
+    }
+  },
+  "expected": [
+    {
+      "rule_version": "high_cpa_target@2",
+      "object_type": "campaign",
+      "object_id": 101,
+      "candidate_level": "change",
+      "action_level": "inspect_only",
+      "action": {
+        "type": "decrease_bid",
+        "change_pct": -15
+      },
+      "exposure": "27000.00"
+    }
+  ]
+}

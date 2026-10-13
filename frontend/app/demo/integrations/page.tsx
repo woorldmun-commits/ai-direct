@@ -78,7 +78,7 @@ export default function Integrations() {
       </div>
 
       <h2 className="mt-10 text-xl font-bold">Другие источники</h2>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">{["VK Реклама","Telegram Ads","Avito","CRM"].map(name=><article key={name} className="card p-5"><h3 className="font-semibold">{name}</h3><p className="text-sm text-muted mt-2">Скоро. Интеграция пока не реализована.</p><button className="btn btn-secondary mt-4" disabled>Подключение недоступно</button></article>)}</div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">{["VK Реклама","Avito","CRM"].map(name=><article key={name} className="card p-5"><h3 className="font-semibold">{name}</h3><p className="text-sm text-muted mt-2">Скоро. Интеграция пока не реализована.</p><button className="btn btn-secondary mt-4" disabled>Подключение недоступно</button></article>)}</div>
       <h2 className="mt-10 text-xl font-bold">Как выглядят состояния подключения</h2>
       <p className="text-sm text-muted">Примеры для демо: так AdPilot сообщает о проблемах с доступом.</p>
       <ul className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
