@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import { ArrowLeft, FileCheck2 } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Footer } from "@/components/landing/bottom";
 import { Logo } from "@/components/ui";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { LEGAL_DOCS } from "@/lib/site";
 
 export const dynamicParams = false;
@@ -23,22 +25,24 @@ export default async function LegalPage({ params }: PageProps<"/legal/[slug]">) 
   if (!doc) notFound();
 
   return (
-    <>
-      <header className="mx-auto max-w-[860px] px-4 py-6">
+    <div className="legal-container">
+      <header className="mx-auto flex max-w-[860px] items-center justify-between px-4 py-6">
         <Link href="/" aria-label="На главную">
           <Logo />
         </Link>
+        <ThemeToggle/>
       </header>
-      <main className="mx-auto max-w-[860px] px-4 pb-20">
-        <h1 className="text-[32px] leading-tight font-bold tracking-tight">{doc.title}</h1>
+      <main id="main-content" className="legal-page legal-layout">
+        <aside><Link href="/" className="mb-8 inline-flex items-center gap-2 text-xs text-muted"><ArrowLeft size={14}/> На главную</Link><nav aria-label="Юридические документы">{LEGAL_DOCS.map(d => <Link href={`/legal/${d.slug}`} key={d.slug} aria-current={d.slug === slug ? "page" : undefined}>{d.title}</Link>)}</nav></aside>
+        <article><FileCheck2 size={28} className="mb-6 text-brand"/><h1 className="text-[32px] leading-tight font-semibold tracking-tight">{doc.title}</h1>
         {slug === "requisites" ? (
           <dl className="card mt-6 grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 p-6 text-sm">
             {[
-              ["Наименование", "[ИП Фамилия И. О. / ООО «Название»]"],
-              ["ИНН", "[__________]"],
-              ["ОГРН / ОГРНИП", "[_____________]"],
-              ["Адрес", "[____]"],
-              ["E-mail", "[support@…]"],
+              ["Наименование", "Реквизиты ещё не опубликованы"],
+              ["ИНН", "Будет указан после утверждения"],
+              ["ОГРН / ОГРНИП", "Будет указан после утверждения"],
+              ["Адрес", "Будет указан после утверждения"],
+              ["E-mail", "Будет указан после утверждения"],
             ].map(([k, v]) => (
               <div key={k} className="contents">
                 <dt className="text-muted">{k}</dt>
@@ -55,8 +59,9 @@ export default async function LegalPage({ params }: PageProps<"/legal/[slug]">) 
             </p>
           </div>
         )}
+        </article>
       </main>
       <Footer />
-    </>
+    </div>
   );
 }

@@ -11,7 +11,7 @@ import pytest
 
 from app.rules.domain import (BID_OR_BUDGET_ACTIONS, AuditSettings, CampaignDay, Finding, NotEnoughData, Reason,
                               SnapshotView, run, windows)
-from app.rules import RULES
+from app.rules import RULES_V1
 from app.rules.high_cpa import HIGH_CPA_BASELINE, HIGH_CPA_TARGET, bid_change
 
 D = date(2026, 9, 30)  # последний день снимка
@@ -34,7 +34,7 @@ def snap(eval_cost=42000, eval_conv=8, base_cost=115200, base_conv=30, history_d
                         period_from=D - timedelta(36), period_to=D, sources=sources, campaign_days=days)
 
 
-HIGH_CPA_RULES = tuple(r for r in RULES if r.family == "high_cpa")  # другие семейства — свои тесты
+HIGH_CPA_RULES = tuple(r for r in RULES_V1 if r.family == "high_cpa")  # @1; другие семейства и @2 — свои тесты
 
 
 def audit(s, settings):

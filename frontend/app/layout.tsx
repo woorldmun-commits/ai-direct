@@ -1,11 +1,15 @@
 import type { Metadata, Viewport } from "next";
-import { IBM_Plex_Mono, Manrope } from "next/font/google";
+import { IBM_Plex_Mono, Inter } from "next/font/google";
 import { headers } from "next/headers";
+import { NonceProvider } from "@/components/nonce";
 import { CookieBanner } from "@/components/cookie-banner";
+import { PageMotion } from "@/components/page-motion";
 import { SITE_URL } from "@/lib/site";
 import "./globals.css";
+import "./design.css";
+import "./figma.css";
 
-const manrope = Manrope({
+const manrope = Inter({
   variable: "--font-manrope",
   subsets: ["latin", "cyrillic"],
   display: "swap",
@@ -18,9 +22,9 @@ const plexMono = IBM_Plex_Mono({
   display: "swap",
 });
 
-const TITLE = "AdPilot — контроль кабинетов Яндекс Директа для агентств и директологов";
+const TITLE = "AdPilot — анализ рекламы для владельцев бизнеса";
 const DESCRIPTION =
-  "AdPilot каждый день проверяет кабинеты Яндекс Директа и Метрики и показывает расход с признаками неэффективности в рублях — с доказательством на данных. Решение и изменения — за специалистом. Первый аудит бесплатно, без карты.";
+  "AdPilot каждый день проверяет кабинеты Яндекс Директа и Метрики и показывает расход с признаками неэффективности в рублях — с доказательством на данных. Решение и изменения — за вами. Первый аудит бесплатно, без карты.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -48,7 +52,7 @@ export const viewport: Viewport = {
 };
 
 // Runs before paint so a saved dark theme doesn't flash light.
-const themeScript = `try{var t=localStorage.getItem("adpilot-theme");if(t==="dark")document.documentElement.dataset.theme="dark"}catch(e){}`;
+const themeScript = `try{document.documentElement.dataset.theme=localStorage.getItem("adpilot-theme")==="light"?"light":"dark"}catch(e){document.documentElement.dataset.theme="dark"}`;
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   // Per-request CSP nonce from proxy.ts; reading headers() also makes rendering dynamic, which nonces require.
@@ -63,7 +67,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className="min-h-full">
-        {children}
+        <a href="#main-content" className="skip-link">Перейти к содержанию</a>
+        <PageMotion />
+        <NonceProvider nonce={nonce}>{children}</NonceProvider>
         <CookieBanner />
       </body>
     </html>

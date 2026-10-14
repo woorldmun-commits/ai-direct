@@ -1,0 +1,160 @@
+{
+  "description": "История снимка 20 дней — базы нет: «недостаточно данных» на весь кабинет.",
+  "tags": [
+    "not_enough_data"
+  ],
+  "rules_version": 2,
+  "flags": [
+    "audit_rules_candidates"
+  ],
+  "settings": {},
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "sources": [
+      "yandex_direct",
+      "direct_conversions"
+    ],
+    "conversion_definition": {
+      "goal_ids": [
+        111
+      ],
+      "attribution": "last"
+    },
+    "campaigns": [
+      {
+        "id": 208,
+        "history_days": 20,
+        "days": [
+          {
+            "date": "2026-09-11",
+            "cost": "2000.00",
+            "clicks": 100,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-12",
+            "cost": "2000.00",
+            "clicks": 100,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-13",
+            "cost": "2000.00",
+            "clicks": 100,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-14",
+            "cost": "2000.00",
+            "clicks": 100,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-15",
+            "cost": "2000.00",
+            "clicks": 100,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-16",
+            "cost": "2000.00",
+            "clicks": 100,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-17",
+            "cost": "2000.00",
+            "clicks": 100,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-18",
+            "cost": "2000.00",
+            "clicks": 100,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-19",
+            "cost": "2000.00",
+            "clicks": 100,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-20",
+            "cost": "2000.00",
+            "clicks": 100,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-21",
+            "cost": "2000.00",
+            "clicks": 100,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-22",
+            "cost": "2000.00",
+            "clicks": 100,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-23",
+            "cost": "2000.00",
+            "clicks": 100,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-24",
+            "cost": "2000.00",
+            "clicks": 100,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-25",
+            "cost": "2000.00",
+            "clicks": 100,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-26",
+            "cost": "2000.00",
+            "clicks": 100,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-27",
+            "cost": "2000.00",
+            "clicks": 100,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-28",
+            "cost": "2000.00",
+            "clicks": 100,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-29",
+            "cost": "2000.00",
+            "clicks": 100,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-30",
+            "cost": "2000.00",
+            "clicks": 100,
+            "conversions": "1"
+          }
+        ]
+      }
+    ],
+    "history_days": 20
+  },
+  "expected": [],
+  "expected_not_enough_data": [
+    {
+      "rule_version": "anomaly@1",
+      "reason": "baseline_history_insufficient"
+    }
+  ]
+}

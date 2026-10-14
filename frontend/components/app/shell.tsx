@@ -2,26 +2,29 @@
 
 import {
   Bell,
+  BarChart3,
+  FileText,
+  Bot,
+  Megaphone,
   CalendarDays,
   GitCompareArrows,
   History,
   LayoutDashboard,
   Lightbulb,
   Menu,
-  Moon,
   Plug,
   Search,
   Settings,
-  Sun,
   TrendingDown,
+  TrendingUp,
   Wallet,
   X,
-  Zap,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { DemoBadge, Logo } from "@/components/ui";
 import { ValueView } from "@/components/value-view";
 import { DEMO_NOW, LAST_AUDIT_AT, P7, RECOMMENDATIONS, TODAY_DATE, USER } from "@/lib/demo";
@@ -42,64 +45,30 @@ const NAV: NavItem[] = [
   { href: "/demo/history", label: "История решений", icon: History },
   { href: "/demo/integrations", label: "Интеграции", icon: Plug },
   { href: "/demo/settings", label: "Настройки", icon: Settings },
+  { href: "/demo/campaigns", label: "Кампании", icon: Megaphone },
+  { href: "/demo/analytics", label: "Аналитика", icon: BarChart3 },
+  { href: "/demo/assistant", label: "AI-помощник", icon: Bot },
+  { href: "/demo/effect", label: "Эффект", icon: TrendingUp },
+  { href: "/demo/reports", label: "Отчёты", icon: FileText },
+  { href: "/demo/plans", label: "Тарифы", icon: Wallet },
 ];
-const MOBILE_NAV = [NAV[0], NAV[1], NAV[2], { ...NAV[5], label: "История" }];
-
-function useTheme() {
-  const [dark, setDark] = useState(false);
-  useEffect(() => {
-    // The theme was applied by the inline script in <head>; mirror it into state.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDark(document.documentElement.dataset.theme === "dark");
-  }, []);
-  function toggle() {
-    const next = !dark;
-    setDark(next);
-    if (next) document.documentElement.dataset.theme = "dark";
-    else delete document.documentElement.dataset.theme;
-    try {
-      localStorage.setItem("adpilot-theme", next ? "dark" : "light");
-    } catch {}
-  }
-  return { dark, toggle };
-}
-
-type Theme = ReturnType<typeof useTheme>;
+const CORE_NAV = [NAV[9], NAV[2], NAV[11], NAV[6], NAV[7]];
+const EXTRA_NAV = NAV.filter((n) => !CORE_NAV.includes(n));
+const MOBILE_NAV = [{ ...NAV[9], label: "Анализ" }, NAV[2], NAV[11], { ...NAV[6], label: "Источники" }];
 
 function isActive(path: string, href: string) {
   return href === "/demo" ? path === href : path.startsWith(href);
 }
 
 function Sidebar({ path }: { path: string }) {
+  const navLink = (n: NavItem) => <Link key={n.href} href={n.href} aria-current={isActive(path, n.href) ? "page" : undefined} className={`app-nav-link flex h-11 items-center gap-3 rounded-xl px-3 text-[13px] font-medium transition-colors ${isActive(path, n.href) ? "bg-brand-soft text-brand" : "text-muted hover:bg-surface-2 hover:text-text"}`}><n.icon size={18}/>{n.href === "/demo/analytics" ? "Анализ" : n.href === "/demo/integrations" ? "Подключения" : n.label}</Link>;
   return (
-    <aside className="sticky top-0 hidden h-dvh w-[248px] shrink-0 flex-col border-r border-line bg-surface p-4 lg:flex">
-      <Link href="/" className="px-2 py-1" aria-label="AdPilot — на сайт">
-        <Logo />
-      </Link>
-      <nav className="mt-6 flex-1 space-y-0.5" aria-label="Разделы">
-        {NAV.map((n) => {
-          const active = isActive(path, n.href);
-          return (
-            <Link
-              key={n.href}
-              href={n.href}
-              aria-current={active ? "page" : undefined}
-              className={`flex h-10 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors ${
-                active ? "bg-brand-soft text-brand" : "text-muted hover:bg-surface-2 hover:text-text"
-              }`}
-            >
-              <n.icon size={18} />
-              {n.label}
-            </Link>
-          );
-        })}
+    <aside className="app-sidebar sticky top-0 hidden h-dvh w-[248px] shrink-0 flex-col border-r border-line p-4 lg:flex">
+      <nav className="flex-1 space-y-1 pb-3" aria-label="Разделы">
+        {CORE_NAV.map(navLink)}
+        <details key={path} open={EXTRA_NAV.some(n => isActive(path,n.href))} className="sidebar-more"><summary>Все инструменты</summary><div className="mt-2 space-y-1">{EXTRA_NAV.map(navLink)}</div></details>
       </nav>
-      <div className="rounded-2xl border border-dashed border-line p-4 opacity-80" aria-disabled>
-        <p className="flex items-center gap-2 text-sm font-semibold">
-          <Zap size={16} className="text-muted" /> Применение через API после одобрения — в планах
-        </p>
-        <p className="mt-1 text-xs text-muted">Сейчас изменения в Директе вносите вы, а AdPilot сверяет их по данным и измеряет эффект.</p>
-      </div>
+      <div className="sidebar-meta px-3"><span>Тариф</span><strong className="block my-2 text-text">Контроль · демо</strong><small>Вы принимаете решения</small></div>
       <Link href="/signup" className="btn btn-primary mt-3">
         Запустить свой аудит
       </Link>
@@ -143,15 +112,17 @@ function Notifications() {
   );
 }
 
-function Topbar({ onPalette, onMenu, theme }: { onPalette: () => void; onMenu: () => void; theme: Theme }) {
+function Topbar({ onPalette, onMenu }: { onPalette: () => void; onMenu: () => void }) {
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line bg-bg/80 px-4 backdrop-blur-xl md:px-6">
+    <header className="app-topbar sticky top-0 z-30 flex h-[76px] items-center gap-3 border-b border-line px-4 md:px-6">
+      <Link href="/" className="cabinet-brand" aria-label="AdPilot — на сайт"><Logo size={23}/></Link>
       <button className="btn btn-ghost size-10 p-0 lg:hidden" aria-label="Меню" onClick={onMenu}>
         <Menu size={20} />
       </button>
       <button
         onClick={onPalette}
-        className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-xl border border-line bg-surface px-3 text-sm text-muted md:max-w-[340px]"
+        aria-label="Поиск и команды"
+        className="cabinet-command flex h-10 min-w-0 flex-1 items-center gap-2 rounded-xl border border-line bg-surface px-3 text-sm text-muted md:max-w-[340px]"
       >
         <Search size={16} />
         <span className="truncate">Поиск и команды</span>
@@ -162,26 +133,26 @@ function Topbar({ onPalette, onMenu, theme }: { onPalette: () => void; onMenu: (
         <span className="hidden items-center gap-1.5 rounded-xl border border-line bg-surface px-3 py-2 text-xs md:inline-flex">
           <CalendarDays size={14} className="text-muted" /> {formatPeriod(P7)}
         </span>
-        <button className="btn btn-ghost size-10 p-0" aria-label={theme.dark ? "Светлая тема" : "Тёмная тема"} onClick={theme.toggle}>
-          {theme.dark ? <Sun size={18} /> : <Moon size={18} />}
-        </button>
+        <Link href="/demo/assistant" className="cabinet-ai" aria-label="AI-помощник">AI ◉</Link>
         <Notifications />
-        <span className="hidden items-center gap-2 pl-2 md:flex">
-          <span className="grid size-9 place-items-center rounded-full bg-brand-soft text-sm font-bold text-brand">А</span>
+        <Link href="/demo/settings#profile" aria-label="Открыть профиль" className="hidden items-center gap-2 pl-2 md:flex">
+          <span className="cabinet-avatar"><Image src="/figma/liquid/6-40708-img1.png" alt="" width={1600} height={1200} unoptimized /></span>
           <span className="text-sm leading-tight">
             <b>{USER.name}</b>
             <span className="block text-xs text-muted">{USER.account}</span>
           </span>
-        </span>
+        </Link>
       </div>
     </header>
   );
 }
 
 function MobileMenu({ path, onClose }: { path: string; onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => { dialog.current?.showModal(); }, []);
   return (
-    <div className="fixed inset-0 z-[65] bg-black/30 lg:hidden" onClick={onClose}>
-      <div className="anim-fade absolute inset-x-0 bottom-0 rounded-t-3xl bg-surface p-4 pb-8" onClick={(e) => e.stopPropagation()}>
+    <dialog ref={dialog} className="app-mobile-menu glass fixed inset-x-0 top-auto bottom-0 m-0 w-full max-w-none rounded-t-3xl p-0 text-text" aria-label="Все разделы" onCancel={onClose} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="anim-fade p-4 pb-8">
         <div className="mb-3 flex items-center justify-between">
           <Logo />
           <button className="btn btn-ghost size-10 p-0" aria-label="Закрыть" onClick={onClose}>
@@ -194,6 +165,7 @@ function MobileMenu({ path, onClose }: { path: string; onClose: () => void }) {
               key={n.href}
               href={n.href}
               onClick={onClose}
+              aria-current={isActive(path, n.href) ? "page" : undefined}
               className={`flex items-center gap-2 rounded-xl border border-line p-3 text-sm ${isActive(path, n.href) ? "bg-brand-soft text-brand" : ""}`}
             >
               <n.icon size={16} /> {n.label}
@@ -201,20 +173,21 @@ function MobileMenu({ path, onClose }: { path: string; onClose: () => void }) {
           ))}
         </nav>
       </div>
-    </div>
+    </dialog>
   );
 }
 
 function BottomNav({ path, onMore }: { path: string; onMore: () => void }) {
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
+      className="app-bottom-nav glass fixed inset-x-3 bottom-3 z-30 grid grid-cols-5 rounded-[22px] pb-[env(safe-area-inset-bottom)] lg:hidden"
       aria-label="Нижняя навигация"
     >
       {MOBILE_NAV.map((n) => (
         <Link
           key={n.href}
           href={n.href}
+          aria-current={isActive(path, n.href) ? "page" : undefined}
           className={`flex h-16 flex-col items-center justify-center gap-1 text-[11px] ${isActive(path, n.href) ? "text-brand" : "text-muted"}`}
         >
           <n.icon size={20} /> {n.label}
@@ -229,7 +202,6 @@ function BottomNav({ path, onMore }: { path: string; onMore: () => void }) {
 
 export function Shell({ children }: { children: ReactNode }) {
   const path = usePathname();
-  const theme = useTheme();
   const [palette, setPalette] = useState(false);
   const [menu, setMenu] = useState(false);
 
@@ -245,17 +217,15 @@ export function Shell({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <div className="flex min-h-dvh">
+    <div className="app-shell flex min-h-dvh">
+      <Topbar onPalette={() => setPalette(true)} onMenu={() => setMenu(true)} />
       <Sidebar path={path} />
-      <div className="min-w-0 flex-1">
-        <Topbar onPalette={() => setPalette(true)} onMenu={() => setMenu(true)} theme={theme} />
+      <div className="app-workspace">
         <div className="flex items-center justify-center gap-2 bg-warning-bg px-4 py-1.5 text-xs font-semibold text-warning sm:hidden">
           ДЕМО-ДАННЫЕ · {formatPeriod(P7)}
         </div>
-        <Suspense fallback={null}>
-          <Freshness className="border-b border-line bg-bg/80 px-4 py-2 md:px-6" />
-        </Suspense>
-        <main className="mx-auto max-w-[1360px] px-4 pt-6 pb-28 md:px-6 lg:pb-12">{children}</main>
+        <details className="cabinet-freshness"><summary>Данные аудита</summary><Suspense fallback={null}><Freshness className="p-3" /></Suspense></details>
+        <main id="main-content" key={path} className="app-content mx-auto max-w-[1360px] px-4 pt-8 pb-28 md:px-8 lg:pb-12">{children}</main>
       </div>
       <BottomNav path={path} onMore={() => setMenu(true)} />
       {menu && <MobileMenu path={path} onClose={() => setMenu(false)} />}

@@ -1,5 +1,5 @@
-// ponytail: placeholder domain until the real one is bought
-export const SITE_URL = "https://adpilot.ru";
+// ponytail: placeholder domain until the real one is bought; set NEXT_PUBLIC_SITE_URL in prod
+export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://adpilot.ru";
 
 const rubFmt = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 

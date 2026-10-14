@@ -23,7 +23,7 @@ def both(api, rw, ids, name="a1"):
 
 def assert_active(api, rw, ids, rec_ids: list[int], name="a1"):
     today, items = both(api, rw, ids, name)
-    assert today["counts"] == {"active": len(rec_ids)}
+    assert today["counts"] == {"active": len(rec_ids), "beyond_budget": 0}
     assert sorted(i["id"] for i in items) == sorted(i["id"] for i in today["top"]) == sorted(f"rec_{r}" for r in rec_ids)
     return today, items
 
@@ -113,7 +113,7 @@ def test_unknown_action_form_does_not_break_the_list(api, rw, world, caplog):
     assert actions[f"rec_{world['rec_a1']['rec']}"]["type"] == "lower_cpa"
     assert "action outside contract" in caplog.text
     today = api.get(f"/api/v1/workspaces/ws_{world['a1']}/today", headers=cookie(token))
-    assert today.status_code == 200 and today.json()["counts"] == {"active": 2}
+    assert today.status_code == 200 and today.json()["counts"] == {"active": 2, "beyond_budget": 0}
 
 
 def test_card_overlaps_add_up_to_total(api, rw, world):

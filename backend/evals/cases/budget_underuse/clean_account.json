@@ -1,0 +1,263 @@
+{
+  "description": "Потрачено 70% недельного лимита: недоиспользования нет.",
+  "tags": [
+    "clean"
+  ],
+  "rules_version": 2,
+  "flags": [
+    "audit_rules_candidates"
+  ],
+  "settings": {},
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "sources": [
+      "yandex_direct",
+      "direct_conversions",
+      "direct_budgets"
+    ],
+    "conversion_definition": {
+      "goal_ids": [
+        111
+      ],
+      "attribution": "last"
+    },
+    "campaigns": [
+      {
+        "id": 302,
+        "strategy": "manual",
+        "days": [
+          {
+            "date": "2026-08-25",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-08-26",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-08-27",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-08-28",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-08-29",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-08-30",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-08-31",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-01",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-02",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-03",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-04",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-05",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-06",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-07",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-08",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-09",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-10",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-11",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-12",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-13",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-14",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-15",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-16",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-17",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-18",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-19",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-20",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-21",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-22",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-23",
+            "cost": "1000.00",
+            "clicks": 50,
+            "conversions": "1"
+          },
+          {
+            "date": "2026-09-24",
+            "cost": "800.00",
+            "clicks": 60,
+            "conversions": "2"
+          },
+          {
+            "date": "2026-09-25",
+            "cost": "800.00",
+            "clicks": 60,
+            "conversions": "2"
+          },
+          {
+            "date": "2026-09-26",
+            "cost": "800.00",
+            "clicks": 60,
+            "conversions": "2"
+          },
+          {
+            "date": "2026-09-27",
+            "cost": "800.00",
+            "clicks": 60,
+            "conversions": "2"
+          },
+          {
+            "date": "2026-09-28",
+            "cost": "800.00",
+            "clicks": 60,
+            "conversions": "2"
+          },
+          {
+            "date": "2026-09-29",
+            "cost": "800.00",
+            "clicks": 60,
+            "conversions": "2"
+          },
+          {
+            "date": "2026-09-30",
+            "cost": "800.00",
+            "clicks": 60,
+            "conversions": "2"
+          }
+        ]
+      }
+    ],
+    "budgets": [
+      {
+        "campaign_id": 302,
+        "daily_budget": null,
+        "weekly_budget": "8000"
+      }
+    ]
+  },
+  "expected": []
+}

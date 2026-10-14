@@ -1,0 +1,19 @@
+# В контекст сборки — только исходники: без секретов, git, локальных зависимостей и артефактов.
+.git
+.github
+.claude
+.env
+.env.*
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.venv
+backend/tests
+backend/evals
+backend/scripts
+frontend/node_modules
+frontend/.next
+docs
+_docs
+e2e-result
+graphify-out
