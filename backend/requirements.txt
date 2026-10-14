@@ -1,3 +1,6 @@
+# Прямые зависимости. Образ ставит requirements.lock (версии + хэши); после правки этого файла пересоберите его:
+#   uv pip compile requirements.txt --generate-hashes --python-version 3.11 --python-platform linux -o requirements.lock
+# (CI проверяет, что lock соответствует этому файлу; --upgrade — осознанное обновление версий.)
 pydantic>=2
 psycopg[binary,pool]  # pool — пул соединений API (app/api/db.py)
 cryptography>=43  # AES-GCM для OAuth-токенов подключений
