@@ -400,7 +400,9 @@ CREATE TABLE workspace_settings (
   lead_to_sale_rate    numeric(5, 4) CHECK (lead_to_sale_rate > 0 AND lead_to_sale_rate <= 1),
   notify_pct_threshold smallint NOT NULL DEFAULT 10 CHECK (notify_pct_threshold IN (10, 15, 20)),
   attribution_model    text CHECK (attribution_model IN ('cross_device_last_significant', 'last', 'cross_device_first', 'automatic')),
-  updated_at           timestamptz NOT NULL DEFAULT now()
+  updated_at           timestamptz NOT NULL DEFAULT now(),
+  -- target_cpa введён с НДС (расход в снимках — с НДС); false — без НДС, правила @3 сравнивают с target × 1,22
+  target_cpa_includes_vat boolean NOT NULL DEFAULT true
 );
 
 -- ============================================================================
@@ -873,14 +875,17 @@ CREATE TABLE measurements (
 );
 
 -- День выполнения — execution_date события 'done' (его считает приложение в часовом поясе данных).
--- measure@2 (текущая; @1 — только для уже созданных замеров): 7 дней до дня выполнения и 7 дней после; сам день выполнения не входит ни в одно окно.
+-- Окна: 7 дней до дня выполнения и 7 дней после; сам день выполнения не входит ни в одно окно. Методика: high_cpa —
+-- high_cpa_measure@3 («до» методика берёт вне окна срабатывания правила), остальные — '<issue_type>_measure@2';
+-- уже созданные замеры остаются на своей версии.
 CREATE FUNCTION create_measurement_on_done() RETURNS trigger
 LANGUAGE plpgsql AS $$
 DECLARE d date := NEW.execution_date;
 BEGIN
   INSERT INTO measurements (done_event_id, recommendation_id, issue_id, finding_id, policy,
                             before_from, before_to, after_from, after_to)
-  SELECT NEW.id, NEW.recommendation_id, NEW.issue_id, NEW.finding_id, i.issue_type || '_measure@2',
+  SELECT NEW.id, NEW.recommendation_id, NEW.issue_id, NEW.finding_id,
+         i.issue_type || CASE WHEN i.issue_type = 'high_cpa' THEN '_measure@3' ELSE '_measure@2' END,
          d - 7, d - 1, d + 1, d + 7
   FROM issues i
   WHERE i.id = NEW.issue_id;
