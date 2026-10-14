@@ -16,7 +16,8 @@ HASH = "a" * 64
 
 def test_registered_agents_are_chief_judge_and_specialists():
     assert set(AGENTS) == {"evidence_judge", "chief_analyst", "data_quality", "campaign_performance",
-                           "search_queries", "rsya_placements", "anomaly", "budget"}
+                           "search_queries", "rsya_placements", "anomaly", "budget", "goals_attribution",
+                           "root_cause"}
 
 
 def test_spec_fields_match_59_and_116():

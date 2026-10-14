@@ -5,7 +5,8 @@
 (сравнение точное, по значению: «4 820» = 4820.00; округление не допускается — открытый вопрос §6.1); упоминает
 неизвестную ссылку obj_N; похоже на инъекцию или ссылку; причинно («из-за») без HYPOTHESIS и причинного факта;
 число со знаком «%» не из *_pct процитированных фактов или с «п.п.» не из *_pp (unit_mismatch: относительное
-изменение и процентные пункты не взаимозаменяемы).
+изменение и процентные пункты не взаимозаменяемы); упоминает объект obj_N, которого нет среди объектов процитированных
+фактов (object_mismatch: цифра кампании A не подтверждает утверждение о кампании B).
 Отброшено ключевое утверждение, не осталось ни одного или не прошёл summary → весь ответ на шаблон."""
 
 import re
@@ -78,6 +79,9 @@ def _claim_problem(raw: Mapping, packet: Packet, allowed_types: frozenset) -> tu
         return None, problem
     if _unit_problem(claim.text, packet, claim.evidence_ids):
         return None, "unit_mismatch"
+    cited_objects = {f.get("object") for f in packet.payload["facts"] if f["id"] in claim.evidence_ids}
+    if set(OBJECT_REF.findall(claim.text)) - cited_objects:
+        return None, "object_mismatch"
     if _CAUSAL.search(claim.text) and (claim.type is not ClaimType.HYPOTHESIS
                                        or not any(packet.kinds[e] in CAUSAL_KINDS for e in claim.evidence_ids)):
         return None, "causal_without_basis"

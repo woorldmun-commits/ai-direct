@@ -79,3 +79,45 @@ def test_unknown_rule_is_an_error_not_a_silent_drop():
 def test_chief_result_carries_specialist_reports():
     result = chief.run(bundle(finding("e1", "high_cpa_target@2"), rules_run=("high_cpa_target@2",)), CTX, env=ON)
     assert by_id(result.specialists)["campaign_performance"].finding_ids == ("e1",)
+
+
+# --- «Цели и атрибуция» и «Причины изменения CPA» -------------------------------------------------------
+
+@pytest.mark.parametrize("goals, status, missing", [
+    (None, Status.NOT_SUPPORTED, ()),
+    ({"metrika": "missing"}, Status.INSUFFICIENT_DATA, ("metrika_missing",)),
+    ({"metrika": "connected", "selected_goals": 0}, Status.ISSUE_FOUND, ("conversion_definition_missing",)),
+    ({"metrika": "connected", "selected_goals": 2, "source_failure": "goal_not_found"}, Status.ISSUE_FOUND,
+     ("goal_not_found",)),
+    ({"metrika": "connected", "selected_goals": 2}, Status.NO_MATERIAL_ISSUE, ()),
+])
+def test_goals_attribution(goals, status, missing):
+    report = by_id(route(bundle(**({"goals": goals} if goals else {}))))["goals_attribution"]
+    assert (report.status, report.missing) == (status, missing)
+
+
+def periods(fid, before, after):
+    keys = ("cost", "clicks", "conversions")
+    return {"id": fid, "kind": "campaign_periods", "object": "c1",
+            "values": {**{f"before_{k}": Decimal(v) for k, v in zip(keys, before)},
+                       **{f"after_{k}": Decimal(v) for k, v in zip(keys, after)}}}
+
+
+def with_facts(*facts):
+    return EvidenceBundle(facts=facts, findings=(), metrics=(), constraints=(), data_health={"data_sufficiency": "high"},
+                          capabilities={}, period={"from": date(2026, 9, 1)}, source_registry={})
+
+
+def test_root_cause_without_period_facts_is_not_supported():
+    assert by_id(route(with_facts()))["root_cause"].status is Status.NOT_SUPPORTED
+
+
+def test_root_cause_finds_associated_driver():
+    report = by_id(route(with_facts(periods("p1", (500000, 20000, 400), (520000, 20000, 260)))))["root_cause"]
+    assert report.status is Status.ISSUE_FOUND and report.finding_ids == ("p1",)
+    assert report.details[0].driver == "cr"
+
+
+def test_root_cause_on_noise_is_insufficient_not_a_finding():
+    report = by_id(route(with_facts(periods("p1", (10000, 200, 4), (10000, 200, 2)))))["root_cause"]
+    assert report.status is Status.INSUFFICIENT_DATA and report.finding_ids == ()

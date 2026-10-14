@@ -121,3 +121,24 @@ def test_percent_and_percentage_points_are_not_interchangeable(text, ok):
     assert v.accepted is ok
     if not ok:
         assert v.dropped == ((0, "unit_mismatch"),)
+
+
+# --- объект утверждения совпадает с объектом доказательства ----------------------------------------------
+TWO = build_packet(EvidenceBundle(
+    facts=({"id": "e5", "kind": "spend", "object": "c1", "values": {"spend": Decimal("5000.00")}},
+           {"id": "e6", "kind": "spend", "object": "c2", "values": {"spend": Decimal("7000.00")}}),
+    findings=(), metrics=(), constraints=(), data_health={}, capabilities={}, period={"from": date(2026, 9, 1)},
+    source_registry={}))
+
+
+@pytest.mark.parametrize("text, ids, ok", [
+    ("Расход obj_1 — 5 000 ₽", ("e5",), True),
+    ("Расход obj_2 — 5 000 ₽", ("e5",), False),           # цифра кампании c1 приписана c2
+    ("Расход obj_1 и obj_2 — 5 000 и 7 000 ₽", ("e5", "e6"), True),
+    ("Расход obj_1 и obj_2 — 5 000 ₽", ("e5",), False),   # obj_2 не подкреплён ни одним фактом
+])
+def test_object_in_claim_must_be_the_object_of_cited_evidence(text, ids, ok):
+    v = judge(answer(claim(text=text, ids=ids), summary="Расход по кампаниям"), TWO, ALLOWED)
+    assert v.accepted is ok
+    if not ok:
+        assert v.dropped == ((0, "object_mismatch"),)

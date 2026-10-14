@@ -82,6 +82,11 @@ SPECIALISTS = (
                 ("campaign",)),
     _specialist("budget", "Бюджет", "budget", ("budget_underuse",), ("direct_cost", "campaign_budget"),
                 ("campaign",)),
+    # без своих правил: область — исправность целей Метрики (data_health.goals)
+    _specialist("goals_attribution", "Цели и атрибуция", "measurement", (), ("metrika_goals",), ("account",)),
+    # без своих правил: вклад CPC и CR в изменение CPA по фактам campaign_periods (intelligence/root_cause.py)
+    _specialist("root_cause", "Причины изменения CPA", "root_cause", (),
+                ("direct_cost", "direct_clicks", "direct_conversions"), ("campaign",)),
 )
 
 AGENTS = MappingProxyType({a.agent_id: a for a in (

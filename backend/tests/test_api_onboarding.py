@@ -5,7 +5,7 @@ import pytest
 
 from app.api import create_app
 from test_api_support import ORIGIN, client_for, cookie, session, settings, user, world, ws  # noqa: F401
-from test_schema import one
+from test_schema import connected, one
 
 pytestmark = pytest.mark.usefixtures("db")
 PROFILE = {"industry": "services", "business_model": "leads", "site_url": "https://shop.example.test",
@@ -84,7 +84,7 @@ def test_agents_lists_chief_and_specialists_read_only(c, rw, world):
     assert body["mode"] == "recommendations_only" and body["coordinator"]["id"] == "chief_analyst"
     ids = {s["id"]: s for s in body["specialists"]}
     assert set(ids) == {"data_quality", "campaign_performance", "search_queries", "rsya_placements", "anomaly",
-                        "budget"}
+                        "budget", "goals_attribution", "root_cause"}
     assert ids["campaign_performance"]["status"] in ("issue_found", "no_material_issue", "insufficient_data",
                                                      "not_supported")
 
@@ -92,3 +92,21 @@ def test_agents_lists_chief_and_specialists_read_only(c, rw, world):
 def world_account(rw, workspace: int) -> int:
     return one(rw, """SELECT da.id FROM direct_accounts da JOIN direct_connections dc ON dc.id = da.direct_connection_id
                       WHERE dc.workspace_id = %s ORDER BY da.id LIMIT 1""", workspace)
+
+
+def test_agents_goals_attribution_reads_metrika_state(c, rw, world):
+    url, h = f"/api/v1/workspaces/{ws(world, 'a1')}/agents", cookie(session(rw, world["owner"]))
+    goals = {s["id"]: s for s in c.get(url, headers=h).json()["specialists"]}["goals_attribution"]
+    assert (goals["status"], goals["missing_data"]) == ("insufficient_data", ["metrika_missing"])
+    conn_id = connected(rw, "metrika", world["a1"], f"metrika-agents-{world['a1']}")
+    rw.execute("INSERT INTO metrika_counters (metrika_connection_id, counter_id) VALUES (%s, 555)", (conn_id,))
+    goals = {s["id"]: s for s in c.get(url, headers=h).json()["specialists"]}["goals_attribution"]
+    assert (goals["status"], goals["missing_data"]) == ("issue_found", ["conversion_definition_missing"])
+    rw.execute("UPDATE metrika_counters SET is_selected = true, goal_ids = '{7}' WHERE counter_id = 555")
+    goals = {s["id"]: s for s in c.get(url, headers=h).json()["specialists"]}["goals_attribution"]
+    assert goals["status"] == "no_material_issue"
+
+
+def test_agents_root_cause_without_campaign_stats_is_not_supported(c, rw, world):
+    body = c.get(f"/api/v1/workspaces/{ws(world, 'a1')}/agents", headers=cookie(session(rw, world["owner"]))).json()
+    assert {s["id"]: s for s in body["specialists"]}["root_cause"]["status"] == "not_supported"
