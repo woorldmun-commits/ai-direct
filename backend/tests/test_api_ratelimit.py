@@ -65,6 +65,19 @@ def test_limit_per_address_and_window():
     assert one.get("/api/v1/auth/x").status_code == 200  # новое окно
 
 
+def test_clients_behind_trusted_proxy_get_separate_buckets():
+    """Все запросы приходят с адреса прокси (Caddy/Next): без доверия к X-Forwarded-For один клиент
+    исчерпал бы лимит /auth/* за всех."""
+    app = RateLimitMiddleware(ok, trusted=PROXY, limits={"auth": 2, "expensive": 5})
+    proxy = TestClient(app, client=("10.0.0.2", 1))
+
+    def call(ip):
+        return proxy.get("/api/v1/auth/x", headers={"x-forwarded-for": ip}).status_code
+
+    assert [call("203.0.113.1") for _ in range(3)] == [200, 200, 429]
+    assert [call("203.0.113.2") for _ in range(2)] == [200, 200]  # другой клиент за тем же прокси не заблокирован
+
+
 def test_429_through_app_has_request_id_and_security_headers(db):
     app = create_app(settings(db))
     with TestClient(app, base_url="https://testserver", client=("198.51.100.7", 1)) as c:
