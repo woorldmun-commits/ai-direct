@@ -1,7 +1,9 @@
 """Причины изменения CPA кампании (§41–§44 ТЗ): детерминированно, без LLM.
 
-CPA = CPC / CR. Вклад факторов — LMDI (metrics/contribution.py); главный фактор — тот, чья доля в ΔCPA ≥ DOMINANT,
-иначе mixed. Если в изменении участвует CR, его изменение обязано быть статистически достоверным
+CPA = CPC / CR. Изменение CPA меньше MATERIALITY от исходного — не изменение. Вклад факторов — LMDI
+(metrics/contribution.py); главный фактор — тот, чья доля в ΔCPA ≥ DOMINANT, иначе mixed; вклады разных знаков — всегда
+mixed (доля одного фактора тогда может превысить 100% и не означает, что он «главный»). Если в изменении участвует CR,
+его изменение обязано быть статистически достоверным
 (metrics/statistics.py, интервалы Уилсона) — иначе причина «не установлена» и нужно больше данных.
 Причинность не выше ASSOCIATED: «рост CPA связан с падением CR», а не «вызван». Смену структуры трафика (устройства,
 регионы, сети) без срезов проверить нельзя — это всегда в limitations, а не молчаливое «проверено»."""
@@ -17,6 +19,7 @@ from app.intelligence.metrics.statistics import rate_changed
 
 METHOD = f"root_cause@1({SPLIT_METHOD},{STAT_METHOD})"
 DOMINANT = Decimal("0.6")
+MATERIALITY = Decimal("0.05")  # |ΔCPA| / CPA до: меньше — шум, а не изменение
 NEXT_CHECKS = {"cr": ("conversion_goals", "landing_page", "segments"),
                "cpc": ("strategy", "auction", "network_placements"),
                "mixed": ("conversion_goals", "strategy", "segments")}
@@ -41,6 +44,8 @@ class Cause:
 
 
 def _driver(c: Contribution) -> str:
+    if c.cpc * c.cr < 0:
+        return "mixed"
     delta = c.cpa_after - c.cpa_before
     if c.cr / delta >= DOMINANT:
         return "cr"
@@ -54,7 +59,7 @@ def explain(before: Period, after: Period) -> Cause:
     if c is None:
         return Cause(Status.INSUFFICIENT_DATA, None, None, None)
     significant = rate_changed(before.conversions, before.clicks, after.conversions, after.clicks)
-    if c.cpa_after == c.cpa_before:
+    if abs(c.cpa_after - c.cpa_before) < MATERIALITY * c.cpa_before:
         return Cause(Status.NO_MATERIAL_CHANGE, None, c, significant)
     driver = _driver(c)
     if driver != "cpc" and significant is not True:  # CR участвует, но его изменение в пределах шума
