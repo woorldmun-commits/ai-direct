@@ -124,8 +124,8 @@ services:
     <<: *backend
     command: ["python", "-m", "app.worker.main"]
     stop_grace_period: 60s  # SIGTERM: текущая задача дорабатывает, новая не начинается
-    # Синхронизация с Директом в воркер пока не подключена: когда появится — добавить TOKEN_ENCRYPTION_KEY_*
-    # и YANDEX_API_* (как у api), YANDEXGPT_* — когда LLM-шлюз начнёт создаваться из окружения.
+    # Воркер синхронизирует Директ и Метрику (worker/pipeline.py): без YANDEX_API_* и ключей шифрования токенов
+    # не стартует. YANDEXGPT_* — когда LLM-шлюз начнёт создаваться из окружения.
     environment:
       <<: *flags
       WORKER_DATABASE_URL: postgresql://app_token:${APP_TOKEN_PASSWORD:?}@db:5432/ai_direct
@@ -135,6 +135,13 @@ services:
       WORKER_MEASURE_EVERY:
       WORKER_RETENTION_EVERY:
       DIRECT_PLACEMENTS_REPORT:
+      YANDEX_API_CLIENT_ID:
+      YANDEX_API_CLIENT_SECRET:
+      YANDEX_API_REDIRECT_URI:
+      TOKEN_ENCRYPTION_KEY_VERSION:
+      TOKEN_ENCRYPTION_KEY_1:
+      TOKEN_ENCRYPTION_KEY_2:
+      TOKEN_ENCRYPTION_KEY_3:
     depends_on:
       migrate:
         condition: service_completed_successfully

@@ -38,11 +38,15 @@ def _existing(conn: psycopg.Connection, workspace_id: int, task_key: str) -> int
 
 def _settings(conn: psycopg.Connection, workspace_id: int) -> tuple[AuditSettings, dict]:
     """Настройки, которые читают правила, — копией в audit_run: их изменение не «перепишет» старый вывод."""
-    row = conn.execute("""SELECT target_cpa, avg_check, lead_to_sale_rate, notify_pct_threshold, attribution_model
+    row = conn.execute("""SELECT target_cpa, avg_check, lead_to_sale_rate, notify_pct_threshold, attribution_model,
+                                 target_cpa_includes_vat
                           FROM workspace_settings WHERE workspace_id = %s""", (workspace_id,)).fetchone()
-    names = ("target_cpa", "avg_check", "lead_to_sale_rate", "notify_pct_threshold", "attribution_model")
+    names = ("target_cpa", "avg_check", "lead_to_sale_rate", "notify_pct_threshold", "attribution_model",
+             "target_cpa_includes_vat")
     frozen = {n: (str(v) if isinstance(v, Decimal) else v) for n, v in zip(names, row or (None,) * len(names))}
-    return AuditSettings(target_cpa=row[0] if row else None), frozen
+    if row is None:
+        return AuditSettings(), frozen
+    return AuditSettings(target_cpa=row[0], target_cpa_includes_vat=row[5]), frozen
 
 
 def _evaluate(conn: psycopg.Connection, workspace_id: int, inc: Included, settings: AuditSettings,
