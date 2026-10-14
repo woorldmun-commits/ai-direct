@@ -3,7 +3,7 @@
 from decimal import Decimal as D
 
 from app.intelligence.metrics.contribution import Period
-from app.intelligence.root_cause import METHOD, Status, explain
+from app.intelligence.root_cause import MATERIALITY, METHOD, Status, explain
 
 BEFORE = Period(cost=D(500000), clicks=D(20000), conversions=D(400))   # CPC 25, CR 2%, CPA 1250
 
@@ -39,3 +39,17 @@ def test_mixed_when_no_factor_dominates():
 def test_no_change_and_missing_data():
     assert explain(BEFORE, BEFORE).status is Status.NO_MATERIAL_CHANGE
     assert explain(BEFORE, Period(cost=D(100), clicks=D(10), conversions=None)).status is Status.INSUFFICIENT_DATA
+
+
+def test_change_below_materiality_threshold_is_not_a_change():
+    after = Period(cost=D(500400), clicks=D(20000), conversions=D(400))  # CPA 1250 → 1251
+    cause = explain(BEFORE, after)
+    assert cause.status is Status.NO_MATERIAL_CHANGE and cause.driver is None
+    assert MATERIALITY == D("0.05")
+
+
+def test_opposite_contributions_are_mixed_not_a_share_over_100_percent():
+    after = Period(cost=D(400000), clicks=D(20000), conversions=D(200))  # CPC −20%, CR вдвое ниже, CPA 2000
+    cause = explain(BEFORE, after)
+    assert cause.contribution.cpc < 0 < cause.contribution.cr
+    assert cause.driver == "mixed"

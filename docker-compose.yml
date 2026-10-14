@@ -1,5 +1,7 @@
 # Локальный и пилотный запуск: postgres 16 → migrate (один раз) → api, worker, frontend.
 # Секреты — только из .env рядом с этим файлом (в .gitignore; образец переменных — в шапке ниже), в образах их нет.
+# .env целиком в контейнеры не передаётся: каждый сервис получает только свои переменные (environment ниже).
+# Запись без значения (`NAME:`) берёт значение из .env/окружения, а если его нет — переменная в контейнере не задана.
 #   docker compose up --build
 # Обязательные переменные .env:
 #   POSTGRES_PASSWORD, APP_MIGRATOR_PASSWORD, APP_RW_PASSWORD, APP_TOKEN_PASSWORD, APP_SYSTEM_PASSWORD,
@@ -16,9 +18,33 @@ x-backend: &backend
       RELEASE_BUILD_ID: ${RELEASE_BUILD_ID:-compose}
   image: adpilot-backend:${RELEASE_BUILD_ID:-compose}
   restart: unless-stopped
-  env_file:
-    - path: .env
-      required: false
+
+# Флаги функций (app/flags.py) — не секреты; нужны и api, и worker.
+x-flags: &flags
+  INTELLIGENCE_V2:
+  SOURCE_OF_TRUTH_V2:
+  EVIDENCE_BUNDLE_V2:
+  SAFETY_ENGINE_V2:
+  CAPABILITY_REGISTRY_V2:
+  CHIEF_ANALYST:
+  SEARCH_INTELLIGENCE:
+  RSYA_INTELLIGENCE:
+  ROOT_CAUSE:
+  OPPORTUNITY_ENGINE:
+  CREATIVE_INTELLIGENCE:
+  LLM_ENABLED:
+  AUDIT_RULES_CANDIDATES:
+  SMS_LOGIN:
+  LOG_LEVEL:
+
+# Внутренняя сеть с фиксированной подсетью: только от адресов из неё API принимает X-Forwarded-For
+# (лимит частоты по адресу клиента, app/api/ratelimit.py). Сюда же попадает шлюз сети — через него приходят
+# соединения на опубликованный 127.0.0.1:8000 (Caddy на хосте). Подсеть занята — задайте APP_NET_SUBNET.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${APP_NET_SUBNET:-172.31.250.0/24}
 
 services:
   db:
@@ -54,10 +80,35 @@ services:
   api:
     <<: *backend
     environment:
+      <<: *flags
       API_DATABASE_URL: postgresql://app_rw:${APP_RW_PASSWORD:?}@db:5432/ai_direct
       API_ALLOWED_ORIGINS: ${API_ALLOWED_ORIGINS:-http://localhost:3000}
+      API_TRUSTED_PROXIES: ${APP_NET_SUBNET:-172.31.250.0/24}
+      API_ENV:
+      API_HSTS:
+      API_APP_URL:
+      API_MAX_BODY_BYTES:
+      API_SESSION_COOKIE:
+      API_POOL_MIN:
+      API_POOL_MAX:
+      # Остаточный риск: /ops/health (app/api/ops.py) ходит системной ролью без RLS — её пароль есть в api.
       OPS_DATABASE_URL: postgresql://app_system:${APP_SYSTEM_PASSWORD:?}@db:5432/ai_direct
       OPS_TOKEN: ${OPS_TOKEN:?}
+      OPS_SYNC_STALE_HOURS:
+      YANDEX_LOGIN_CLIENT_ID:
+      YANDEX_LOGIN_CLIENT_SECRET:
+      YANDEX_LOGIN_REDIRECT_URI:
+      YANDEX_API_CLIENT_ID:
+      YANDEX_API_CLIENT_SECRET:
+      YANDEX_API_REDIRECT_URI:
+      # Шифрование OAuth-токенов подключений (app/auth/tokens.py): текущая версия + ключи на время ротации.
+      TOKEN_ENCRYPTION_KEY_VERSION:
+      TOKEN_ENCRYPTION_KEY_1:
+      TOKEN_ENCRYPTION_KEY_2:
+      TOKEN_ENCRYPTION_KEY_3:
+      PHONE_AUTH_ENABLED:
+      PHONE_AUTH_HMAC_KEY:
+      PHONE_AUTH_DAILY_SEND_CAP:
     ports:
       - "127.0.0.1:8000:8000"
     healthcheck:
@@ -73,10 +124,24 @@ services:
     <<: *backend
     command: ["python", "-m", "app.worker.main"]
     stop_grace_period: 60s  # SIGTERM: текущая задача дорабатывает, новая не начинается
+    # Воркер синхронизирует Директ и Метрику (worker/pipeline.py): без YANDEX_API_* и ключей шифрования токенов
+    # не стартует. YANDEXGPT_* — когда LLM-шлюз начнёт создаваться из окружения.
     environment:
+      <<: *flags
       WORKER_DATABASE_URL: postgresql://app_token:${APP_TOKEN_PASSWORD:?}@db:5432/ai_direct
       WORKER_SYSTEM_DATABASE_URL: postgresql://app_system:${APP_SYSTEM_PASSWORD:?}@db:5432/ai_direct
       WORKER_DELETER_DATABASE_URL: postgresql://app_deleter:${APP_DELETER_PASSWORD:?}@db:5432/ai_direct
+      WORKER_NOTIFY_EVERY:
+      WORKER_MEASURE_EVERY:
+      WORKER_RETENTION_EVERY:
+      DIRECT_PLACEMENTS_REPORT:
+      YANDEX_API_CLIENT_ID:
+      YANDEX_API_CLIENT_SECRET:
+      YANDEX_API_REDIRECT_URI:
+      TOKEN_ENCRYPTION_KEY_VERSION:
+      TOKEN_ENCRYPTION_KEY_1:
+      TOKEN_ENCRYPTION_KEY_2:
+      TOKEN_ENCRYPTION_KEY_3:
     depends_on:
       migrate:
         condition: service_completed_successfully

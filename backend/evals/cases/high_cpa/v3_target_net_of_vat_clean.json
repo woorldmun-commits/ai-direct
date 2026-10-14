@@ -1,0 +1,41 @@
+{
+  "description": "@3: target_cpa 1 000 ₽ введён без НДС, расход с НДС: CPA 1 220 ₽ = target × 1,22 — ровно на цели, вывода нет (без поправки на НДС был бы «CPA выше цели на 22%»).",
+  "tags": [
+    "clean",
+    "boundary"
+  ],
+  "rules_version": 3,
+  "settings": {
+    "target_cpa": "1000",
+    "target_cpa_includes_vat": false
+  },
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "sources": [
+      "yandex_direct",
+      "direct_conversions"
+    ],
+    "campaigns": [
+      {
+        "id": 101,
+        "strategy": "manual",
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "488000",
+            "clicks": 9000,
+            "conversions": "400"
+          }
+        ]
+      }
+    ],
+    "conversion_definition": {
+      "goal_ids": [
+        111,
+        222
+      ],
+      "attribution": "last"
+    }
+  },
+  "expected": []
+}

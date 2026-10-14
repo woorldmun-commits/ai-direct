@@ -110,3 +110,26 @@ def test_agents_goals_attribution_reads_metrika_state(c, rw, world):
 def test_agents_root_cause_without_campaign_stats_is_not_supported(c, rw, world):
     body = c.get(f"/api/v1/workspaces/{ws(world, 'a1')}/agents", headers=cookie(session(rw, world["owner"]))).json()
     assert {s["id"]: s for s in body["specialists"]}["root_cause"]["status"] == "not_supported"
+
+
+def test_profile_without_target_cpa_keeps_settings(c, rw, world):
+    """target_cpa не прислан — настройка аудита не стирается в NULL; прислан null — сбрасывается явно."""
+    h = auth(session(rw, world["owner"]))
+    url = f"/api/v1/workspaces/{ws(world, 'a1')}/business-profile"
+    assert c.put(url, json=PROFILE, headers=h).status_code == 200
+    without = {k: v for k, v in PROFILE.items() if k != "target_cpa"}
+    assert c.put(url, json=without, headers=h).status_code == 200
+    assert str(one(rw, "SELECT target_cpa FROM workspace_settings WHERE workspace_id = %s", world["a1"])) == "2500.00"
+    assert c.put(url, json={**PROFILE, "target_cpa": None}, headers=h).status_code == 200
+    assert one(rw, "SELECT target_cpa FROM workspace_settings WHERE workspace_id = %s", world["a1"]) is None
+
+
+def test_personal_workspace_after_deletion_starts_again(c, rw):
+    """Личный workspace в удалении не возвращает 410 навсегда: пользователь начинает с нового."""
+    token = session(rw, user(rw))
+    first = c.post("/api/v1/workspaces", json={"name": "Старый"}, headers=auth(token)).json()["id"]
+    rw.execute("UPDATE workspaces SET status = 'deletion_pending', deactivated_at = now() WHERE id = %s",
+               (int(first.removeprefix("ws_")),))
+    again = c.post("/api/v1/workspaces", json={"name": "Новый"}, headers=auth(token))
+    assert again.status_code == 201
+    assert again.json()["id"] != first and again.json()["name"] == "Новый"

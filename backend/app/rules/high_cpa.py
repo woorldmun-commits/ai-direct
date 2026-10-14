@@ -10,7 +10,14 @@ high_cpa_baseline@1 — target_cpa не задан → сравнение с bas
 в evidence_meta — цели и атрибуция снимка, без них (conversion_definition нет) правило не вычисляется. Конверсии дней
 досчёта (date ≥ partial_from) — не финальные: если без них вывод не держится (по завершённым дням CPA не выше порога
 срабатывания), достаточность данных не выше medium и level_reason = conversions_partial — как в zero_conv_*. Неизвестные
-конверсии (None) за день окна — SOURCE_MISSING, а не ноль."""
+конверсии (None) за день окна — SOURCE_MISSING, а не ноль.
+
+@3 — статистический порог вместо «CPA выше ориентира на 10%»: при 20 конверсиях в неделю кампания ровно на цели
+получала «снизить ставку» в ~38% недель (шум Пуассона ±22%). Теперь вывод — только если и нижняя граница CPA выше
+ориентира × trigger_margin: cost / upper90(conversions) > reference × 1,1, где upper90 — односторонняя 90% верхняя
+граница среднего Пуассона (rules/poisson.py). Доля ложных выводов на кампании «ровно на цели» ≤ 5% при λ = 10…30
+(tests/test_high_cpa_v3.py). Достаточность: high от 30 конверсий, medium от 10. target_cpa — на базе расхода (с НДС,
+AuditSettings.target_cpa_gross; vat_basis в evidence_meta). lost = cost − ориентир × конверсии — без округлённого CPA."""
 
 from datetime import date
 from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
@@ -19,7 +26,8 @@ from dataclasses import replace
 
 from app.rules.domain import (DIRECT_CONVERSIONS, FORMULA, AuditSettings, CampaignDay, Fact, Finding, NotEnoughData,
                               Output, Reason, Rule, SnapshotView, Window, frozen, issue_key, windows)
-from app.rules.evidence import PARTIAL, definition_meta, definition_missing, labels, user_input
+from app.rules.evidence import PARTIAL, definition_meta, definition_missing, labels, target_reference, user_input
+from app.rules.poisson import Z90, upper
 
 FAMILY = "high_cpa"
 CPA_FORMULA = "period_total_spend / period_total_conversions"
@@ -46,10 +54,27 @@ def _quality_v2(rule: Rule, snap: SnapshotView, days: list[CampaignDay], evaluat
                                 evaluation)
     p = rule.params
     quality = _current_data_quality(done_conv, p)
-    solid = done_conv > 0 and delta_pct(done_cost / done_conv, reference) >= p["trigger_delta_pct"]
+    solid = _triggered(rule, done_cost, done_conv, reference)
     if not solid and quality == "high":
         quality = "medium"
     return quality, not solid or quality != _current_data_quality(conv, p)
+
+
+def _triggered(rule: Rule, cost: Decimal, conv: Decimal, reference: Decimal) -> bool:
+    """Срабатывает ли правило. @1–@2: точный CPA выше ориентира на trigger_delta_pct. @3: нижняя граница CPA
+    (cost / верхняя граница конверсий) выше ориентира × trigger_margin — превышение не объясняется шумом Пуассона."""
+    if conv <= 0:
+        return False
+    p = rule.params
+    if rule.version < 3:
+        return delta_pct(cost / conv, reference) >= p["trigger_delta_pct"]
+    return cost / upper(conv, p["trigger_z"]) > reference * p["trigger_margin"]
+
+
+def _lost(rule: Rule, cost: Decimal, conv: Decimal, cpa: Decimal, reference: Decimal) -> Decimal:
+    """@3: cost − ориентир × конверсии (точно). @1–@2 — от округлённого CPA, как были записаны их выводы."""
+    raw = cost - reference * conv if rule.version >= 3 else (cpa - reference) * conv
+    return raw.quantize(CENT, ROUND_HALF_UP)
 
 
 def _current_data_quality(conversions: Decimal, p) -> str:
@@ -85,6 +110,8 @@ def _reference(rule: Rule, snap: SnapshotView, settings: AuditSettings, days, ev
                baseline: Window, account_history_from: date) -> tuple[Decimal, dict, dict] | Reason:
     """Ориентир сравнения: (значение, доказательства, meta) или причина, почему его нет."""
     if rule.params["mode"] == "target":
+        if rule.version >= 3:
+            return target_reference(settings, evaluation)
         return settings.target_cpa, {"target_cpa": Fact(settings.target_cpa, "rub", "user_input", evaluation)}, {}
     # «Новый аккаунт» (PRD §4.1) — по первому дню с данными во всём аккаунте, а не в кампании: дни без показов
     # Директ не отдаёт, и кампания на паузе в начале окна иначе выглядела бы новой.
@@ -125,7 +152,7 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings,
 
     cpa = (cost / conv).quantize(CENT, ROUND_HALF_UP)  # для показа и доказательств
     delta = delta_pct(cost / conv, reference)           # пороги — по точному CPA, не по округлённому
-    if delta < p["trigger_delta_pct"]:
+    if not _triggered(rule, cost, conv, reference):
         return None
 
     conv_label, cpa_label = labels(rule)
@@ -138,8 +165,8 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings,
         **ref_evidence,
     }
     source = user_input(cpa_label) if mode == "target" else cpa_label
-    lost = Fact(((cpa - reference) * conv).quantize(CENT, ROUND_HALF_UP), "rub", source, evaluation,
-                "estimated", f"(cpa - {mode}_cpa) * conversions")
+    formula = f"cost - {mode}_cpa * conversions" if rule.version >= 3 else f"(cpa - {mode}_cpa) * conversions"
+    lost = Fact(_lost(rule, cost, conv, cpa, reference), "rub", source, evaluation, "estimated", formula)
     if mode == "target":
         action = {"type": "decrease_bid", "change_pct": bid_change(delta, p)}
     else:
@@ -195,3 +222,15 @@ HIGH_CPA_BASELINE = Rule(
 # @2 — те же пороги, другие метки источника, доказательства и досчёт (см. docstring модуля); @1 остаются для старых выводов.
 HIGH_CPA_TARGET_V2 = replace(HIGH_CPA_TARGET, version=2)
 HIGH_CPA_BASELINE_V2 = replace(HIGH_CPA_BASELINE, version=2)
+
+# @3 — статистический порог и НДС (см. docstring модуля). Пороги — предложение до проверки на живых кабинетах.
+_V3 = {
+    # Нижняя граница CPA выше ориентира на 10%: при 90% односторонней границе ложный вывод «ровно на цели» ≤ 5%.
+    "trigger_margin": Decimal("1.1"), "trigger_z": Z90,
+    # ≥ 30 конверсий → high (относительная ошибка CPA ≈ 1/√30 ≈ 18%), ≥ 10 → medium, меньше → low (inspect_only).
+    "current_high_conversions": 30, "current_medium_conversions": 10,
+}
+HIGH_CPA_TARGET_V3 = replace(HIGH_CPA_TARGET, version=3, params=frozen(
+    {k: v for k, v in {**HIGH_CPA_TARGET.params, **_V3}.items() if k != "trigger_delta_pct"}))
+HIGH_CPA_BASELINE_V3 = replace(HIGH_CPA_BASELINE, version=3, params=frozen(
+    {k: v for k, v in {**HIGH_CPA_BASELINE.params, **_V3}.items() if k != "trigger_delta_pct"}))

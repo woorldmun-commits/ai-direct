@@ -2,8 +2,10 @@
 не пересчитываются), @2 берёт источник конверсий и CPA из реестра метрик и кладёт в evidence_meta цели и атрибуцию.
 Чистый модуль, как остальной rules/."""
 
+from decimal import Decimal
+
 from app.intelligence.metrics.definitions import DEFINITIONS, VERSION, source_of_truth
-from app.rules.domain import NotEnoughData, Reason, Rule, SnapshotView
+from app.rules.domain import VAT_RATE, AuditSettings, Fact, NotEnoughData, Reason, Rule, SnapshotView, Window
 
 LEGACY_LABELS = ("yandex_metrika", "yandex_direct+yandex_metrika")  # (конверсии, CPA) у @1
 PARTIAL_REASON = "conversions_partial"  # evidence_meta.level_reason и причина понижения в safety_policy@2
@@ -42,3 +44,23 @@ def definition_missing(rule: Rule, snap: SnapshotView) -> tuple[NotEnoughData, .
     if not _legacy(rule) and snap.conversion_definition is None:
         return (NotEnoughData(rule.rule_version, Reason.SOURCE_MISSING),)
     return None
+
+
+VAT_FORMULA = "target_cpa * (1 + vat_rate)"
+
+
+def target_reference(settings: AuditSettings, period: Window, key: str = "target_cpa") -> tuple[Decimal, dict, dict]:
+    """Целевой CPA на базе расхода (с НДС) для правил @3: (ориентир, доказательства, meta). Введён без НДС — в
+    доказательствах и исходное число (user_input), и пересчитанное с НДС (estimated); vat_basis — всегда."""
+    gross = settings.target_cpa_gross()
+    facts = {key: Fact(settings.target_cpa, "rub", "user_input", period)}
+    if not settings.target_cpa_includes_vat:
+        facts[f"{key}_with_vat"] = Fact(gross, "rub", "user_input", period, "estimated", VAT_FORMULA)
+    return gross, facts, vat_meta(settings)
+
+
+def vat_meta(settings: AuditSettings) -> dict[str, str]:
+    """На какой базе НДС введён target_cpa (evidence_meta.vat_basis)."""
+    if settings.target_cpa_includes_vat:
+        return {"vat_basis": "target_includes_vat"}
+    return {"vat_basis": "target_net_converted", "vat_rate": str(VAT_RATE)}

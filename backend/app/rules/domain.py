@@ -7,7 +7,7 @@
 import hashlib
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from enum import Enum
 from types import MappingProxyType
 from typing import Callable, Literal, Mapping
@@ -34,6 +34,10 @@ DIRECT_QUERIES = "direct_queries"
 # «В снимке есть бюджеты кампаний» (Campaigns.get: дневной бюджет или недельный лимит автостратегии). Пока синхронизация
 # их не читает — правило недоиспользования бюджета не вычисляется (SOURCE_MISSING), а не гадает.
 DIRECT_BUDGETS = "direct_budgets"
+
+# НДС в РФ с 01.01.2026 — 22% (НК РФ ст. 164 п. 3 в ред. 2025 г.). Одна константа: при смене ставки — новая версия
+# правил, которые её используют (выводы с прежней базой не пересчитываются).
+VAT_RATE = Decimal("0.22")
 
 BID_OR_BUDGET_ACTIONS = frozenset({"decrease_bid", "increase_bid", "change_budget", "pause"})
 
@@ -108,10 +112,19 @@ class SnapshotView:
 class AuditSettings:
     """Замороженная копия настроек workspace на момент аудита (audit_runs.settings)."""
     target_cpa: Decimal | None = None
+    # Введён ли target_cpa с НДС (workspace_settings.target_cpa_includes_vat). Расход в снимке — с НДС (реестр метрик,
+    # cost.vat = included); по умолчанию True — как до появления флага: целевой CPA сравнивается с расходом как есть.
+    target_cpa_includes_vat: bool = True
 
     def __post_init__(self):
         if self.target_cpa is not None and self.target_cpa <= 0:  # то же, что CHECK в workspace_settings
             raise ValueError("target_cpa > 0")
+
+    def target_cpa_gross(self) -> Decimal | None:
+        """target_cpa на той же базе, что расход (с НДС): без НДС → × (1 + VAT_RATE), до копеек."""
+        if self.target_cpa is None or self.target_cpa_includes_vat:
+            return self.target_cpa
+        return (self.target_cpa * (1 + VAT_RATE)).quantize(Decimal("0.01"), ROUND_HALF_UP)
 
 
 @dataclass(frozen=True)

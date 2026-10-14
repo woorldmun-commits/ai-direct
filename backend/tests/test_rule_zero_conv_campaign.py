@@ -56,7 +56,8 @@ def only(result):
 
 def test_registered_once():
     assert [r.rule_version for r in RULES if r.family == "zero_conv_campaign"] == ["zero_conv_campaign@2"]
-    assert [r.rule_version for r in ALL_RULES if r.family == "zero_conv_campaign"] == [RULE, "zero_conv_campaign@2"]
+    assert [r.rule_version for r in ALL_RULES if r.family == "zero_conv_campaign"] == [RULE, "zero_conv_campaign@2",
+                                                                                    "zero_conv_campaign@3"]
 
 
 def test_v1_params_are_fixed():

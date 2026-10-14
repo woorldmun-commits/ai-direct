@@ -4,10 +4,8 @@ import pytest
 
 from app import flags
 
-ON = ("intelligence_v2", "source_of_truth_v2", "evidence_bundle_v2", "safety_engine_v2", "capability_registry_v2")
-OFF = ("chief_analyst", "search_intelligence", "rsya_intelligence", "root_cause", "opportunity_engine",
-       "creative_intelligence", "llm_enabled", "audit_rules_candidates",
-       "sms_login")
+ON = ("source_of_truth_v2", "safety_engine_v2")
+OFF = ("chief_analyst", "root_cause", "llm_enabled", "audit_rules_candidates", "audit_rules_v3", "sms_login")
 
 
 def test_defaults_follow_owner_decisions():
@@ -18,7 +16,7 @@ def test_defaults_follow_owner_decisions():
 @pytest.mark.parametrize("raw, want", [("0", False), ("false", False), (" OFF ", False), ("no", False),
                                        ("1", True), ("true", True), (" On ", True), ("yes", True)])
 def test_env_overrides_default_both_ways(raw, want):
-    assert flags.flag("intelligence_v2", {"INTELLIGENCE_V2": raw}) is want
+    assert flags.flag("source_of_truth_v2", {"SOURCE_OF_TRUTH_V2": raw}) is want
     assert flags.flag("llm_enabled", {"LLM_ENABLED": raw}) is want
 
 

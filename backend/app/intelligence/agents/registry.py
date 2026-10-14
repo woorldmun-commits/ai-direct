@@ -59,7 +59,8 @@ _NO_WRITE = dict(workspace_scope="current_workspace", write_scope=(), version="1
                  optional_data=(), object_scope=("campaign",), data_scope=("aggregates",),
                  read_scope=("evidence_bundle",))
 
-_SPECIALIST = dict(_NO_WRITE, model_policy="deterministic", allowed_claim_types=frozenset(),
+# Специалисты работают только внутри Chief Analyst: своего флага у них нет, включаются вместе с ним.
+_SPECIALIST = dict(_NO_WRITE, flag_name="chief_analyst", model_policy="deterministic", allowed_claim_types=frozenset(),
                    allowed_actions=frozenset({ActionType.INSPECT, ActionType.MONITOR, ActionType.INVESTIGATE,
                                               ActionType.DO_NOTHING}))
 

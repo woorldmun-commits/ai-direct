@@ -103,6 +103,19 @@ def test_settings_from_env():
     assert "app_rw@db" not in repr(s)  # строка подключения (с паролем) не попадает в repr и логи
 
 
+@pytest.mark.parametrize("api_env, api_hsts, expected", [
+    ("production", None, True),    # в production HSTS включён по умолчанию
+    ("production", "0", False),    # явное выключение (например, API за http-балансировщиком)
+    ("", None, False),
+    ("", "1", True),
+])
+def test_hsts_default_follows_production(api_env, api_hsts, expected):
+    env = {"API_DATABASE_URL": "postgresql://x", "API_ALLOWED_ORIGINS": "https://app.example.test", "API_ENV": api_env}
+    if api_hsts is not None:
+        env["API_HSTS"] = api_hsts
+    assert Settings.from_env(env).hsts is expected
+
+
 @pytest.mark.parametrize("env", [
     {"API_ALLOWED_ORIGINS": "https://app.example.test"},                                    # нет БД
     {"API_DATABASE_URL": "postgresql://x"},                                                 # нет allowlist

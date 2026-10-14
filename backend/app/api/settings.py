@@ -39,7 +39,7 @@ def _flag(value: str | None) -> bool:
 class Settings:
     database_url: str = field(repr=False)  # может содержать пароль — не в repr и не в логах
     allowed_origins: frozenset[str]
-    hsts: bool = False
+    hsts: bool = False  # API_HSTS; не задан — включён в production (явное «0» выключает)
     max_body_bytes: int = DEFAULT_MAX_BODY
     session_cookie: str = SESSION_COOKIE
     pool_min_size: int = 1
@@ -63,15 +63,17 @@ class Settings:
     @classmethod
     def from_env(cls, env: Mapping[str, str] = os.environ) -> "Settings":
         origins = frozenset(o.strip() for o in env.get("API_ALLOWED_ORIGINS", "").split(",") if o.strip())
+        production = env.get("API_ENV", "").strip().lower() == "production"
+        hsts = env.get("API_HSTS", "").strip()
         return cls(
             database_url=env.get("API_DATABASE_URL", ""),
             allowed_origins=origins,
-            hsts=_flag(env.get("API_HSTS")),
+            hsts=_flag(hsts) if hsts else production,
             max_body_bytes=int(env.get("API_MAX_BODY_BYTES", DEFAULT_MAX_BODY)),
             session_cookie=env.get("API_SESSION_COOKIE", SESSION_COOKIE),
             pool_min_size=int(env.get("API_POOL_MIN", 1)),
             pool_max_size=int(env.get("API_POOL_MAX", 10)),
-            production=env.get("API_ENV", "").strip().lower() == "production",
+            production=production,
             trusted_proxies=_networks(env.get("API_TRUSTED_PROXIES", "")),
             app_url=env.get("API_APP_URL", "").rstrip("/"),
         )

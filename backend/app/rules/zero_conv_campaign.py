@@ -37,14 +37,19 @@ recoverable = unavailable: действие — «проверить», обос
 поэтому «Можно сэкономить» не копирует lost и не завышается.
 
 @2 (те же пороги): источник конверсий и CPA — yandex_direct из реестра метрик (а не Метрика); в evidence_meta — цели и
-атрибуция снимка, без определения конверсии (conversion_definition) правило не вычисляется (SOURCE_MISSING)."""
+атрибуция снимка, без определения конверсии (conversion_definition) правило не вычисляется (SOURCE_MISSING).
+
+@3 (те же пороги): в абсолютном режиме (CPA-ориентира нет) достаточность данных — low, а lost — unavailable
+(volume_insufficient; расход — в evidence.cost): 5 000 ₽ без конверсий за неделю для дорогой ниши — норма, поэтому
+вывод — только «проверить» и в итог «Расход с признаками неэффективности» (audit/exposure.py) не входит. target_cpa —
+на базе расхода (с НДС; vat_basis в evidence_meta, evidence/target_reference)."""
 
 from dataclasses import replace
 from decimal import ROUND_HALF_UP, Decimal
 
 from app.rules.domain import (DIRECT_CONVERSIONS, SPEND_CAMPAIGN, AuditSettings, CampaignDay, Fact, Finding,
                               NotEnoughData, Output, Reason, Rule, SnapshotView, Window, frozen, issue_key, windows)
-from app.rules.evidence import PARTIAL, definition_meta, definition_missing, labels
+from app.rules.evidence import PARTIAL, definition_meta, definition_missing, labels, target_reference, vat_meta
 
 FAMILY = "zero_conv_campaign"
 CPA_FORMULA = "period_total_spend / period_total_conversions"
@@ -79,6 +84,9 @@ def _reference(rule: Rule, snap: SnapshotView, settings: AuditSettings, days: li
                evaluation: Window) -> tuple[str, str, Decimal | None, dict]:
     """(reference_type, reference_source, CPA-ориентир или None, доказательства ориентира)."""
     p = rule.params
+    if settings.target_cpa is not None and rule.version >= 3:
+        reference, facts, _ = target_reference(settings, evaluation)
+        return "target", "target_cpa", reference, facts
     if settings.target_cpa is not None:
         return "target", "target_cpa", settings.target_cpa, {
             "target_cpa": Fact(settings.target_cpa, "rub", "user_input", evaluation)}
@@ -90,6 +98,24 @@ def _reference(rule: Rule, snap: SnapshotView, settings: AuditSettings, days: li
         if found := _baseline_cpa(list(snap.campaign_days), baseline, "account_baseline", p, labels(rule)):
             return "baseline", "account_baseline", *found
     return "absolute", "absolute_minimum", None, {}
+
+
+def _absolute_low(rule: Rule, ref_cpa: Decimal | None) -> bool:
+    """@3: без CPA-ориентира ожидаемое число конверсий неизвестно — достаточность low (политика → inspect_only)."""
+    return rule.version >= 3 and ref_cpa is None
+
+
+def _lost(rule: Rule, cost: Decimal, ref_cpa: Decimal | None, source: str, evaluation: Window) -> Fact:
+    """Расход за окно; @3 в абсолютном режиме — unavailable: не доказано, что он неэффективен, и в итог не входит."""
+    if _absolute_low(rule, ref_cpa):
+        return Fact.unavailable("rub", source, evaluation, LOST_FORMULA, reason="volume_insufficient")
+    return Fact(cost.quantize(CENT, ROUND_HALF_UP), "rub", source, evaluation, "estimated", LOST_FORMULA)
+
+
+def _vat_meta(rule: Rule, settings: AuditSettings) -> dict:
+    if rule.version < 3 or settings.target_cpa is None:
+        return {}
+    return vat_meta(settings)
 
 
 def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings, campaign_id: int,
@@ -124,7 +150,7 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings, 
     if ref_cpa is not None:
         source = "user_input" if ref_type == "target" else cpa_label
         evidence["spend_threshold"] = Fact(threshold, "rub", source, evaluation, "estimated", THRESHOLD_FORMULA)
-    lost = Fact(cost.quantize(CENT, ROUND_HALF_UP), "rub", cpa_label, evaluation, "estimated", LOST_FORMULA)
+    lost = _lost(rule, cost, ref_cpa, cpa_label, evaluation)
     action = {"type": "investigate_zero_conversions", "check": CHECKS}
     if ref_type != "target":
         action["suggest"] = "set_target_cpa"
@@ -135,10 +161,10 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings, 
         reason_code="zero_conversions", metric="cost", actual=cost, reference=threshold, reference_type=ref_type,
         delta_pct=((cost - threshold) / threshold * 100).quantize(Decimal("0.1"), ROUND_HALF_UP),
         lost=lost, recoverable=Fact.unavailable("rub", cpa_label, evaluation, reason="no_forecast"),
-        current_data_quality="high" if high else "medium",
+        current_data_quality="high" if high else "low" if _absolute_low(rule, ref_cpa) else "medium",
         evidence=frozen(evidence), action=frozen(action),
         evidence_meta=frozen({"reference_source": ref_source, **definition_meta(rule, snap),
-                              **({} if solid else PARTIAL)}),
+                              **_vat_meta(rule, settings), **({} if solid else PARTIAL)}),
         exposure_basis=SPEND_CAMPAIGN,
     )
 
@@ -163,3 +189,6 @@ ZERO_CONV_CAMPAIGN = Rule(
 
 # @2 — те же пороги, другие метки источника и доказательства; @1 остаётся для старых выводов.
 ZERO_CONV_CAMPAIGN_V2 = replace(ZERO_CONV_CAMPAIGN, version=2)
+
+# @3 — те же пороги; абсолютный режим — low и lost unavailable, target_cpa с НДС (см. docstring модуля).
+ZERO_CONV_CAMPAIGN_V3 = replace(ZERO_CONV_CAMPAIGN, version=3)
