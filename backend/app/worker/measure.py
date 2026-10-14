@@ -208,6 +208,10 @@ def _input(m: _M, view: SnapshotView) -> MeasureInput:
     if kind == "zero_conv_campaign":
         ref = next((m.evidence[k]["amount"] for k in REFERENCE_KEYS if (m.evidence.get(k) or {}).get("amount")), None)
         return MeasureInput(data.campaign_days, reference_cpa=None if ref is None else Decimal(ref))
+    if kind == "high_cpa" and (cost := m.evidence.get("cost") or {}).get("period_from"):
+        # окно, в котором сработал вывод (evidence.cost — его окно оценки): «до» @3 берётся вне него
+        trigger = Window(date.fromisoformat(cost["period_from"]), date.fromisoformat(cost["period_to"]))
+        return MeasureInput(data.campaign_days, trigger_window=trigger)
     return data
 
 

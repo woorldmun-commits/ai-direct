@@ -267,7 +267,7 @@
       "exposure": "7000.00"
     },
     {
-      "rule_version": "anomaly@1",
+      "rule_version": "anomaly@2",
       "object_type": "campaign",
       "object_id": 206,
       "candidate_level": "inspect_only",

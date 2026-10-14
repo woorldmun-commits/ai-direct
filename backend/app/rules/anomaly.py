@@ -22,9 +22,13 @@ investigate_cpa_growth (уровень inspect_only и форма «провер
 
 Недостаточно данных: история снимка короче окна + базы → BASELINE_HISTORY_INSUFFICIENT на весь кабинет; у кампании
 с расходом ≥ min_excess_rub в окне база меньше min_active_days дней с расходом → BASELINE_DATA_INSUFFICIENT;
-конверсии неизвестны (None) в базе или окне → SOURCE_MISSING."""
+конверсии неизвестны (None) в базе или окне → SOURCE_MISSING.
 
-from dataclasses import dataclass
+anomaly@2 (те же пороги): средний дневной расход и конверсии базы — на дни базы с расходом (Base.active_days), а не
+на все 30: кампания, запущенная 15 дней назад с 10 000 ₽/день, иначе «ожидала» 35 000 ₽ в неделю и обычная неделя
+70 000 ₽ выглядела ростом в 2 раза. Пауза внутри базы при этом не занижает «норму»."""
+
+from dataclasses import dataclass, replace
 from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -83,6 +87,15 @@ def _complete(snap: SnapshotView, evaluation: Window) -> Window | None:
     return Window(evaluation.date_from, min(snap.partial_from - timedelta(1), evaluation.date_to))
 
 
+def _per_day(rule: Rule, base: Base) -> Decimal:
+    """Делитель базы на день: @1 — все 30 дней, @2 — дни с расходом (≥ min_active_days > 0, иначе вывода нет)."""
+    return Decimal(BASELINE_DAYS if rule.version < 2 else base.active_days)
+
+
+def _formula(rule: Rule, formula: str) -> str:
+    return formula if rule.version < 2 else formula.replace(f"/ {BASELINE_DAYS}", "/ baseline_active_days")
+
+
 def _q(x: Decimal) -> Decimal:
     return x.quantize(CENT, ROUND_HALF_UP)
 
@@ -90,13 +103,13 @@ def _q(x: Decimal) -> Decimal:
 def _spike(rule: Rule, days, base: Base, evaluation: Window, done: Window | None) -> Signal | None:
     p, (conv_label, cpa_label) = rule.params, labels(rule)
     cost, _, _ = _sum(days, evaluation)
-    expected = _q(base.cost / BASELINE_DAYS * EVALUATION_DAYS)
+    expected = _q(base.cost / _per_day(rule, base) * EVALUATION_DAYS)
     if expected <= 0 or cost < expected * p["spike_ratio"]:
         return None
     backed, evidence = Decimal(0), {}
     if done is not None and base.cpa is not None:
         d_cost, d_conv, k = _sum(days, done)
-        extra = max(Decimal(0), d_conv / k - base.conversions / BASELINE_DAYS) * EVALUATION_DAYS
+        extra = max(Decimal(0), d_conv / k - base.conversions / _per_day(rule, base)) * EVALUATION_DAYS
         backed = extra * base.cpa
         evidence = {"complete_conversions": Fact(d_conv, "count", conv_label, done)}
     lost = _q(cost - expected - backed)
@@ -104,10 +117,10 @@ def _spike(rule: Rule, days, base: Base, evaluation: Window, done: Window | None
         return None  # рост объяснён конверсиями или слишком мал в рублях
     evidence |= {"cost": Fact(cost, "rub", "yandex_direct", evaluation),
                  "expected_cost": Fact(expected, "rub", "yandex_direct", evaluation, "estimated",
-                                       EXPECTED_COST_FORMULA)}
+                                       _formula(rule, EXPECTED_COST_FORMULA))}
     adjusted = done is not None and base.cpa is not None
     return Signal("spend_spike", "cost", cost, expected,
-                  Fact(lost, "rub", cpa_label, evaluation, "estimated", SPIKE_FORMULA),
+                  Fact(lost, "rub", cpa_label, evaluation, "estimated", _formula(rule, SPIKE_FORMULA)),
                   "medium" if adjusted else "low", evidence, partial=done is None)
 
 
@@ -116,16 +129,16 @@ def _drop(rule: Rule, days, base: Base, done: Window | None) -> Signal | None:
     if done is None or base.cpa is None:
         return None
     d_cost, d_conv, k = _sum(days, done)
-    expected = _q(base.conversions / BASELINE_DAYS * k)
+    expected = _q(base.conversions / _per_day(rule, base) * k)
     if k < p["min_complete_days"] or expected < p["min_expected_conversions"]:
         return None  # ноль-два «пропавших» конверсии — обычный шум, а не аномалия
-    if d_conv > expected * p["drop_ratio"] or d_cost < base.cost / BASELINE_DAYS * k * p["min_spend_ratio"]:
+    if d_conv > expected * p["drop_ratio"] or d_cost < base.cost / _per_day(rule, base) * k * p["min_spend_ratio"]:
         return None  # конверсий не меньше половины ожидаемых или расход упал вместе с ними
     lost = _q(d_cost - d_conv * base.cpa)
     evidence = {"complete_cost": Fact(d_cost, "rub", "yandex_direct", done),
                 "complete_conversions": Fact(d_conv, "count", conv_label, done),
                 "expected_conversions": Fact(expected, "count", conv_label, done, "estimated",
-                                             EXPECTED_CONV_FORMULA)}
+                                             _formula(rule, EXPECTED_CONV_FORMULA))}
     quality = "medium" if expected >= p["medium_expected_conversions"] else "low"
     return Signal("conversion_drop", "conversions", d_conv, expected,
                   Fact(lost, "rub", cpa_label, done, "estimated", DROP_FORMULA), quality, evidence)
@@ -211,3 +224,6 @@ ANOMALY = Rule(
         "min_complete_days": 3,
     }),
 )
+
+# @2 — те же пороги, база на день — по дням с расходом (см. docstring модуля); @1 остаётся для старых выводов.
+ANOMALY_V2 = replace(ANOMALY, version=2)

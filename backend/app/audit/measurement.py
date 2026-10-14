@@ -13,6 +13,16 @@ high_cpa: saved = конверсии_после × max(CPA_до − CPA_посл
   verdict = not_confirmed («стоимость заявки снизилась, но экономия не подтверждена: заявок стало меньше»).
 - high_cpa_measure@1 — историческая (допуск падения конверсий 20%, при падении — no_effect). Новые замеры по ней не
   создаются; остаётся для воспроизводимости уже сделанных.
+- high_cpa_measure@3 — текущая (триггер create_measurement_on_done с миграции 0009): регрессия к среднему. Окно «до»
+  @2 — 7 дней перед выполнением — почти всегда совпадает с окном, в котором правило сработало, а сработало оно потому,
+  что CPA там был высоким (в т. ч. случайно); после — CPA «сам» возвращается к норме, и «Сэкономлено» росло без всякого
+  эффекта. @3 берёт «до» вне окна срабатывания: если окна не пересекаются — переданное окно «до», иначе до
+  baseline_days дней перед окном срабатывания (сколько их есть в снимке замера). Конверсии «до» и «после» сравниваются
+  в день (окна разной длины). Экономия подтверждается только статистически: верхняя 95% граница CPA «после»
+  (расход / нижняя граница конверсий, rules/poisson.py) ниже CPA «до»; иначе not_confirmed (cpa_change_within_noise).
+  saved — нижняя граница: конверсии_после × (CPA_до − верхняя граница CPA_после) — отбор «значимых» иначе завышал
+  бы сумму (проклятие победителя). Наблюдаемый эффект (точечный, и отрицательный) — в effect.observed_saved; saved
+  (схема: ≥ 0, только при effect) — только подтверждённый. Окно срабатывания неизвестно → insufficient (trigger_window_unknown).
 
 zero_conv_campaign_measure@2 и zero_conv_placements_measure@2 — первые версии методик этих семейств. Номер «@2» —
 тот, что ставит триггер create_measurement_on_done (schema.sql) для любого issue_type; «@1» у них нет и не было.
@@ -23,7 +33,10 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Iterable, Literal, Mapping
 
 from app.intelligence.metrics.definitions import source_of_truth
+from datetime import timedelta
+
 from app.rules.domain import CampaignDay, Fact, PlacementDay, Window, frozen
+from app.rules.poisson import Z95, lower
 
 DESIGN = "uncontrolled_before_after"
 _WAIT = {"final_data_wait_days": 14}  # сколько ждать окончательных данных за окно «после»; дальше — insufficient
@@ -39,16 +52,22 @@ METHODS = {
     "high_cpa_measure@1": frozen(_V1),
     "high_cpa_measure@2": frozen({**_V1, "max_conversion_drop_pct": 0,  # conv_after ≥ conv_before
                                   "conversions_dropped_verdict": "not_confirmed"}),
+    # «До» — вне окна срабатывания (≤ 30 дней перед ним); ≥ 10 конверсий: CPA «до» — эталон, его шум не должен
+    # подтверждать экономию; граница CPA «после» — 95% односторонняя.
+    "high_cpa_measure@3": frozen({**_V1, "min_before_conversions": 10, "baseline_days": 30, "z": Z95,
+                                  "conversions_dropped_verdict": "not_confirmed"}),
     # CPA после ≤ max_cpa_after_reference_share × ориентир CPA выполненного вывода. Утверждает владелец продукта.
     "zero_conv_campaign_measure@2": frozen({"max_cpa_after_reference_share": Decimal(1), **_WAIT}),
     # Конверсии кампании «до» — не меньше: иначе «конверсии не упали» ничего не значит (0 → 0). Утверждает владелец.
     "zero_conv_placements_measure@2": frozen({"min_before_conversions": 3, **_WAIT}),
 }
-POLICY = "high_cpa_measure@2"  # high_cpa: по ней создаются новые замеры (триггер на 'done' в schema.sql)
-PARAMS = METHODS[POLICY]
+POLICY = "high_cpa_measure@3"  # high_cpa: по ней создаются новые замеры (триггер на 'done' в schema.sql)
+PARAMS = METHODS["high_cpa_measure@2"]  # умолчание measure_cpa — методика окна «7 дней до» (@1/@2)
 CENT = Decimal("0.01")
 CPA_FORMULA = "period_total_spend / period_total_conversions"
 SAVED_FORMULA = "conversions_after * (cpa_before - cpa_after)"
+# @3: нижняя граница экономии — CPA «после» по его верхней 95% границе; точечная оценка — effect.observed_saved
+SAVED_LOWER_FORMULA = "conversions_after * (cpa_before - cost_after / poisson_lower95(conversions_after))"
 ZERO_CAMPAIGN_SAVED_FORMULA = "campaign_cost_before - campaign_cost_after"
 PLACEMENTS_SAVED_FORMULA = "excluded_placements_cost_before - excluded_placements_cost_after"
 DM = source_of_truth("cpa")  # CPA и экономия — Директ (Reports API, реестр метрик); раньше писали yandex_direct+yandex_metrika
@@ -73,6 +92,7 @@ class MeasureInput:
     placements_reported: bool = False                      # в снимке замера есть отчёт площадок (direct_placements)
     placement_ids: frozenset[int] = frozenset()            # zero_conv_placements: какие площадки исключить (action)
     reference_cpa: Decimal | None = None                   # zero_conv_campaign: ориентир CPA выполненного вывода
+    trigger_window: Window | None = None                   # high_cpa@3: окно, в котором сработал выполненный вывод
 
 
 def family(policy: str) -> str:
@@ -129,6 +149,55 @@ def measure_cpa(days: Iterable[CampaignDay], before: Window, after: Window, para
     if a_conv < b_conv * (1 - Decimal(params["max_conversion_drop_pct"]) / 100):
         return result(params["conversions_dropped_verdict"], "conversions_dropped", **observed)
     saved = Fact((a_conv * (cpa_b - cpa_a)).quantize(CENT, ROUND_HALF_UP), "rub", DM, after, "estimated", SAVED_FORMULA)
+    return result("effect", "cpa_lower_at_same_volume", saved, **observed)
+
+
+def _reference_window(days: list[CampaignDay], before: Window, trigger: Window, params) -> Window | None:
+    """Окно «до» вне окна срабатывания: переданное, если не пересекается с ним, иначе ≤ baseline_days дней перед
+    окном срабатывания — с первого дня кампании в снимке замера. None — таких дней нет."""
+    if before.date_to < trigger.date_from or before.date_from > trigger.date_to:
+        return before
+    start = max(trigger.date_from - timedelta(params["baseline_days"]), min((d.date for d in days), default=trigger.date_from))
+    return Window(start, trigger.date_from - timedelta(1)) if start < trigger.date_from else None
+
+
+def _days(window: Window) -> int:
+    return (window.date_to - window.date_from).days + 1
+
+
+def measure_cpa_outside_trigger(days: Iterable[CampaignDay], before: Window, after: Window, trigger: Window | None,
+                                params=METHODS["high_cpa_measure@3"]) -> Measured:
+    """high_cpa_measure@3 (см. docstring модуля): «до» вне окна срабатывания, экономия — только значимая."""
+    days = list(days)
+    if trigger is None:
+        return _builder({}, {})("insufficient", "trigger_window_unknown")
+    ref = _reference_window(days, before, trigger, params)
+    if ref is None:
+        return _builder({}, {})("insufficient", "no_history_before_trigger")
+    if not _known(days, ref, after):
+        return _builder({}, {})("insufficient", "conversions_unknown")
+    b_cost, b_conv, b_facts = _period(days, ref)
+    a_cost, a_conv, a_facts = _period(days, after)
+    result = _builder(b_facts, a_facts)
+    if b_conv < params["min_before_conversions"] or b_cost <= 0:
+        return result("insufficient", "before_conversions_below_minimum")
+    if a_cost == 0 and a_conv == 0:
+        return result("insufficient", "no_activity_after")
+    if a_conv == 0:
+        return result("no_effect", "no_conversions_after")
+    cpa_b, cpa_a = b_cost / b_conv, a_cost / a_conv
+    rate_b, rate_a = b_conv / _days(ref), a_conv / _days(after)
+    observed = {"cpa_change_pct": _pct(cpa_a, cpa_b), "conversions_per_day_change_pct": _pct(rate_a, rate_b),
+                "observed_saved": _money(a_conv * (cpa_b - cpa_a)), "before_window": f"{ref.date_from}..{ref.date_to}"}
+    if cpa_a >= cpa_b:
+        return result("no_effect", "cpa_not_lower", **observed)
+    if rate_a < rate_b:
+        return result(params["conversions_dropped_verdict"], "conversions_dropped", **observed)
+    cpa_a_upper = a_cost / lower(a_conv, params["z"])
+    if cpa_a_upper >= cpa_b:  # верхняя граница CPA «после» не ниже CPA «до»
+        return result("not_confirmed", "cpa_change_within_noise", **observed)
+    saved = Fact((a_conv * (cpa_b - cpa_a_upper)).quantize(CENT, ROUND_HALF_UP), "rub", DM, after, "estimated",
+                 SAVED_LOWER_FORMULA)
     return result("effect", "cpa_lower_at_same_volume", saved, **observed)
 
 
@@ -246,6 +315,8 @@ def measure(policy: str, data: MeasureInput, before: Window, after: Window) -> M
     проверяет METHODS заранее и пропускает такой замер (no_method_for_policy)."""
     params = METHODS[policy]
     kind = family(policy)
+    if kind == "high_cpa" and "baseline_days" in params:
+        return measure_cpa_outside_trigger(data.campaign_days, before, after, data.trigger_window, params)
     if kind == "high_cpa":
         return measure_cpa(data.campaign_days, before, after, params)
     if kind == "zero_conv_campaign":

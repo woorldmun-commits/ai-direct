@@ -153,7 +153,7 @@
   "expected": [],
   "expected_not_enough_data": [
     {
-      "rule_version": "anomaly@1",
+      "rule_version": "anomaly@2",
       "reason": "baseline_history_insufficient"
     }
   ]

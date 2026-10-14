@@ -1,0 +1,57 @@
+{
+  "description": "@3: 24 конверсии, CPA 7 000 ₽ против baseline 3 840 ₽ — нижняя граница CPA (168 000 / 31,6) выше 1,1 × baseline; baseline-режим, конверсии окна только в днях досчёта: вывод остаётся, уровень inspect_only.",
+  "tags": [
+    "problem",
+    "partial"
+  ],
+  "rules_version": 3,
+  "settings": {},
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "sources": [
+      "yandex_direct",
+      "direct_conversions"
+    ],
+    "campaigns": [
+      {
+        "id": 101,
+        "strategy": "manual",
+        "days": [
+          {
+            "date": "2026-09-23",
+            "cost": "115200",
+            "clicks": 300,
+            "conversions": "30"
+          },
+          {
+            "date": "2026-09-30",
+            "cost": "168000",
+            "clicks": 70,
+            "conversions": "24"
+          }
+        ]
+      }
+    ],
+    "conversion_definition": {
+      "goal_ids": [
+        111,
+        222
+      ],
+      "attribution": "last"
+    }
+  },
+  "expected": [
+    {
+      "rule_version": "high_cpa_baseline@3",
+      "object_type": "campaign",
+      "object_id": 101,
+      "candidate_level": "inspect_only",
+      "action_level": "inspect_only",
+      "action": {
+        "type": "investigate_cpa_growth",
+        "suggest": "set_target_cpa"
+      },
+      "exposure": "75840.00"
+    }
+  ]
+}

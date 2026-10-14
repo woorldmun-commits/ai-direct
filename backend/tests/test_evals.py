@@ -8,7 +8,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.rules import ALL_RULES
+from app.rules import ALL_RULES, RETIRED
 from evals import golden
 from evals.golden import CASES_DIR, Case, gate, load_cases
 
@@ -40,7 +40,7 @@ def test_every_rule_version_has_expected_findings():
     for c in CASES:
         versions = {e["rule_version"] for e in c.data["expected"] + c.data.get("expected_not_enough_data", [])}
         mentions.update(versions)
-    for rule in ALL_RULES:
+    for rule in (r for r in ALL_RULES if r not in RETIRED):  # снятые версии больше не вычисляются
         assert mentions[rule.rule_version] >= 4, rule.rule_version
         assert any(e["rule_version"] == rule.rule_version for c in CASES for e in c.data["expected"]), rule.rule_version
 

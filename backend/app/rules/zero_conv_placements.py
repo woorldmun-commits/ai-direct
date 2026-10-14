@@ -30,7 +30,12 @@ recoverable = unavailable (no_forecast): после исключения пло�
 охват кампании, и решение — за человеком.
 
 @2 (те же пороги): источник конверсий и CPA — yandex_direct из реестра метрик; в evidence_meta — цели и атрибуция
-снимка (без определения конверсии правило не вычисляется). Конверсии кампании неизвестны (None) — SOURCE_MISSING."""
+снимка (без определения конверсии правило не вычисляется). Конверсии кампании неизвестны (None) — SOURCE_MISSING.
+
+@3 (те же пороги): без target_cpa ориентир — CPA сетевой части кампании (сумма всех её площадок РСЯ за снимок из
+отчёта площадок), а не CPA всей кампании: поиск и сети — разные каналы (channel_scope в реестре метрик), и дешёвый
+поиск занижал порог для площадок. Конверсий сетей меньше reference_min_conversions (или 0) — BASELINE_DATA_INSUFFICIENT,
+а не подстановка смешанного CPA. target_cpa — на базе расхода (с НДС; vat_basis в evidence_meta)."""
 
 from dataclasses import replace
 from datetime import date
@@ -39,12 +44,13 @@ from decimal import ROUND_HALF_UP, Decimal
 from app.rules.domain import (DIRECT_CONVERSIONS, DIRECT_PLACEMENTS, AuditSettings, CampaignDay, ExposureBasis,
                               Fact, Finding, NotEnoughData, Output, PlacementDay, Reason, Rule, SnapshotView, Window,
                               frozen, issue_key, windows)
-from app.rules.evidence import definition_meta, definition_missing, labels, user_input
+from app.rules.evidence import definition_meta, definition_missing, labels, target_reference, user_input, vat_meta
 
 FAMILY = "zero_conv_placements"
 CENT = Decimal("0.01")
 MASK = "***"  # sync/sanitize.py: имя площадки не прошло allowlist — исключить такую площадку человек не сможет
 CPA_FORMULA = "campaign_total_spend / campaign_total_conversions"
+NETWORK_CPA_FORMULA = "network_placements_total_spend / network_placements_total_conversions"
 LOST_FORMULA = "sum(placement_cost) for placements with 0 conversions, cost >= reference_cpa * min_cost_cpa_share, " \
                "clicks >= min_clicks"
 QUALITY_ORDER = ("low", "medium", "high")
@@ -55,10 +61,31 @@ def _sum_cost_conv(days, window: Window | None = None) -> tuple[Decimal, Decimal
     return (sum((d.cost for d in inside), Decimal(0)), sum((d.conversions for d in inside), Decimal(0)))
 
 
+def _network_reference(rule: Rule, snap: SnapshotView, days: list[PlacementDay]) -> tuple[Decimal, dict] | Reason:
+    """@3: CPA сетевой части кампании — по всем её площадкам за снимок (отчёт площадок — только AD_NETWORK)."""
+    if any(d.conversions is None for d in days):
+        return Reason.SOURCE_MISSING
+    cost, conv = _sum_cost_conv(days)
+    if conv < rule.params["reference_min_conversions"] or conv == 0:
+        return Reason.BASELINE_DATA_INSUFFICIENT  # смешанный с поиском CPA не подставляется
+    cpa = (cost / conv).quantize(CENT, ROUND_HALF_UP)
+    if cpa <= 0:
+        return Reason.BASELINE_DATA_INSUFFICIENT
+    period = Window(snap.period_from, snap.period_to)
+    conv_label, cpa_label = labels(rule)
+    return cpa, {"network_cost": Fact(cost, "rub", "yandex_direct", period),
+                 "network_conversions": Fact(conv, "count", conv_label, period),
+                 "reference_cpa": Fact(cpa, "rub", cpa_label, period, "estimated", NETWORK_CPA_FORMULA)}
+
+
 def _reference(rule: Rule, snap: SnapshotView, settings: AuditSettings, campaign_days: list[CampaignDay],
-               evaluation: Window) -> tuple[Decimal, dict[str, Fact]] | Reason:
+               evaluation: Window, placement_days: list[PlacementDay] = ()) -> tuple[Decimal, dict[str, Fact]] | Reason:
+    if settings.target_cpa is not None and rule.version >= 3:
+        return target_reference(settings, evaluation, "reference_cpa")[:2]
     if settings.target_cpa is not None:
         return settings.target_cpa, {"reference_cpa": Fact(settings.target_cpa, "rub", "user_input", evaluation)}
+    if rule.version >= 3:
+        return _network_reference(rule, snap, list(placement_days))
     period = Window(snap.period_from, snap.period_to)
     if any(d.conversions is None for d in campaign_days):
         return Reason.SOURCE_MISSING  # ноль конверсий не выводится из их отсутствия
@@ -76,6 +103,10 @@ def _reference(rule: Rule, snap: SnapshotView, settings: AuditSettings, campaign
         "campaign_conversions": Fact(conv, "count", conv_label, period),
         "reference_cpa": Fact(cpa, "rub", cpa_label, period, "estimated", CPA_FORMULA),
     }
+
+
+def _vat_meta(rule: Rule, settings: AuditSettings) -> dict[str, str]:
+    return vat_meta(settings) if rule.version >= 3 and settings.target_cpa is not None else {}
 
 
 def _passes(cost: Decimal, clicks: int, reference: Decimal, p) -> bool:
@@ -129,7 +160,7 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings, 
                        campaign_days: list[CampaignDay], days: list[PlacementDay]) -> Output | None:
     p = rule.params
     evaluation, _ = windows(snap.period_to)
-    ref = _reference(rule, snap, settings, campaign_days, evaluation)
+    ref = _reference(rule, snap, settings, campaign_days, evaluation, days)
     if isinstance(ref, Reason):
         return NotEnoughData(rule.rule_version, ref, "campaign", campaign_id)
     reference, ref_evidence = ref
@@ -140,7 +171,7 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings, 
     cost = sum((f[2] for f in flagged), Decimal(0))
     clicks = sum(f[3] for f in flagged)
     partial = any(f[4] for f in flagged)
-    mode = "target" if settings.target_cpa is not None else "campaign"
+    mode = "target" if settings.target_cpa is not None else "network" if rule.version >= 3 else "campaign"
     conv_label, cpa_label = labels(rule)
     source = user_input(cpa_label) if mode == "target" else cpa_label
     evidence = {
@@ -151,7 +182,7 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings, 
         **ref_evidence,
     }
     meta = {"reference_mode": mode, "placement_ids": ",".join(str(f[0]) for f in flagged),
-            **definition_meta(rule, snap)}
+            **definition_meta(rule, snap), **_vat_meta(rule, settings)}
     for pid, name, p_cost, p_clicks, only_partial in flagged:
         evidence[f"placement_{pid}_cost"] = Fact(p_cost, "rub", "yandex_direct", evaluation)
         evidence[f"placement_{pid}_clicks"] = Fact(Decimal(p_clicks), "count", "yandex_direct", evaluation)
@@ -216,3 +247,6 @@ ZERO_CONV_PLACEMENTS = Rule(
 
 # @2 — те же пороги, другие метки источника и доказательства; @1 остаётся для старых выводов.
 ZERO_CONV_PLACEMENTS_V2 = replace(ZERO_CONV_PLACEMENTS, version=2)
+
+# @3 — те же пороги; ориентир без target_cpa — CPA сетей, а не всей кампании (см. docstring модуля).
+ZERO_CONV_PLACEMENTS_V3 = replace(ZERO_CONV_PLACEMENTS, version=3)

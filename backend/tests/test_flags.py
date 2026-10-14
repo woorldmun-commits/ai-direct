@@ -5,7 +5,7 @@ import pytest
 from app import flags
 
 ON = ("source_of_truth_v2", "safety_engine_v2")
-OFF = ("chief_analyst", "root_cause", "llm_enabled", "audit_rules_candidates", "sms_login")
+OFF = ("chief_analyst", "root_cause", "llm_enabled", "audit_rules_candidates", "audit_rules_v3", "sms_login")
 
 
 def test_defaults_follow_owner_decisions():
