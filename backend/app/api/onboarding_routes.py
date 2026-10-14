@@ -60,15 +60,26 @@ class BusinessProfile(BaseModel):
         return result
 
 
+def _live_personal(conn: Conn, user_id: int) -> tuple[int, int] | None:
+    """Личный workspace, кроме удаляемого: иначе пользователь получал бы 410 навсегда и не мог начать заново.
+    Статус виден только внутри workspace (RLS) — поэтому вход в каждого кандидата по очереди."""
+    rows = conn.execute(
+        """SELECT a.workspace_id, a.organization_id FROM user_workspaces(%s) a
+                         JOIN organizations o ON o.id=a.organization_id
+                         WHERE o.kind='business' AND a.role='owner' ORDER BY a.workspace_id""",
+        (user_id,),
+    ).fetchall()
+    for ws, org in rows:
+        set_local_workspace(conn, ws)
+        if conn.execute("SELECT status FROM workspaces WHERE id=%s", (ws,)).fetchone()[0] != "deletion_pending":
+            return ws, org
+    return None
+
+
 @router.post("/workspaces", status_code=201)
 def personal_workspace(conn: Conn, actor: CurrentActor, body: WorkspaceCreate):
     conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", (f"personal:{actor.user_id}",))
-    row = conn.execute(
-        """SELECT a.workspace_id, a.organization_id FROM user_workspaces(%s) a
-                         JOIN organizations o ON o.id=a.organization_id
-                         WHERE o.kind='business' AND a.role='owner' ORDER BY a.workspace_id LIMIT 1""",
-        (actor.user_id,),
-    ).fetchone()
+    row = _live_personal(conn, actor.user_id)
     if row:
         ws, org = row
     else:
@@ -96,9 +107,10 @@ def save_profile(conn: Conn, ws: CurrentWorkspace, body: BusinessProfile):
                   ON CONFLICT(workspace_id) DO UPDATE SET profile=excluded.profile,updated_at=now()""",
         (ws.id, Jsonb(payload)),
     )
-    conn.execute(
-        """INSERT INTO workspace_settings(workspace_id,target_cpa) VALUES(%s,%s)
-                  ON CONFLICT(workspace_id) DO UPDATE SET target_cpa=excluded.target_cpa,updated_at=now()""",
-        (ws.id, body.target_cpa),
-    )
+    if "target_cpa" in body.model_fields_set:  # не прислан — настройку аудита не трогаем
+        conn.execute(
+            """INSERT INTO workspace_settings(workspace_id,target_cpa) VALUES(%s,%s)
+                      ON CONFLICT(workspace_id) DO UPDATE SET target_cpa=excluded.target_cpa,updated_at=now()""",
+            (ws.id, body.target_cpa),
+        )
     return payload
