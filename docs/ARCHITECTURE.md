@@ -464,7 +464,15 @@ docs/
 
 - Yandex Cloud: одна VM (Compute) с docker compose: `api`, `worker`, `web`, `redis`, Caddy (HTTPS).
 - PostgreSQL — Managed Service for PostgreSQL (бэкапы, PITR — не своими руками).
-- Секреты — Lockbox / переменные окружения, в репозитории нет.
+- Секреты — Lockbox / переменные окружения, в репозитории нет. Каждый контейнер получает только свои переменные
+  (`docker-compose.yml`, без `env_file`): пароль суперпользователя PostgreSQL — только `db`, `migrate` — только DSN
+  `app_migrator`. Остаточный риск: `api` держит DSN системной роли `app_system` (без RLS) ради `/ops/health`
+  (`app/api/ops.py`); убрать — вынести сводку в отдельный сервис или в view с `SECURITY DEFINER`.
+- Лимит частоты (`app/api/ratelimit.py`) — в памяти процесса: одна реплика `api`, один процесс uvicorn. Адрес клиента
+  берётся из `X-Forwarded-For` только от `API_TRUSTED_PROXIES` (в compose — подсеть внутренней сети `APP_NET_SUBNET`
+  с её шлюзом, через который приходят соединения на опубликованный `127.0.0.1:8000`). Без этого все клиенты за
+  Caddy/Next делят один ключ, и перебор на `/auth/*` блокирует вход всем. Несколько реплик — общий стор (Redis).
+- HSTS у API включён по умолчанию при `API_ENV=production` (`API_HSTS=0` — выключить явно).
 - Потом: вторая VM / Serverless Containers — когда одна VM перестанет справляться с синхронизациями.
 - Восстановление после сбоев (цели RPO ≤ 15 мин, RTO ≤ 4 ч, ежемесячный тест) — [DISASTER_RECOVERY.md](DISASTER_RECOVERY.md).
 
