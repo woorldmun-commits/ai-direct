@@ -7,9 +7,11 @@
 {
   "description": "что проверяет кейс",
   "tags": ["problem" | "clean" | "boundary" | "partial" | "autostrategy" | "not_enough_data", ...],
-  "rules_version": 2,                                     // необязательно: версии правил и политики (1 — по умолчанию)
+  "rules_version": 2,                                     // необязательно: версии правил (1 — по умолчанию; 3 — @3)
+                                                          // и политики (@2 при rules_version ≥ 2)
   "flags": ["audit_rules_candidates"],                    // необязательно: включить правила за флагом (rules.FLAGGED)
-  "settings": {"target_cpa": "3000"},                    // замороженные настройки workspace; {} — target не задан
+  "settings": {"target_cpa": "3000"},                    // замороженные настройки workspace; {} — target не задан;
+                                                          // "target_cpa_includes_vat": false — target введён без НДС
   "snapshot": {
     "period_to": "2026-09-30",                            // последний день снимка
     "history_days": 37,                                   // необязательно: глубина снимка (period_from)
@@ -172,14 +174,15 @@ class Case:
 
     def settings(self) -> AuditSettings:
         s = self.data.get("settings", {})
-        _keys(s, {"target_cpa"}, f"{self.name}: settings")
-        return AuditSettings(target_cpa=Decimal(s["target_cpa"]) if s.get("target_cpa") is not None else None)
+        _keys(s, {"target_cpa", "target_cpa_includes_vat"}, f"{self.name}: settings")
+        return AuditSettings(target_cpa=Decimal(s["target_cpa"]) if s.get("target_cpa") is not None else None,
+                             target_cpa_includes_vat=bool(s.get("target_cpa_includes_vat", True)))
 
     @property
     def rules_version(self) -> int:
         version = self.data.get("rules_version", 1)
-        if version not in (1, 2):
-            raise ValueError(f"{self.name}: rules_version 1 или 2")
+        if version not in (1, 2, 3):
+            raise ValueError(f"{self.name}: rules_version 1, 2 или 3")
         return version
 
     @property
@@ -191,8 +194,8 @@ class Case:
 
     def rules(self) -> list:
         """Как аудит: версия правил кейса + правила за включёнными флагами (у них своя версия)."""
-        flagged = [r for name, rules in FLAGGED.items() for r in rules]
-        return ([r for r in ALL_RULES if r.version == self.rules_version and r not in flagged]
+        flagged = {r.family for rules in FLAGGED.values() for r in rules}  # и прежние версии правил за флагом
+        return ([r for r in ALL_RULES if r.version == self.rules_version and r.family not in flagged]
                 + [r for name in sorted(self.flags) for r in FLAGGED[name]])
 
     def definition(self) -> ConversionDefinition | None:
@@ -280,7 +283,7 @@ def evaluate(case: Case) -> tuple[list[Outcome], list[NotEnoughData]]:
     view, partial_from = case.view()
     settings = case.settings()
     findings, skipped = [], []
-    policy = decide_v2 if case.rules_version == 2 else decide
+    policy = decide_v2 if case.rules_version >= 2 else decide
     strategies = case.strategies()
     for rule in case.rules():
         for out in run(rule, view, settings):

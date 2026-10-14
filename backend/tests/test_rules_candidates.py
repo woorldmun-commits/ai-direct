@@ -1,4 +1,4 @@
-"""Правила за флагом audit_rules_candidates (zero_conv_queries@1, anomaly@1, budget_underuse@1): выключены по умолчанию,
+"""Правила за флагом audit_rules_candidates (zero_conv_queries@1, anomaly@2, budget_underuse@1): выключены по умолчанию,
 не предлагают ставок и бюджета, тексты запросов не попадают ни в вывод, ни в объяснение. Пороги и суммы — golden-кейсы
 evals/cases/{zero_conv_queries,anomaly,budget_underuse}/."""
 
@@ -17,7 +17,7 @@ def test_flag_is_off_by_default_and_adds_rules_when_on():
     assert not versions & {r.rule_version for r in RULES}
     on = active_rules({"AUDIT_RULES_CANDIDATES": "1"})
     assert on[-3:] == CANDIDATES and versions <= {r.rule_version for r in ALL_RULES}
-    assert versions == {"zero_conv_queries@1", "anomaly@1", "budget_underuse@1"}
+    assert versions == {"zero_conv_queries@1", "anomaly@2", "budget_underuse@1"}
 
 
 def test_query_text_cannot_reach_rules():

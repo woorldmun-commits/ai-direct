@@ -21,6 +21,9 @@ DEFAULTS: Mapping[str, bool] = {
     "opportunity_engine": False,
     "creative_intelligence": False,
     "llm_enabled": False,
+    # правила @3 (rules.RULES_V3: статистический порог high_cpa, НДС target_cpa, CPA сетей для площадок): меняют, какие
+    # выводы появляются (пример PRD §4.1 — 8 конверсий, +37% — шумом не отличим от нормы и вывода не даёт) — включает владелец
+    "audit_rules_v3": False,
     "audit_rules_candidates": False,  # правила 4, 5 и бюджет (rules.FLAGGED) — до проверки на живых кабинетах
     "sms_login": False,           # вход по SMS: юридический HOLD (ст. 10 149-ФЗ), маршруты /auth/code/* выключены
 }
