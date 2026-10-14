@@ -39,6 +39,11 @@ def test_grounded_answer_is_accepted():
 @pytest.mark.parametrize("text, expected", [
     ("4 820,00 ₽", {Decimal("4820")}), ("рост на 42%", {Decimal("42")}), ("1 500.5", {Decimal("1500.5")}),
     ("obj_1 и e1, high_cpa_target@1", set()), ("снижение -5", {Decimal("5")}),
+    # числа, приклеенные к буквам, множители и числа словами
+    ("50тыс", {Decimal("50000")}), ("12,5 тыс", {Decimal("12500")}), ("12млн", {Decimal("12000000")}),
+    ("5000руб", {Decimal("5000")}), ("рост 3x", {Decimal("3")}), ("рост x3", {Decimal("3")}),
+    ("в два раза", {Decimal("2")}), ("двадцать процентов", {Decimal("20")}), ("полтора", {Decimal("1.5")}),
+    ("вдвое дороже", {Decimal("2")}), ("одинаковый", set()), ("простой", set()),
 ])
 def test_number_extraction(text, expected):
     assert numbers_in(text) == expected
@@ -63,10 +68,30 @@ def test_number_extraction(text, expected):
     (claim(text="CPA вырос из-за конкурентов", ids=("e3",), type="HYPOTHESIS", status="plausible_hypothesis"),
      "causal_without_basis"),                                                      # нет причинного факта
     (claim(text="CPA вырос из-за ставок", ids=("e2",)), "causal_without_basis"),   # причинность как OBSERVATION
+    # числа, которые прежний разбор не видел: приклеены к буквам, с множителем, словами
+    (claim(text="Сэкономите 50тыс ₽"), "number_not_in_evidence"),
+    (claim(text="CPA obj_1: рост 3x"), "number_not_in_evidence"),
+    (claim(text="Потеряно 12млн"), "number_not_in_evidence"),
+    (claim(text="Расход 5000руб"), "number_not_in_evidence"),
+    (claim(text="CPA obj_1 в два раза дороже целевого"), "number_not_in_evidence"),
+    (claim(text="CPA obj_1 выше целевого на двадцать процентов"), "number_not_in_evidence"),
+    # направление: факт e2 — CPA вырос (3 580 → 4 820)
+    (claim(text="CPA obj_1 снизился с 3 580 до 4 820 ₽", ids=("e2",)), "sign_mismatch"),
 ])
 def test_bad_key_claim_sends_whole_answer_to_template(bad, code):
     v = judge(answer(bad), PACKET, ALLOWED)
     assert not v.accepted and v.dropped == ((0, code),) and v.reason == "key_claim_dropped"
+
+
+@pytest.mark.parametrize("marker", ["объясняется", "благодаря", "обусловлен", "связан с", "связано с", "следствие",
+                                    "под влиянием"])
+def test_extra_causal_markers_need_hypothesis(marker):
+    v = judge(answer(claim(text=f"CPA obj_1 вырос: {marker} ставки", ids=("e2",))), PACKET, ALLOWED)
+    assert v.dropped == ((0, "causal_without_basis"),)
+
+
+def test_multiplier_backed_by_evidence_is_accepted():
+    assert judge(answer(claim(text="Потери obj_1 — 12,5 тыс ₽")), PACKET, ALLOWED).accepted
 
 
 def test_bad_non_key_claim_is_dropped_but_answer_stays():
@@ -113,6 +138,7 @@ UNITS = build_packet(EvidenceBundle(
     ("CR obj_1 снизился на 0,7 п.п.", True),
     ("CR obj_1 снизился на 0.7 pp", True),
     ("CR obj_1 снизился на 14 п.п.", False),       # относительное изменение выдано за абсолютное
+    ("CR obj_1 снизился на 14 pp", False),         # прежде в шаблоне стоял символ \x08 вместо \b — pp не ловился
     ("CR obj_1 снизился на 0,7%", False),          # абсолютное выдано за относительное
     ("Кликов obj_1: 14", True),                    # число без единицы — прежняя проверка по значению
 ])
@@ -142,3 +168,32 @@ def test_object_in_claim_must_be_the_object_of_cited_evidence(text, ids, ok):
     assert v.accepted is ok
     if not ok:
         assert v.dropped == ((0, "object_mismatch"),)
+
+
+# --- направление изменения совпадает со знаком процитированного факта --------------------------------------
+SIGNED = build_packet(EvidenceBundle(
+    facts=({"id": "e7", "kind": "metric_change", "object": "c1", "metric": "cpa",
+            "values": {"cpa_delta_pct": Decimal("20")}},),
+    findings=(), metrics=(), constraints=(), data_health={}, capabilities={}, period={"from": date(2026, 9, 1)},
+    source_registry={}))
+
+
+@pytest.mark.parametrize("text, ok", [
+    ("CPA obj_1 вырос на 20%", True),
+    ("CPA obj_1 увеличился на 20%", True),
+    ("CPA obj_1 снизился на 20%", False),     # abs() терял знак: +20% «подтверждал» падение
+    ("CPA obj_1 упал на 20%", False),
+    ("CPA obj_1 стал ниже на 20%", False),
+    ("CPA obj_1 изменился на 20%", True),     # направление не названо — проверять нечего
+])
+def test_direction_must_match_sign_of_cited_change(text, ok):
+    v = judge(answer(claim(text=text, ids=("e7",)), summary="CPA obj_1 изменился"), SIGNED, ALLOWED)
+    assert v.accepted is ok
+    if not ok:
+        assert v.dropped == ((0, "sign_mismatch"),)
+
+
+def test_summary_with_wrong_direction_goes_to_template():
+    v = judge(answer(claim(text="CPA obj_1 вырос на 20%", ids=("e7",)), summary="CPA obj_1 снизился"), SIGNED,
+              ALLOWED)
+    assert not v.accepted and v.reason == "summary_unsupported"
