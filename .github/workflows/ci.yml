@@ -45,18 +45,28 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: backend/requirements*.txt
+          cache-dependency-path: backend/requirements*
+      # Тесты идут на тех же версиях, что и образ: сначала lock с хэшами, затем инструменты разработки.
       - name: Install dependencies
-        run: python -m pip install -r requirements-dev.txt
+        run: |
+          python -m pip install --require-hashes --no-deps -r requirements.lock
+          python -m pip install -r requirements-dev.txt
+      # lock собран из requirements.txt: uv берёт версии из существующего lock, расхождение — только если
+      # requirements.txt изменён без пересборки lock (команда — в шапке requirements.txt).
+      - name: requirements.lock matches requirements.txt
+        run: |
+          python -m pip install uv==0.11.28
+          uv pip compile requirements.txt --generate-hashes --python-version 3.11 --python-platform linux -o requirements.lock -q
+          git diff --exit-code requirements.lock
       - name: Ruff
         run: ruff check --output-format=github .
       - name: Migrations reproduce schema.sql
         run: python -m pytest -q -p no:cacheprovider tests/test_migrations.py
-      # Покрытие — только отчёт, без --cov-fail-under: порог включается отдельным решением.
-      - name: Tests (coverage report)
+      # Порог — текущее покрытие (97,35 % на 2026-10-14), округлённое вниз: покрытие не падает незаметно.
+      - name: Tests (coverage)
         run: >-
           python -m pytest -q -p no:cacheprovider --ignore=tests/test_migrations.py
-          --cov=app --cov-report=term:skip-covered --cov-report=xml:coverage.xml
+          --cov=app --cov-report=term:skip-covered --cov-report=xml:coverage.xml --cov-fail-under=97
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4
@@ -66,7 +76,7 @@ jobs:
           if-no-files-found: ignore
 
   frontend:
-    name: frontend (lint, build, headers)
+    name: frontend (lint, unit checks, build, headers)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:
@@ -78,11 +88,13 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: lts/*
+          node-version: 22.x
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - run: npm run test:ui
+      - run: npm run test:runtime
       - run: npm run build
       # Браузерная часть проверки (нарушения CSP в консоли) обязательна: без Playwright шаг падает, а не пропускается.
       - name: Install Playwright (Chromium)
@@ -121,12 +133,14 @@ jobs:
           python-version: "3.11"
       - uses: actions/setup-node@v5
         with:
-          node-version: lts/*
+          node-version: 22.x
       # Блокирует любая известная уязвимость (у PyPI-advisory нет единой шкалы severity). Исключение — только
       # осознанное: --ignore-vuln <ID> с комментарием, почему не применимо.
+      # requirements.lock — ровно то, что ставит образ (версии + хэши, без резолва); dev — инструменты CI.
       - name: pip-audit
         run: |
           python -m pip install pip-audit==2.10.1
+          pip-audit --disable-pip -r backend/requirements.lock
           pip-audit -r backend/requirements-dev.txt
       # Блокирует high/critical в зависимостях, которые попадают в продакшен-сборку. Инструменты разработки
       # (eslint и т. п.) не исполняются в продакшене: их уязвимости видны в отчёте, но merge не блокируют —
