@@ -45,7 +45,12 @@ export function proxy(request: NextRequest) {
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", csp);
 
-  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  const cookieName = process.env.REKVERO_SESSION_COOKIE ?? process.env.ADPILOT_SESSION_COOKIE ?? 'session';
+  const needsLogin = /^\/workspace(\/|$)/.test(request.nextUrl.pathname)
+    && !/^[A-Za-z0-9_-]{32,128}$/.test(request.cookies.get(cookieName)?.value ?? '');
+  const response = needsLogin
+    ? NextResponse.redirect(new URL('/login', process.env.REKVERO_APP_ORIGIN || request.url))
+    : NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy", csp);
   if(isPrivatePage(request.nextUrl.pathname)){response.headers.set("Referrer-Policy","no-referrer");response.headers.set("Cache-Control","no-store");}
   return response;

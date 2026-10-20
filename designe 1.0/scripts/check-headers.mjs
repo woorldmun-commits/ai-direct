@@ -161,12 +161,7 @@ async function httpChecks(base) {
     if (!/no-store/.test(redirect.headers.get("cache-control") ?? "")) fail(`${route}: retired account route must not be cached`);
   }
   const anonymous = await fetch(base + "/workspace", { redirect: "manual" });
-  if (process.env.ADPILOT_API_URL) {
-    if (anonymous.status !== 307 || anonymous.headers.get("location") !== "/login") fail("/workspace: anonymous visitor must redirect to /login");
-  } else {
-    const html = await anonymous.text();
-    if (anonymous.status !== 200 || !html.includes("Сервис временно недоступен") || html.includes('class="pilot-card pilot-metric"')) fail("/workspace: missing API configuration must show unavailable without metrics");
-  }
+  if (anonymous.status !== 307 || new URL(anonymous.headers.get('location') || '/invalid', base).pathname !== '/login') fail('/workspace: anonymous visitor must redirect to /login before streaming');
   if (!/no-store/.test(anonymous.headers.get("cache-control") ?? "")) fail("/workspace: anonymous response must not be cached");
   const forged = await fetch(base + "/api/auth/logout", { method: "POST", headers: { Origin: "https://untrusted.example" }, redirect: "manual" });
   if (forged.status !== 403 || forged.headers.get("cache-control") !== "no-store") fail("auth: foreign-origin POST must fail closed without caching");
