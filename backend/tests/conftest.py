@@ -15,7 +15,9 @@ def _admin_uri() -> str:
         return uri
     import pgserver
 
-    return pgserver.get_server(Path(tempfile.gettempdir()) / "ai-direct-pgtest", cleanup_mode="stop").get_uri()
+    # TEST_PG_DIR: свой экземпляр на рабочую копию, чтобы параллельные прогоны не затирали общую базу
+    pg_dir = os.environ.get("TEST_PG_DIR", "ai-direct-pgtest")
+    return pgserver.get_server(Path(tempfile.gettempdir()) / pg_dir, cleanup_mode="stop").get_uri()
 
 
 def _with_user(uri: str, user: str, dbname: str) -> str:

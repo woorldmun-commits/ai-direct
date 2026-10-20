@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.deps import Conn, CurrentActor, CurrentWorkspace, require_manager
 from app.api.errors import not_found
-from app.api.active import active_cards, today_msk, with_exposure
+from app.api.active import active_cards, budgeted, today_msk, with_exposure
 from app.api.serialize import ext, recommendation_item
 from app.tenancy import set_local_workspace
 
@@ -52,7 +52,10 @@ def me(conn: Conn, actor: CurrentActor):
         # owner / admin — полные права по org_role, ws_role: null (API_CONTRACT.md §10)
         by_org[org_id].append({"id": ext("ws", ws), "name": name,
                                "ws_role": None if role in ("owner", "admin") else role})
-    return {"user": {"id": ext("u", actor.user_id), "email": email},
+    # phone: номер в AdPilot не хранится (вход по SMS — только хэш в журнале кодов), поэтому null.
+    # workspaces — плоский список для экрана выбора бизнеса; тот же набор, что внутри organizations.
+    return {"user": {"id": ext("u", actor.user_id), "phone": None, "email": email},
+            "workspaces": [w for items in by_org.values() for w in items],
             "organizations": [{"id": ext("org", org_id), "name": name, "kind": kind, "org_role": org_role,
                                "workspaces": by_org[org_id]} for org_id, name, kind, org_role in orgs]}
 
@@ -91,11 +94,12 @@ def recommendations(conn: Conn, ws: CurrentWorkspace, q: Annotated[Recommendatio
     last_cutoff = conn.execute("SELECT max(data_cutoff) FROM audit_runs WHERE workspace_id = %s",
                                (ws.id,)).fetchone()[0]
     _, overlaps = with_exposure(conn, cards, last_cutoff or today_msk())
-    shown = sorted((c for c in cards if account is None or c.account_id == account), key=_order)
+    in_budget, beyond = budgeted([c for c in cards if account is None or c.account_id == account], _order)
+    shown = in_budget + beyond  # сверх 10 на кабинет — в конце списка, не скрыты
     page = shown[offset:offset + q.limit]
     more = len(shown) > offset + q.limit
     return {"items": [recommendation_item(c, overlaps[c.rec_id]) for c in page],
-            "next_cursor": f"o{offset + q.limit}" if more else None}
+            "next_cursor": f"o{offset + q.limit}" if more else None, "beyond_budget": len(beyond)}
 
 
 @router.get("/workspaces/{workspace_id}/members")

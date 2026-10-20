@@ -22,11 +22,24 @@ import psycopg
 from app.audit.exposure import (ACCOUNT_LEVEL, CAMPAIGN_LEVEL, ExposureFinding, ExposureTotal, StatUnit,
                                 basis_from_meta, exposure_total)
 from app.contract import Value
-from app.rules import RULES
+from app.rules import ALL_RULES
 from app.rules.domain import UNAVAILABLE_REASON_OF, Reason, windows
 
 MSK = timezone(timedelta(hours=3), "MSK")  # пояс данных Директа (как DATA_TIMEZONE воркеров; без перехода на летнее)
-FAMILY_OF = {r.rule_version: r.family for r in RULES}
+FAMILY_OF = {r.rule_version: r.family for r in ALL_RULES}  # старые выводы (@1) тоже
+# Не больше стольких рекомендаций одного кабинета в начале списка (решение владельца 2026-10-13): защита от потока
+# ложных срабатываний на «шумном» кабинете. Остальные не скрываются и не выпадают из итога exposure — они идут
+# после всех и считаются в beyond_budget («ещё N»).
+FINDINGS_PER_ACCOUNT = 10
+
+
+def budgeted(cards: list, key, limit: int = FINDINGS_PER_ACCOUNT) -> tuple[list, list]:
+    """(в бюджете, сверх бюджета) — оба в порядке key; бюджет считается по кабинету (account_id)."""
+    shown, rest, per_account = [], [], {}
+    for card in sorted(cards, key=key):
+        n = per_account[card.account_id] = per_account.get(card.account_id, 0) + 1
+        (shown if n <= limit else rest).append(card)
+    return shown, rest
 _REASONS = {r.value: r for r in Reason}
 
 _CANDIDATES = """

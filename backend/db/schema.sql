@@ -403,12 +403,6 @@ CREATE TABLE workspace_settings (
   updated_at           timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE telegram_links (
-  user_id   bigint PRIMARY KEY REFERENCES users,
-  chat_id   bigint NOT NULL UNIQUE,
-  linked_at timestamptz NOT NULL DEFAULT now()
-);
-
 -- ============================================================================
 -- Подключения  [O]
 -- ============================================================================
@@ -550,6 +544,13 @@ CREATE TABLE snapshots (
   CHECK (NOT 'yandex_metrika' = ANY (sources) OR conversion_definition IS NOT NULL),
   status       text NOT NULL DEFAULT 'building' CHECK (status IN ('building', 'complete', 'failed')),
   sealed_at    timestamptz,
+  -- Стратегия кампании на момент синхронизации (Campaigns.get → sources/strategy.py): {"<campaign_id>": "auto_cpa"}.
+  -- Аудит режет по ней уровень действия (STRATEGY_ACTIONS); нет кампании — стратегия неизвестна.
+  campaign_strategies jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(campaign_strategies) = 'object'
+    AND NOT jsonb_path_exists(campaign_strategies, '$.keyvalue() ? (!(@.key like_regex "^[1-9][0-9]{0,18}$")
+      || !(@.value == "manual_bidding" || @.value == "auto_clicks" || @.value == "auto_cpc" || @.value == "auto_cpa"
+           || @.value == "pay_for_conversion" || @.value == "max_conversions" || @.value == "serving_off"
+           || @.value == "unsupported" || @.value == "unknown"))')),
   CHECK ((status = 'complete') = (sealed_at IS NOT NULL)),
   CHECK (period_from <= period_to),
   CHECK (partial_from BETWEEN period_from AND period_to + 1)
@@ -965,7 +966,7 @@ CREATE TRIGGER recommendation_results_done BEFORE INSERT ON recommendation_resul
 -- ============================================================================
 -- Транзакционный outbox
 -- ============================================================================
--- Доменное событие пишется в той же транзакции, что и бизнес-изменение; доставка наружу (Telegram, email, UI) —
+-- Доменное событие пишется в той же транзакции, что и бизнес-изменение; доставка наружу (email, UI) —
 -- отдельным воркером после COMMIT. Никаких HTTP внутри транзакции БД.
 -- Состояние — из полей доставки, без изменяемого status: delivered_at задан → доставлено; locked_until в будущем
 -- → в работе (аренда воркера); last_error → ошибка, повтор не раньше available_at. Доставка at-least-once:
@@ -1006,7 +1007,7 @@ CREATE TABLE notifications (  -- [O]
   id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   workspace_id bigint NOT NULL REFERENCES workspaces,
   kind         text NOT NULL CHECK (kind IN ('digest', 'correction', 'new_problem', 'critical', 'billing')),
-  channel      text NOT NULL CHECK (channel IN ('telegram', 'email')),
+  channel      text NOT NULL CHECK (channel IN ('in_app', 'email')),
   dedup_key    text NOT NULL UNIQUE,
   digest_id    bigint REFERENCES digests,
   snapshot_id  bigint REFERENCES snapshots,
@@ -1199,7 +1200,6 @@ BEGIN
   END IF;
 
   DELETE FROM sessions WHERE user_id = ANY (sole_users);
-  DELETE FROM telegram_links WHERE user_id = ANY (sole_users);
   DELETE FROM yandex_identities WHERE user_id = ANY (sole_users);
   -- принятия документов — доказательство: не удаляются, а обезличиваются (срок хранения — вопрос юристу, LEGAL.md)
   PERFORM set_config('app.anonymizing', 'on', true);
@@ -1415,17 +1415,26 @@ CREATE TRIGGER issues_close_only BEFORE UPDATE ON issues
 -- Писать и сбрасывать токен может приложение (OAuth-колбэк, отключение); читать — только роль воркера app_token.
 -- Функции SECURITY DEFINER с фиксированным search_path, подключение ищется строго в пределах переданного workspace.
 -- Аргумент ws сверяется с контекстом: если app.workspace_id выставлен (API в запросе, воркер в задаче) и не равен
--- ws — ошибка insufficient_privilege. Контекст не выставлен (системная роль, OAuth-колбэк до входа) — проверки
--- нет: workspace — явный параметр, право на него вызывающий проверяет сам (workspace_role).
+-- ws — ошибка insufficient_privilege. Без контекста вызывать может только app_system или app_token: у них workspace —
+-- явный параметр, право на него вызывающий проверяет сам (workspace_role). Прикладной роли app_rw без контекста —
+-- insufficient_privilege: иначе запрос API вне workspace_scope записал бы или сбросил токен чужого workspace по номеру.
 
 -- Текущий workspace прикладной роли (app/tenancy.py); NULL — не выставлен. Основа политик RLS (конец файла).
 CREATE FUNCTION app_workspace_id() RETURNS bigint
 LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('app.workspace_id', true), '')::bigint $$;
 
+-- Вызывается из функций SECURITY DEFINER: current_user там — владелец, поэтому вызывающий — роль сессии
+-- (SET ROLE, если был, иначе session_user).
 CREATE FUNCTION require_workspace_context(ws bigint) RETURNS void
 LANGUAGE plpgsql STABLE AS $$
+DECLARE
+  caller name := CASE WHEN current_setting('role') = 'none' THEN session_user ELSE current_setting('role')::name END;
 BEGIN
-  IF app_workspace_id() IS NOT NULL AND app_workspace_id() IS DISTINCT FROM ws THEN
+  IF app_workspace_id() IS NULL THEN
+    IF NOT (pg_has_role(caller, 'app_system', 'MEMBER') OR pg_has_role(caller, 'app_token', 'MEMBER')) THEN
+      RAISE EXCEPTION 'workspace context is required' USING ERRCODE = 'insufficient_privilege';
+    END IF;
+  ELSIF app_workspace_id() IS DISTINCT FROM ws THEN
     RAISE EXCEPTION 'workspace % is not the current workspace', ws USING ERRCODE = 'insufficient_privilege';
   END IF;
 END $$;
@@ -1525,13 +1534,13 @@ REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 
 -- Приложение: читать всё, добавлять везде, изменять — только операционные таблицы. Без DELETE, без DDL.
 GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA public TO app_rw;
-GRANT UPDATE ON users, workspace_settings, telegram_links,
+GRANT UPDATE ON users, workspace_settings,
                 direct_accounts, metrika_counters,
                 sync_runs, snapshots, issues, notifications, outbox_events, subscriptions, payments,
                 deletion_requests
              TO app_rw;
--- Сессии и привязки Telegram — служебные, не доказательные: выход из аккаунта удаляет строку.
-GRANT DELETE ON sessions, telegram_links TO app_rw;
+-- Сессии — служебные, не доказательные: выход из аккаунта удаляет строку.
+GRANT DELETE ON sessions TO app_rw;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO app_rw;
 
 -- Организации и команда (D3): только чтение; создание и изменение — функциями с проверкой actor (owner/admin).
@@ -1608,7 +1617,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE app_migrator IN SCHEMA public GRANT USAGE ON S
 --                set_/remove_workspace_member (проверяют, что actor — owner/admin организации).
 --                workspaces: UPDATE только name, status, deactivated_at (organization_id неизменяем — триггер).
 --                legal_acceptances: пишет всё, читает всё, кроме ip и user_agent (ПД).
---                Токены — set_connection_token / drop_connection_token (ws = app.workspace_id, если выставлен).
+--                Токены — set_connection_token / drop_connection_token, только в контексте (ws = app.workspace_id).
 --   app_token  — член app_rw (+ connection_token): те же политики и права, что у app_rw.
 --   app_system — член app_rw с отдельной разрешающей политикой «все строки»: системные задачи по многим
 --                workspace (планировщик, захват и доставка outbox, уведомления, выбор замеров к запуску).
@@ -1619,7 +1628,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE app_migrator IN SCHEMA public GRANT USAGE ON S
 --   Функции SECURITY DEFINER (удаление, ретеншн, токены, проверка доступа, управление командой) работают от
 --                владельца таблиц (app_migrator) и RLS не подчиняются; workspace / организация у них — явный
 --                параметр, actor — пользователь сессии, которого передаёт API.
--- Без RLS: users, yandex_identities, sessions, telegram_links (данные пользователя, не workspace; приложение
+-- Без RLS: users, yandex_identities, sessions (данные пользователя, не workspace; приложение
 -- фильтрует по пользователю сессии), organizations и organization_memberships (нужны до выбора workspace;
 -- изменять — только функциями), releases и free_audit_claims (глобальные, без данных клиента).
 -- placement_names — под RLS, его политика — в разделе таблицы (создаётся ниже этого блока).
@@ -1957,3 +1966,16 @@ GRANT SELECT, INSERT ON placement_names TO app_rw;
 ALTER TABLE placement_names ENABLE ROW LEVEL SECURITY;
 CREATE POLICY tenant ON placement_names TO app_rw USING (workspace_id = app_workspace_id());
 CREATE POLICY system ON placement_names TO app_system USING (true) WITH CHECK (true);
+
+-- Профиль бизнеса (онбординг, миграция 0008): сайт хранится и не загружается.
+CREATE TABLE business_profiles (  -- [O]
+  workspace_id bigint PRIMARY KEY REFERENCES workspaces ON DELETE CASCADE,
+  profile      jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(profile) = 'object'),
+  updated_at   timestamptz NOT NULL DEFAULT now()
+);
+REVOKE ALL ON business_profiles FROM PUBLIC;
+GRANT SELECT, INSERT, UPDATE ON business_profiles TO app_rw;
+ALTER TABLE business_profiles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant ON business_profiles TO app_rw
+  USING (workspace_id = app_workspace_id()) WITH CHECK (workspace_id = app_workspace_id());
+CREATE POLICY system ON business_profiles TO app_system USING (true) WITH CHECK (true);

@@ -75,10 +75,11 @@ def test_37_days_several_goals(metrika):
     assert {r.conversions for r in rows if r.goal_id == 222} == {Decimal(0)}  # цель без конверсий — данные, не ошибка
 
 
-def test_no_visits_at_all_is_zero_not_failure(metrika):
+def test_no_visits_at_all_is_unknown_not_zero_and_not_failure(metrika):
+    """Пустой ответ Метрики — «нет данных», а не 0 достижений: ноль выводился бы из отсутствия."""
     metrika(report=bytime({}))
     rows = sync_metrika(metrika.source(), GOALS, FROM, TO)
-    assert len(rows) == 2 * DAYS and all(r.conversions == 0 for r in rows)
+    assert len(rows) == 2 * DAYS and all(r.conversions is None for r in rows)
 
 
 def test_several_counters_are_independent(metrika):

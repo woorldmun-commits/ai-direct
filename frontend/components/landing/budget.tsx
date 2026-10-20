@@ -52,7 +52,7 @@ export function BudgetInput() {
               реальные проблемы при бюджете <b className="money">{rub(budget)}</b> в месяц — с формулой и источником каждой цифры.
             </p>
             <Link href="/signup" className="btn btn-primary mt-4">
-              Проверить свой аккаунт <ArrowRight size={16} />
+              Начать бесплатно <ArrowRight size={16} />
             </Link>
           </div>
         </div>

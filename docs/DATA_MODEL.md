@@ -96,8 +96,8 @@ PK (`user_id`, `workspace_id`), `ws_role`: `approver` (смотреть, decide;
 
 Изменения настроек не ломают воспроизводимость: `audit_runs.settings` хранит замороженную копию. `approval_mode` (`single_step` / `two_step` по `kind`) убран: в v1.1 число одобрений задаёт риск действия (EXECUTION_SAFETY.md); в v1.0 решение принимает один человек с правом decide.
 
-### `telegram_links` [O] — не используется в v1.0
-Telegram в AdPilot не используется (D15, VERSION_SCOPE §3.2). Таблица (`user_id` PK, `chat_id` UNIQUE, `linked_at`) осталась в схеме и в релизной миграции `0001_baseline`; к удалению отдельной миграцией (документация код не меняет).
+### ~~`telegram_links`~~ — удалена
+Telegram в AdPilot не используется (D15, VERSION_SCOPE §3.2). Таблица удалена миграцией `0007_drop_telegram`.
 
 ## 3. Подключения
 
@@ -275,7 +275,7 @@ Telegram в AdPilot не используется (D15, VERSION_SCOPE §3.2). Т
 `id`, `workspace_id`, `kind` (`daily` · `weekly`), `snapshot_id`, `audit_run_id`, `payload` jsonb (все показанные `Value` + ID рекомендаций), `created_at`. Отправка — через `notifications`.
 
 ### `notifications` [O]
-`id`, `workspace_id`, `kind` (`digest` · `correction` · `new_problem` · `critical` · `billing`), `channel` (целевое: `in_app` · `email`; в схеме пока `telegram` · `email` — приводится миграцией), `dedup_key` UNIQUE, `digest_id` NULL, `snapshot_id` NULL, `payload` jsonb, `status` (`queued` · `sent` · `failed` · `skipped`), `attempts`, `created_at`, `sent_at`.
+`id`, `workspace_id`, `kind` (`digest` · `correction` · `new_problem` · `critical` · `billing`), `channel` (`in_app` · `email`), `dedup_key` UNIQUE, `digest_id` NULL, `snapshot_id` NULL, `payload` jsonb, `status` (`queued` · `sent` · `failed` · `skipped`), `attempts`, `created_at`, `sent_at`.
 `dedup_key` = `kind:workspace:object:date` — повтор не создаёт второе сообщение. `date` — день самого события в поясе данных, не день доставки: повторная доставка outbox-события на следующий день не даёт дубль. Причина `skipped` — `payload.skip_reason` (`subscription_inactive`, `workspace_inactive`, `no_recipient`).
 
 ## 7. Биллинг и бесплатный аудит
@@ -452,7 +452,7 @@ workspace: active ──«деактивировать»──▶ deactivated �
 - **Дочерние таблицы без `workspace_id`** (`stat_rows`, `findings`, `recommendation_events`, `measurements`, `direct_accounts`, `payments`, …) — политика через `EXISTS` по родителю (`snapshots`, `issues`, подключения, подписки).
 - **`app_system`** — член `app_rw` с политикой «все строки»: задачи по многим workspace (планировщик, захват и доставка outbox, уведомления, выбор замеров к запуску). Те же права на таблицы, что у `app_rw`.
 - **Удаление и ретеншн** — функции `SECURITY DEFINER` под `app_deleter`; workspace — явный параметр.
-- **Организационного контекста (`app.organization_id`) нет.** Без RLS: `users`, `sessions`, `yandex_identities`, `telegram_links` (приложение фильтрует по пользователю сессии), `organizations`, `organization_memberships` (нужны до выбора workspace), `releases`, `free_audit_claims`. Управление организацией и членством — только функциями `SECURITY DEFINER` с проверкой, что actor — `owner` / `admin`; `workspaces.organization_id` неизменяем. Функции токенов сверяют переданный workspace с `app.workspace_id`.
+- **Организационного контекста (`app.organization_id`) нет.** Без RLS: `users`, `sessions`, `yandex_identities` (приложение фильтрует по пользователю сессии), `organizations`, `organization_memberships` (нужны до выбора workspace), `releases`, `free_audit_claims`. Управление организацией и членством — только функциями `SECURITY DEFINER` с проверкой, что actor — `owner` / `admin`; `workspaces.organization_id` неизменяем. Функции токенов сверяют переданный workspace с `app.workspace_id`.
 - Проверяется тестами (`tests/test_access.py`).
 
 ## 10. Индексы (основные)

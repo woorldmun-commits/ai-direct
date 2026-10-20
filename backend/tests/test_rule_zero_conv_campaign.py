@@ -11,7 +11,7 @@ import pytest
 from app.audit.policy import decide
 from app.audit.templates import explain
 from app.audit.values import to_value
-from app.rules import RULES
+from app.rules import ALL_RULES, RULES
 from app.rules.domain import (BID_OR_BUDGET_ACTIONS, SPEND_CAMPAIGN, AuditSettings, CampaignDay, Finding, NotEnoughData,
                               Reason, SnapshotView, run, windows)
 from app.rules.zero_conv_campaign import ZERO_CONV_CAMPAIGN
@@ -55,7 +55,8 @@ def only(result):
 
 
 def test_registered_once():
-    assert [r.rule_version for r in RULES if r.family == "zero_conv_campaign"] == [RULE]
+    assert [r.rule_version for r in RULES if r.family == "zero_conv_campaign"] == ["zero_conv_campaign@2"]
+    assert [r.rule_version for r in ALL_RULES if r.family == "zero_conv_campaign"] == [RULE, "zero_conv_campaign@2"]
 
 
 def test_v1_params_are_fixed():

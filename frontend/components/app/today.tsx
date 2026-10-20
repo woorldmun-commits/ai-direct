@@ -4,13 +4,14 @@ import { ArrowRight, History, ListChecks } from "lucide-react";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui";
 import { DeltaBadge, ValueView } from "@/components/value-view";
+import { LineChart } from "@/components/charts";
 import type { TodayResponse } from "@/lib/contract";
 import { DEMO_ERROR, DEMO_NOW, integrations, type SourcesScenario } from "@/lib/demo-backend";
-import { TODAY_DATE, USER } from "@/lib/demo";
+import { TODAY_DATE, USER, WEEK } from "@/lib/demo";
 import { EXPOSURE, EXPOSURE_NOTE } from "@/lib/site";
 import { formatMoment, formatPeriod } from "@/lib/value";
 import { StaleNotice } from "./freshness";
-import { LevelBadge, MetricCard } from "./problem";
+import { LevelBadge } from "./problem";
 import { ActionText, EVENT_LABEL, HeldNote, OverlapNote, SAVED_NOTE } from "./rec-parts";
 import { ConnectDirect, DemoStateSwitch, ErrorState, LoadingState, NothingFound, type ScreenState } from "./screen-state";
 import { useDemo } from "./store";
@@ -26,7 +27,7 @@ export function TodayScreen({ state, sources }: { state: ScreenState; sources: S
 
   return (
     <>
-      <PageHeader title="Сегодня" sub={`Доброе утро, ${USER.name}. Расход, проблемы и решения по кабинету — с источником каждой цифры.`} />
+      <PageHeader title="Сегодня" sub={`${USER.name}, вот что требует вашего внимания. Демонстрационные данные, каждая оценка — с источником.`} />
       <DemoStateSwitch current={state} path="/demo" />
       {state === "loading" && <LoadingState />}
       {state === "error" && <ErrorState error={DEMO_ERROR} retryHref="/demo" />}
@@ -50,20 +51,12 @@ function TodayData({ today }: { today: TodayResponse }) {
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label={EXPOSURE} v={today.exposure.total} tone="text-danger" note={`${EXPOSURE_NOTE}${missing ? ` Без суммы в итог не вошли: ${missing}.` : ""}`} />
-        <div className="card p-5">
-          <p className="text-sm text-muted">Проблем найдено</p>
-          <p className="money mt-2 text-[28px] leading-tight md:text-[32px]">{counts.active}</p>
-          {byStatus && (
-            <p className="mt-0.5 text-xs text-muted">
-              требуют решения: {(counts.new ?? 0) + (counts.requires_decision ?? 0)} · приняты: {counts.accepted} · отложены: {counts.postponed}
-            </p>
-          )}
-        </div>
-        <MetricCard label="Потрачено" v={today.spent} />
-        {today.saved && <MetricCard label="Сэкономлено" v={today.saved} tone="text-success" note={SAVED_NOTE} />}
+      <div className="overview-grid">
+        <div className="overview-focus"><p>{EXPOSURE}</p><div className="mt-3"><ValueView v={today.exposure.total}/></div><small>{EXPOSURE_NOTE}{missing ? ` Без суммы в итог не вошли: ${missing}.` : ""}</small></div>
+        <div className="overview-stat"><p>Потрачено за период</p><div className="mt-3"><ValueView v={today.spent}/></div><small>{formatPeriod(today.spent.period)} · Яндекс Директ</small><div className="mt-5 border-t border-line pt-3"><p className="text-xs text-muted">Открытых рекомендаций</p><p className="mt-1 text-xl font-semibold">{counts.active}</p>{byStatus && <small className="text-[10px] text-muted">Требуют решения: {(counts.new ?? 0) + (counts.requires_decision ?? 0)}</small>}</div></div>
+        <div className="overview-stat"><p>Результат решений</p><div className="mt-3">{today.saved ? <ValueView v={today.saved} className="text-success"/> : <p className="text-sm text-muted">Недостаточно данных</p>}</div><small>{SAVED_NOTE}</small><Link href="/demo/history" className="mt-5 inline-flex items-center gap-2 text-xs font-semibold text-brand">История решений <ArrowRight size={14}/></Link></div>
       </div>
+      <section className="overview-chart" aria-labelledby="pulse-title"><div><h2 id="pulse-title">Пульс бюджета</h2><p>Расход и признаки неэффективности за 7 дней.</p><p>Демо · {formatPeriod(today.spent.period)}</p></div><div><LineChart series={[{name:"Расход",values:WEEK.spend,color:"var(--brand)"},{name:"Неэффективный расход ≈",values:WEEK.exposure,color:"var(--danger)",dashed:true}]} labels={["25 сен","26","27","28","29","30","1 окт"]} height={145} format={v=>new Intl.NumberFormat("ru-RU",{notation:"compact"}).format(v)}/></div></section>
 
       <section className="card mt-4 p-5 md:p-6" aria-labelledby="top-actions">
         <div className="flex flex-wrap items-center justify-between gap-2">

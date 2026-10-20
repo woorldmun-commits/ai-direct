@@ -4,13 +4,22 @@ high_cpa_target@1   — target_cpa задан → сравнение с target �
 high_cpa_baseline@1 — target_cpa не задан → сравнение с baseline → только «проверить причину» + «укажите целевой CPA».
 
 Общий evaluator, режим — параметр версии. issue_key у обеих одинаковый (family + объект): если клиент задал target,
-проблема и рекомендация остаются теми же, меняется только вывод."""
+проблема и рекомендация остаются теми же, меняется только вывод.
+
+@2 (те же пороги): источник конверсий и CPA — yandex_direct из реестра метрик (Reports API Директа, а не Метрика);
+в evidence_meta — цели и атрибуция снимка, без них (conversion_definition нет) правило не вычисляется. Конверсии дней
+досчёта (date ≥ partial_from) — не финальные: если без них вывод не держится (по завершённым дням CPA не выше порога
+срабатывания), достаточность данных не выше medium и level_reason = conversions_partial — как в zero_conv_*. Неизвестные
+конверсии (None) за день окна — SOURCE_MISSING, а не ноль."""
 
 from datetime import date
 from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
 
+from dataclasses import replace
+
 from app.rules.domain import (DIRECT_CONVERSIONS, FORMULA, AuditSettings, CampaignDay, Fact, Finding, NotEnoughData,
                               Output, Reason, Rule, SnapshotView, Window, frozen, issue_key, windows)
+from app.rules.evidence import PARTIAL, definition_meta, definition_missing, labels, user_input
 
 FAMILY = "high_cpa"
 CPA_FORMULA = "period_total_spend / period_total_conversions"
@@ -20,11 +29,31 @@ ROUNDING = {"floor": ROUND_FLOOR}
 
 def _sum(days: list[CampaignDay], window: Window) -> tuple[Decimal, Decimal]:
     inside = [d for d in days if d.date in window]
-    return sum((d.cost for d in inside), Decimal(0)), sum((d.conversions or Decimal(0) for d in inside), Decimal(0))
+    return sum((d.cost for d in inside), Decimal(0)), sum((d.conversions for d in inside), Decimal(0))
+
+
+def _unknown(days: list[CampaignDay], window: Window) -> bool:
+    """Конверсии неизвестны хотя бы за один день окна: ноль конверсий не выводится из их отсутствия."""
+    return any(d.conversions is None for d in days if d.date in window)
+
+
+def _quality_v2(rule: Rule, snap: SnapshotView, days: list[CampaignDay], evaluation: Window, reference: Decimal,
+                conv: Decimal) -> tuple[str, bool]:
+    """@2: (достаточность данных, вывод опирается на дни досчёта). Конверсии дней досчёта ещё приходят, поэтому
+    достаточность считается по конверсиям завершённых дней (те же пороги), а если вывод держится не на них (CPA по
+    завершённым дням ниже порога срабатывания или конверсий там нет) — не выше medium."""
+    done_cost, done_conv = _sum([d for d in days if snap.partial_from is not None and d.date < snap.partial_from],
+                                evaluation)
+    p = rule.params
+    quality = _current_data_quality(done_conv, p)
+    solid = done_conv > 0 and delta_pct(done_cost / done_conv, reference) >= p["trigger_delta_pct"]
+    if not solid and quality == "high":
+        quality = "medium"
+    return quality, not solid or quality != _current_data_quality(conv, p)
 
 
 def _current_data_quality(conversions: Decimal, p) -> str:
-    """Только показывается пользователю; действие не запрещает (продуктовой политики на это пока нет)."""
+    """Достаточность данных текущего периода; уровень действия по ней режет политика (audit/policy.py)."""
     if conversions >= p["current_high_conversions"]:
         return "high"
     if conversions >= p["current_medium_conversions"]:
@@ -61,6 +90,8 @@ def _reference(rule: Rule, snap: SnapshotView, settings: AuditSettings, days, ev
     # Директ не отдаёт, и кампания на паузе в начале окна иначе выглядела бы новой.
     if snap.period_from > baseline.date_from or account_history_from > baseline.date_from:
         return Reason.BASELINE_HISTORY_INSUFFICIENT
+    if _unknown(days, baseline):
+        return Reason.SOURCE_MISSING
     base_cost, base_conv = _sum(days, baseline)
     quality = _baseline_quality(base_conv, rule.params)
     if quality is None:  # baseline_cpa = null, а не 0 и не бесконечность
@@ -68,10 +99,11 @@ def _reference(rule: Rule, snap: SnapshotView, settings: AuditSettings, days, ev
     reference = (base_cost / base_conv).quantize(CENT, ROUND_HALF_UP)
     if reference <= 0:  # расход в окне ~0 при конверсиях: ориентира нет, а не «CPA 0 ₽» (и не деление на ноль)
         return Reason.BASELINE_DATA_INSUFFICIENT
+    conv_label, cpa_label = labels(rule)
     evidence = {
         "baseline_cost": Fact(base_cost, "rub", "yandex_direct", baseline),
-        "baseline_conversions": Fact(base_conv, "count", "yandex_metrika", baseline),
-        "baseline_cpa": Fact(reference, "rub", "yandex_direct+yandex_metrika", baseline, "estimated", CPA_FORMULA),
+        "baseline_conversions": Fact(base_conv, "count", conv_label, baseline),
+        "baseline_cpa": Fact(reference, "rub", cpa_label, baseline, "estimated", CPA_FORMULA),
     }
     return reference, evidence, {"baseline_data_quality": quality}
 
@@ -81,6 +113,8 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings,
     p, mode = rule.params, rule.params["mode"]
     evaluation, baseline = windows(snap.period_to)
 
+    if _unknown(days, evaluation):
+        return NotEnoughData(rule.rule_version, Reason.SOURCE_MISSING, "campaign", campaign_id)
     cost, conv = _sum(days, evaluation)
     if conv == 0:  # CPA не существует; расход без конверсий ловит другое правило
         return NotEnoughData(rule.rule_version, Reason.NO_CONVERSIONS, "campaign", campaign_id)
@@ -94,13 +128,16 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings,
     if delta < p["trigger_delta_pct"]:
         return None
 
+    conv_label, cpa_label = labels(rule)
+    quality, partial = (_current_data_quality(conv, p), False) if rule.version < 2 else \
+        _quality_v2(rule, snap, days, evaluation, reference, conv)
     evidence = {
         "cost": Fact(cost, "rub", "yandex_direct", evaluation),
-        "conversions": Fact(conv, "count", "yandex_metrika", evaluation),
-        "cpa": Fact(cpa, "rub", "yandex_direct+yandex_metrika", evaluation, "estimated", CPA_FORMULA),
+        "conversions": Fact(conv, "count", conv_label, evaluation),
+        "cpa": Fact(cpa, "rub", cpa_label, evaluation, "estimated", CPA_FORMULA),
         **ref_evidence,
     }
-    source = "yandex_direct+yandex_metrika" + ("+user_input" if mode == "target" else "")
+    source = user_input(cpa_label) if mode == "target" else cpa_label
     lost = Fact(((cpa - reference) * conv).quantize(CENT, ROUND_HALF_UP), "rub", source, evaluation,
                 "estimated", f"(cpa - {mode}_cpa) * conversions")
     if mode == "target":
@@ -115,13 +152,17 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings,
         delta_pct=delta.quantize(Decimal("0.1"), ROUND_HALF_UP), lost=lost,
         # «Проверить» (baseline) — обоснованной формулы прогноза нет: «Можно сэкономить» не копирует lost (ARCHITECTURE §4).
         recoverable=lost if mode == "target" else Fact.unavailable("rub", source, evaluation, reason="no_forecast"),
-        current_data_quality=_current_data_quality(conv, p),
-        evidence=frozen(evidence), evidence_meta=frozen(meta), action=frozen(action),
+        current_data_quality=quality,
+        evidence=frozen(evidence),
+        evidence_meta=frozen({**meta, **definition_meta(rule, snap), **(PARTIAL if partial else {})}),
+        action=frozen(action),
         exposure_basis=FORMULA,  # (cpa − ориентир) × конверсии: на единицы расхода не раскладывается
     )
 
 
 def evaluate(rule: Rule, snap: SnapshotView, settings: AuditSettings) -> tuple[Output, ...]:
+    if missing := definition_missing(rule, snap):
+        return missing
     if not snap.campaign_days:
         return ()
     by_campaign: dict[int, list[CampaignDay]] = {}
@@ -150,3 +191,7 @@ HIGH_CPA_BASELINE = Rule(
                    "baseline_high_conversions": 20,  # PRD §4.1: ≥ 20 → high
                    "baseline_min_conversions": 10}),  # 10–19 → medium, < 10 → baseline не считается
 )
+
+# @2 — те же пороги, другие метки источника, доказательства и досчёт (см. docstring модуля); @1 остаются для старых выводов.
+HIGH_CPA_TARGET_V2 = replace(HIGH_CPA_TARGET, version=2)
+HIGH_CPA_BASELINE_V2 = replace(HIGH_CPA_BASELINE, version=2)

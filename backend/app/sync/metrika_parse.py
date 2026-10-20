@@ -16,7 +16,7 @@ class GoalRow:
     """Всё, что из Метрики попадает в снимок: stat_rows(source=yandex_metrika, level=site_goal, object_id=goal_id)."""
     goal_id: int
     date: date
-    conversions: Decimal
+    conversions: Decimal | None  # None: ответ без данных — достижений «0» из него не выводится
 
 
 def _json(text: str) -> dict:
@@ -87,8 +87,8 @@ def parse_bytime(text: str, spec: MetrikaReportSpec, goal_ids: tuple[int, ...]) 
     data = doc.get("data")
     if not isinstance(data, list) or len(data) > 1:
         raise ReportFormatError(FormatError.MISSING_REQUIRED_COLUMN, "data: ожидается 0 или 1 строка без dimensions")
-    if not data:  # визитов за период не было: это ноль конверсий, а не ошибка API
-        return tuple(GoalRow(g, d, Decimal(0)) for g in goal_ids for d in days)
+    if not data:  # пустой ответ: визитов могло не быть, а могло не быть данных — это неизвестно, а не ноль и не ошибка API
+        return tuple(GoalRow(g, d, None) for g in goal_ids for d in days)
     series = data[0].get("metrics") if isinstance(data[0], dict) else None
     if not isinstance(series, list) or len(series) != len(spec.metrics):
         raise ReportFormatError(FormatError.MISSING_REQUIRED_COLUMN, f"data[0].metrics: нужно {len(spec.metrics)}")

@@ -296,7 +296,7 @@ class Value(BaseModel):
 Доменные события (`recommendation_created` · `_seen_again` · `_resolved` · `_measured` · `measurement_skipped`) пишутся в `outbox_events` в той же транзакции, что и изменение (`app/worker/outbox.py: emit`). Доставка — после COMMIT, отдельным воркером: захват пачки с арендой (`FOR UPDATE SKIP LOCKED`, `locked_until`), отправка вне транзакции, отметка `delivered_at`. Ошибка получателя — повтор с растущей паузой (до 1 ч); упавший воркер не держит событие — аренда истекает. Доставка at-least-once: получатель идемпотентен по `id` события. В `payload` — только ID и числа.
 - События человека (`accepted`, `rejected`, `manual_claimed`; в v1.1 — `approval_granted`, `approved`, `execution_*`): событие рекомендации с `finding_id` версии и событие outbox пишутся в одной бизнес-транзакции. Отдельный `emit` после COMMIT запрещён — падение процесса между ними снова даёт рассинхронизацию.
 - Outbox гарантирует доставку факта «событие произошло» и ничего не решает о показе. Кому, в какой канал, каким текстом и не было ли уже отправки сегодня (дневная дедупликация) — слой `notifications`. Outbox не знает ни о каналах доставки, ни о подписке, ни о настройках уведомлений.
-- Получатель outbox — `app/worker/notify.py` (`run_notifications`): событие → не больше одной строки `notifications`. `recommendation_created` → `new_problem`; остальные события сообщений пока не порождают (уточнения цифр — из сравнения с дайджестом). guard `NOTIFY` не пройден → строка `skipped` с `payload.skip_reason`, иначе `queued`. Любой исход — доставка события в слой: outbox отмечает его доставленным и хранит. Уведомление в интерфейсе доступно сразу (`GET /me/notifications`, API_CONTRACT §1); `queued` для email отправляет отдельный отправитель — только на подтверждённый адрес и если дайджест не выключен. **Код сейчас** (`app/worker/notify.py`, `channel` Telegram/email, `telegram_links`) соответствует прежнему решению и приводится в соответствие отдельным PR; эта документация его не меняет.
+- Получатель outbox — `app/worker/notify.py` (`run_notifications`): событие → не больше одной строки `notifications`. `recommendation_created` → `new_problem`; остальные события сообщений пока не порождают (уточнения цифр — из сравнения с дайджестом). guard `NOTIFY` не пройден → строка `skipped` с `payload.skip_reason`, иначе `queued`. Любой исход — доставка события в слой: outbox отмечает его доставленным и хранит. Уведомление в интерфейсе будет доступно сразу через `GET /me/notifications` (API_CONTRACT §1; эндпоинт ещё не реализован — строки `in_app` пишутся, но API чтения нет); `queued` для email отправляет отдельный отправитель — только на подтверждённый адрес и если дайджест не выключен. Канал строки — `in_app`; Telegram удалён миграцией `0007_drop_telegram`.
 
 ## 6. AI-слой
 
@@ -316,7 +316,7 @@ class LLMProvider(Protocol):
 ```
 **Правило: бизнес-логика не зависит от YandexGPT.** Rule engine формирует факты и выводы, модель только объясняет. Модуль `ai/` не импортируется из `rules/` и `audit/` (проверяется тестом на импорты).
 
-Детерминированные компоненты (Data, Audit, Safety, Measurement) считают и решают; AI только объясняет: в v1.0 — Explain, «Спросить AI» — [v1.1]. «Агентами» их не называем; Root Cause Engine — **[v1.1]**. Подробно — **[AI_GOVERNANCE.md](AI_GOVERNANCE.md)**.
+Детерминированные компоненты (Data, Audit, Safety, Measurement) считают и решают; AI только объясняет и отвечает по проверенным находкам. Решением владельца 2026-10-09 в v1.0 два слоя: детерминированные аналитические движки по отраслям (`rules/`, `audit/`, `intelligence/`) создают факты и находки, а ИИ-агенты (Chief Analyst и отраслевые специалисты, `intelligence/agents/`) работают только на чтение над неизменяемым Evidence Bundle, не создают `FACT` и `DERIVED_FACT` и не вводят чисел; результат проверяет Evidence Judge, при выключенном LLM работает шаблонный путь. Приоритеты по ₽ и разрешение конфликтов — кодом; при нехватке данных ответ «Недостаточно данных». `rules/` и `audit/` не импортируют `ai/`; провайдер LLM — YandexGPT через `LLMProvider`. Root Cause Engine — **[v1.1]**. Подробно — **[AI_GOVERNANCE.md](AI_GOVERNANCE.md)**.
 
 Точка входа `explain(finding) -> Explanation`:
 1. **Контекст** собирает бэкенд: факты с ID (`e1`, `e2`, …) и значения `Value`. Объекты — непрозрачными ссылками на один запрос (`campaign_A`, `object_3`), не ID Яндекса; названия кампаний и тексты запросов не отправляем никогда (§2.4).
@@ -448,7 +448,7 @@ backend/
     audit/              # запуск правил, findings, recommendations, verify, сверка ручного выполнения; exposure.py — итог без двойного счёта [v1.0]
     execution/          # [v1.1] не входит в сборку v1.0: реестр, risk_policy, кворум, предпросмотр, гейт, изменение, откат
     ai/                 # provider, yandexgpt.py, explain.py, anonymize.py (ask.py — v1.1)
-    notify/             # центр уведомлений, email, дайджесты (telegram в коде — к удалению)
+    notify/             # центр уведомлений, email, дайджесты
     billing/            # yookassa.py, subscription, can()
     api/                # роуты
   migrations/           # alembic

@@ -26,6 +26,12 @@ const ROOT: Item[] = [
   { label: "Сегодня", hint: "Раздел", href: "/demo" },
   { label: "Финансы", hint: "Раздел", href: "/demo/finance" },
   { label: "Настройки", hint: "Раздел", href: "/demo/settings" },
+  { label: "Анализ", hint: "Раздел", href: "/demo/analytics" },
+  { label: "Кампании", hint: "Раздел", href: "/demo/campaigns" },
+  { label: "AI-помощник", hint: "Раздел", href: "/demo/assistant" },
+  { label: "Эффект решений", hint: "Раздел", href: "/demo/effect" },
+  { label: "Отчёты", hint: "Раздел", href: "/demo/reports" },
+  { label: "Тарифы", hint: "Раздел", href: "/demo/plans" },
 ];
 
 const CAMPAIGN_ITEMS: Item[] = CAMPAIGNS.map((c) => ({ label: c.name, hint: "Кампания", href: `/demo/recommendations?campaign=${c.id}` }));
@@ -43,6 +49,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
   const input = useRef<HTMLInputElement>(null);
+  const dialog = useRef<HTMLDialogElement>(null);
 
   const items = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -51,6 +58,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   }, [q, mode]);
 
   useEffect(() => input.current?.focus(), [mode]);
+  useEffect(() => { dialog.current?.showModal(); }, []);
 
   function run(i: number) {
     const it = items[i];
@@ -72,10 +80,8 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[70] bg-black/30 p-4 pt-[12vh]" onClick={onClose}>
+    <dialog ref={dialog} aria-label="Поиск и команды" className="fixed inset-0 m-0 h-dvh max-h-none w-full max-w-none bg-black/30 p-4 pt-[12vh] text-text" onCancel={onClose} onClick={(e) => { if(e.target === e.currentTarget) onClose(); }}>
       <div
-        role="dialog"
-        aria-label="Поиск и команды"
         className="glass anim-fade mx-auto max-w-[560px] overflow-hidden rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -104,7 +110,10 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                 setSel((s) => Math.max(s - 1, 0));
               }
               if (e.key === "Enter") run(sel);
-              if (e.key === "Escape") (mode === "root" ? onClose : back)();
+              if (e.key === "Escape") {
+                e.preventDefault();
+                (mode === "root" ? onClose : back)();
+              }
               if (e.key === "Backspace" && !q && mode !== "root") back();
             }}
             placeholder={PLACEHOLDER[mode]}
@@ -133,6 +142,6 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
         </ul>
         <p className="border-t border-line px-4 py-2 text-[11px] text-muted">↑↓ — выбрать · Enter — открыть · Esc — закрыть</p>
       </div>
-    </div>
+    </dialog>
   );
 }

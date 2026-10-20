@@ -14,7 +14,7 @@ class Crash(BaseException):
 
 
 class Receiver:
-    """Получатель, идемпотентный по id события (как должен быть Telegram-/email-отправитель)."""
+    """Получатель, идемпотентный по id события (как должен быть email-отправитель)."""
 
     def __init__(self, fail_with=None, crash_after_send=False):
         self.calls, self.delivered, self.fail_with, self.crash_after_send = [], set(), fail_with, crash_after_send
@@ -106,9 +106,9 @@ def test_two_workers_never_take_the_same_event(rw, chain, db):
 def test_failed_delivery_is_retried_with_backoff(rw, chain):
     eid = event(rw, chain)
     t = now()
-    deliver(rw, Receiver(fail_with=PublishError("telegram_unavailable")), at=t)
+    deliver(rw, Receiver(fail_with=PublishError("email_unavailable")), at=t)
     delivered, attempts, error, locked = state(rw, eid)
-    assert (delivered, attempts, error, locked) == (False, 1, "telegram_unavailable", False)
+    assert (delivered, attempts, error, locked) == (False, 1, "email_unavailable", False)
     early = Receiver()
     deliver(rw, early, at=t + timedelta(seconds=30))
     assert eid not in early.calls                                           # пауза перед повтором
@@ -128,7 +128,7 @@ def test_error_codes_not_server_text(rw, chain):
     import psycopg
     eid = event(rw, chain)
     with pytest.raises(psycopg.errors.CheckViolation):
-        rw.execute("UPDATE outbox_events SET last_error = 'Telegram said: chat 12345 blocked' WHERE id = %s", (eid,))
+        rw.execute("UPDATE outbox_events SET last_error = 'SMTP said: mailbox user12345@example.test blocked' WHERE id = %s", (eid,))
 
 
 def test_unexpected_error_releases_rest_of_batch_without_waiting_for_lease(rw, chain):

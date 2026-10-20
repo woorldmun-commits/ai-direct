@@ -1,7 +1,7 @@
 """Слой уведомлений — получатель outbox (ARCHITECTURE.md §5.1). Outbox хранит факт «событие произошло»; здесь
 решается, нужно ли сообщение, есть ли кому и куда его слать и не было ли его уже в этот день.
 
-Итог по событию — одна строка notifications: queued (отправит Telegram-отправитель) или skipped с причиной
+Итог по событию — одна строка notifications: queued (покажет центр уведомлений / отправит email-отправитель) или skipped с причиной
 (guard NOTIFY, нет получателя), либо ничего, если событие сообщений не порождает. Любое из этих решений —
 успешная доставка события в этот слой: outbox отмечает его доставленным, но не удаляет.
 
@@ -23,7 +23,7 @@ from app.worker.outbox import OutboxEvent, deliver_pending
 # Какие события порождают сообщение. Уточнения цифр — из сравнения с дайджестом, не из seen_again (PRD §3);
 # критические события подключений в outbox пока не пишутся.
 KINDS = {"recommendation_created": "new_problem"}
-CHANNEL = "telegram"
+CHANNEL = "in_app"  # Telegram не используется (D15); email — дайджест, отдельный отправитель
 
 
 class Notifier:
@@ -54,7 +54,6 @@ class Notifier:
         # Получатели — все, у кого есть доступ к workspace (owner/admin организации и участники workspace):
         # та же точка проверки, что и для входа в workspace. Деактивированных представление не возвращает.
         has_recipient = self.conn.execute("""SELECT 1 FROM effective_workspace_access a
-                                             JOIN telegram_links t ON t.user_id = a.user_id
                                              WHERE a.workspace_id = %s LIMIT 1""", (workspace_id,)).fetchone()
         return None if has_recipient else "no_recipient"
 

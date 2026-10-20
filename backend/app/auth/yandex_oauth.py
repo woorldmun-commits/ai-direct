@@ -20,6 +20,7 @@ import httpx
 AUTHORIZE_URL = "https://oauth.yandex.ru/authorize"
 TOKEN_URL = "https://oauth.yandex.ru/token"
 TIMEOUT = httpx.Timeout(10.0)
+MAX_TOKEN_LIFETIME = 10 * 366 * 24 * 60 * 60  # broad ceiling; ordinary one-year tokens remain unchanged
 
 
 class OAuthError(Exception):
@@ -75,6 +76,20 @@ def refresh(http: httpx.Client, app: OAuthApp, refresh_token: str, now: datetime
     return _token(http, app, {"grant_type": "refresh_token", "refresh_token": refresh_token}, now)
 
 
+def _token_text(value: object) -> str:
+    if not isinstance(value, str) or not value or not value.isascii() or any(ord(c) <= 32 or ord(c) == 127 for c in value):
+        raise ValueError("invalid token")
+    return value
+
+
+def _lifetime(value: object) -> int:
+    if isinstance(value, str) and re.fullmatch(r"[0-9]{1,10}", value):
+        value = int(value)
+    if type(value) is not int or not 0 < value <= MAX_TOKEN_LIFETIME:
+        raise ValueError("invalid token lifetime")
+    return value
+
+
 def _token(http: httpx.Client, app: OAuthApp, data: dict, now: datetime) -> Tokens:
     try:
         r = http.post(TOKEN_URL, data={**data, "client_id": app.client_id, "client_secret": app.client_secret},
@@ -84,9 +99,12 @@ def _token(http: httpx.Client, app: OAuthApp, data: dict, now: datetime) -> Toke
     if r.status_code == 200:
         try:
             body = r.json()
-            return Tokens(body["access_token"], body.get("refresh_token"),
-                          now + timedelta(seconds=int(body["expires_in"])))
-        except (ValueError, KeyError, TypeError, AttributeError):
+            access = _token_text(body["access_token"])
+            refresh_token = body.get("refresh_token")
+            if refresh_token is not None:
+                refresh_token = _token_text(refresh_token)
+            return Tokens(access, refresh_token, now + timedelta(seconds=_lifetime(body["expires_in"])))
+        except (ValueError, KeyError, TypeError, AttributeError, OverflowError):
             raise OAuthError("bad_response") from None
     if r.status_code >= 500:
         raise OAuthError("yandex_unavailable")
@@ -99,6 +117,6 @@ def _token(http: httpx.Client, app: OAuthApp, data: dict, now: datetime) -> Toke
 def _error_code(r: httpx.Response) -> str:
     try:
         code = r.json().get("error", "")
-    except ValueError:
+    except (ValueError, AttributeError):
         code = ""
-    return code if re.fullmatch(r"[a-z_]+", code or "") else f"http_{r.status_code}"
+    return code if isinstance(code, str) and re.fullmatch(r"[a-z_]{1,64}", code) else f"http_{r.status_code}"

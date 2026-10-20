@@ -5,12 +5,13 @@ import { AuthLayout, PhoneAuth } from "@/components/auth";
 export const metadata: Metadata = {
   title: "Вход",
   alternates: { canonical: "/login" },
+  robots: { index: false, follow: false },
 };
 
 export default function LoginPage() {
   return (
     <AuthLayout
-      title="Вход в AdPilot"
+      title="Добро пожаловать!"
       sub="По номеру телефона: пришлём код в SMS."
       footer={
         <>

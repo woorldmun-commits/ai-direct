@@ -19,7 +19,7 @@ from decimal import Decimal
 import psycopg
 from fastapi import APIRouter
 
-from app.api.active import active_cards, today_msk, with_exposure
+from app.api.active import active_cards, budgeted, today_msk, with_exposure
 from app.api.deps import Conn, CurrentWorkspace
 from app.api.serialize import moment, recommendation_item, value_of
 from app.contract import Value
@@ -117,9 +117,10 @@ def today(conn: Conn, ws: CurrentWorkspace):
                                             WHERE workspace_id = %s""", (ws.id,)).fetchone()
     as_of: date = cutoff or today_msk()  # аудита не было — сегодня по МСК (пояс данных), не по UTC
     result, overlaps = with_exposure(conn, cards, as_of)
-    top = [recommendation_item(c, overlaps[c.rec_id]) for c in sorted(cards, key=_priority)[:TOP_LIMIT]]
+    in_budget, beyond = budgeted(cards, _priority)
+    top = [recommendation_item(c, overlaps[c.rec_id]) for c in in_budget[:TOP_LIMIT]]
     scope, spent = _scope(conn, ws.id, as_of)
     partial = spent.data_status == "partial" or any(c.lost.data_status == "partial" for c in cards)
     return {"last_audit_at": moment(last_audit_at), "audit_scope": scope, "spent": value_of(spent),
-            "exposure": _exposure_json(result), "counts": {"active": len(cards)}, "top": top,
+            "exposure": _exposure_json(result), "counts": {"active": len(cards), "beyond_budget": len(beyond)}, "top": top,
             "data_freshness": _freshness(conn, ws.id), "data_status": "partial" if partial else "complete"}

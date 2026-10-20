@@ -107,7 +107,7 @@ def test_today_on_real_snapshot_dedups_overlapping_cards(api, rw, audited, monke
     assert {c["issue_type"]: Decimal(c["amount"]["amount"]) for c in e["components"]} == {
         "spend_block": spend, "high_cpa": high_cpa}
     assert e["coverage"] == {"included": 2, "unavailable": 0}
-    assert body["counts"] == {"active": 2}
+    assert body["counts"] == {"active": 2, "beyond_budget": 0}
     # приоритет — уровень действия: «снизить ставку» (review) выше «проверить» (inspect_only) с большим exposure
     assert [i["action_level"] for i in body["top"]] == ["review", "inspect_only"]
     assert Decimal(body["top"][1]["exposure"]["amount"]) == spend
@@ -208,7 +208,7 @@ def test_decided_recommendation_leaves_today(api, rw, audited, monkeypatch):
                   VALUES (%s, 'rejected', %s, '{"reason": "too_risky"}')""", (rec, audited["user"]))
     body = get_today(api, rw, audited["user"], audited["ws"]).json()
     cards = lost_of(rw, audited["ws"])
-    assert body["counts"] == {"active": 1}
+    assert body["counts"] == {"active": 1, "beyond_budget": 0}
     assert body["exposure"]["total"]["amount"] == cards["high_cpa"]["amount"]
     assert [c["issue_type"] for c in body["exposure"]["components"]] == ["high_cpa"]
     assert f"rec_{rec}" not in [i["id"] for i in body["top"]]
@@ -226,7 +226,7 @@ def test_empty_workspace_is_unavailable_with_empty_top(api, rw):
         assert_value(v)
         assert v["amount"] is None and v["calculation_type"] == "unavailable"
     assert body["exposure"]["components"] == [] and body["exposure"]["coverage"] == {"included": 0, "unavailable": 0}
-    assert body["top"] == [] and body["counts"] == {"active": 0} and body["last_audit_at"] is None
+    assert body["top"] == [] and body["counts"] == {"active": 0, "beyond_budget": 0} and body["last_audit_at"] is None
     assert body["data_freshness"] == {"last_snapshot_at": None,
                                       "yandex_direct": {"status": None, "data_to": None, "last_success_at": None},
                                       "yandex_metrika": {"status": None, "data_to": None, "last_success_at": None}}
@@ -244,7 +244,7 @@ def test_cards_without_audited_snapshot_do_not_count(api, rw):
     ws_id = new_workspace(rw, "not-audited", user=owner)
     recommendation(rw, ws_id, f"na-{ws_id}", "500.00", audited=False)
     body = get_today(api, rw, owner, ws_id).json()
-    assert body["counts"] == {"active": 0} and body["exposure"]["total"]["amount"] is None
+    assert body["counts"] == {"active": 0, "beyond_budget": 0} and body["exposure"]["total"]["amount"] is None
     assert body["last_audit_at"] is not None  # аудит был — но без снимка этого кабинета
     assert body["audit_scope"]["ad_accounts"]["checked"] == 0 and body["audit_scope"]["campaigns"] == 0
     assert body["spent"]["amount"] is None  # снимков в аудите нет — расход неизвестен, а не 0

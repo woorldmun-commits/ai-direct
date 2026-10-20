@@ -1,0 +1,105 @@
+{
+  "description": "Пересечение с правилом 1: кампания без конверсий за окно (42 000 ₽) покрывает весь свой расход, запросы 5 и 6 (8 000 ₽) — часть того же расхода. Итог — максимум, 42 000 ₽, а не 50 000 ₽.",
+  "tags": [
+    "problem"
+  ],
+  "rules_version": 2,
+  "flags": [
+    "audit_rules_candidates"
+  ],
+  "settings": {
+    "target_cpa": "1000"
+  },
+  "snapshot": {
+    "period_to": "2026-09-30",
+    "sources": [
+      "yandex_direct",
+      "direct_conversions",
+      "direct_queries"
+    ],
+    "conversion_definition": {
+      "goal_ids": [
+        111
+      ],
+      "attribution": "last"
+    },
+    "campaigns": [
+      {
+        "id": 808,
+        "strategy": "manual",
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "42000.00",
+            "clicks": 700,
+            "conversions": "0"
+          }
+        ]
+      }
+    ],
+    "queries": [
+      {
+        "campaign_id": 808,
+        "id": 5,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "5000.00",
+            "clicks": 40,
+            "conversions": "0"
+          }
+        ]
+      },
+      {
+        "campaign_id": 808,
+        "id": 6,
+        "days": [
+          {
+            "date": "2026-09-25",
+            "cost": "3000.00",
+            "clicks": 30,
+            "conversions": "0"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": [
+    {
+      "rule_version": "zero_conv_campaign@2",
+      "object_type": "campaign",
+      "object_id": 808,
+      "candidate_level": "inspect_only",
+      "action_level": "inspect_only",
+      "action": {
+        "type": "investigate_zero_conversions",
+        "check": [
+          "conversion_goals",
+          "strategy",
+          "search_queries_negative_keywords"
+        ]
+      },
+      "exposure": "42000.00"
+    },
+    {
+      "rule_version": "zero_conv_queries@1",
+      "object_type": "campaign",
+      "object_id": 808,
+      "candidate_level": "inspect_only",
+      "action_level": "inspect_only",
+      "action": {
+        "type": "investigate_zero_conversions",
+        "check": [
+          "search_queries_negative_keywords"
+        ],
+        "query_ids": [
+          5,
+          6
+        ]
+      },
+      "exposure": "8000.00",
+      "can_save": "unavailable"
+    }
+  ],
+  "exposure_total": "42000.00"
+}

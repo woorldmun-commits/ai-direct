@@ -218,7 +218,7 @@ CPA (`high_cpa`: `high_cpa_target@N` / `high_cpa_baseline@N`), площадки 
 аудита или аудит удержал проблему «недостаточно данных» (`data_sufficiency = insufficient`; `exposure`, `can_save`,
 `exposure_overlap` — `unavailable` с причиной; `action_level = inspect_only`; в итог не входит — `coverage.unavailable`);
 нет решения человека (`postponed` — до `until`). `filter` по статусам — неделя 4. Параметры: `ad_account`, `limit`
-(1–100, по умолчанию 50), `cursor`. Ответ: `{"items": [...], "next_cursor": "…" | null}`. Порядок — по `exposure.amount` по убыванию, `unavailable` — в конце. `computed_at` — когда посчитана текущая версия.
+(1–100, по умолчанию 50), `cursor`. Ответ: `{"items": [...], "next_cursor": "…" | null, "beyond_budget": N}`. Порядок — по `exposure.amount` по убыванию, `unavailable` — в конце; не больше 10 рекомендаций одного кабинета в начале списка (решение 2026-10-13), остальные — после всех, их число — `beyond_budget` («ещё N»; из итога exposure они не выпадают). `computed_at` — когда посчитана текущая версия.
 
 ### `Recommendation` (паспорт) — `GET /workspaces/{ws}/recommendations/{id}`
 
@@ -352,7 +352,7 @@ CPA (`high_cpa`: `high_cpa_target@N` / `high_cpa_baseline@N`), площадки 
   "exposure": {"total": "Value", "overlap": "Value", "version": "exposure_total@1", "formula": "Σ по кабинетам max(...)",
                "components": [{"issue_type": "high_cpa", "amount": "Value"}],
                "coverage": {"included": 3, "unavailable": 1}},
-  "counts": {"active": 4}, "top": ["RecommendationListItem — до 3"],
+  "counts": {"active": 4, "beyond_budget": 0}, "top": ["RecommendationListItem — до 3"],
   "data_freshness": {"last_snapshot_at": "…",
                      "yandex_direct": {"status": "connected", "data_to": "2026-10-01", "last_success_at": "…"},
                      "yandex_metrika": {"status": "permission_missing", "data_to": null, "last_success_at": null}}
@@ -368,7 +368,8 @@ CPA (`high_cpa`: `high_cpa_target@N` / `high_cpa_baseline@N`), площадки 
   `period` — окно оценки (7 дней до последнего полного дня данных), `ad_accounts` — кабинеты в аудите и исключённые
   (нет доступа или снимка), `campaigns` — кампании со статистикой в окне. Аудита не было — `null`.
 - `spent` — `actual`: расход этих кампаний за `audit_scope.period` по данным Директа; снимков нет — `unavailable`.
-- `counts.active` — активные рекомендации; `top` — до 3: по уровню действия, затем exposure и уверенности.
+- `counts.active` — активные рекомендации; `counts.beyond_budget` — сверх 10 на кабинет (как в списке); `top` — до 3 из
+  рекомендаций в пределах этого лимита: по уровню действия, затем exposure и уверенности.
 - `data_freshness.*`: `status` — DATA_MODEL.md §8.1 (`null` — источник не подключён), `data_to` — последний день в
   снимках, `last_success_at` — последний успешный запрос к API источника.
 - `last_audit_at = null` → аудита ещё не было: экран «Подключите Директ», без нулей и демо-цифр (период — сегодня МСК).
@@ -395,7 +396,7 @@ CPA (`high_cpa`: `high_cpa_target@N` / `high_cpa_baseline@N`), площадки 
 | GET | `/integrations/{provider}/callback` | возврат с OAuth: state сверяется до обращения к Яндексу, затем редирект в кабинет |
 | POST | `/workspaces/{ws}/integrations/{provider}/disconnect` | отключить: токен удаляется, синхронизация останавливается |
 | PATCH | `/workspaces/{ws}/integrations/ad-accounts/{id}` | `{selected}` — включить кабинет в анализ |
-| GET · PUT | `/workspaces/{ws}/integrations/yandex_metrika/goals` | цели счётчика для выбора (ранжированные, ARCHITECTURE.md §2.8) · выбранные цели |
+| GET · PUT | `/workspaces/{ws}/integrations/yandex_metrika/goals` | счётчики и выбранные цели · `PUT {counter_id, goal_ids}` — выбрать счётчик (один на подключение) и до 10 целей, пустой `goal_ids` снимает выбор. Существование целей сверяет синхронизация (`goal_not_found` в состоянии данных); ранжированный список целей — когда воркер начнёт кэшировать каталог (ARCHITECTURE.md §2.8) |
 | GET · PATCH | `/workspaces/{ws}/notification-preferences` | каналы и частота: `in_app` (всегда включено), `email_digest`, `email_digest_time`, `critical_only` |
 
 ```json
@@ -408,8 +409,9 @@ CPA (`high_cpa`: `high_cpa_target@N` / `high_cpa_baseline@N`), площадки 
 - **Только чтение.** Директ запрашивается со scope `direct:api` (отдельного scope только для чтения у Директа нет), но
   v1.0 вызывает только методы чтения: Reports, `Campaigns.get` и аналогичные `*.get`; Метрика — `metrika:read`. Поле
   `write_access` и проверка права записи — v1.1 (API_CONTRACT_EXECUTION.md §6).
-- Подключений Директа и кабинетов в workspace может быть несколько; сверх лимита `max_ad_accounts` → `422
-  action_unavailable` с `entitlement_exceeded`. Workspace организации-агентства подключает Директ только после
+- Подключений Директа и кабинетов в workspace может быть несколько; включить в анализ сверх лимита тарифа → `422
+  action_unavailable` с `entitlement_exceeded`. Лимит (решение 2026-10-13): `start` — 1, `business` — 5, `business_plus` — 25;
+  без действующей подписки (бесплатный аудит, пробный период, истекла) — как `start`. Выключить кабинет можно всегда. Workspace организации-агентства подключает Директ только после
   подтверждения мандата клиента (`POST /workspaces/{ws}/legal/agency-client-mandate` `{version}`, LEGAL.md); без него
   → `422 acceptance_required`.
 - Импорт офлайн-конверсий и квалификации лидов (CSV) — v1.0.x / v1.1 (VERSION_SCOPE.md), в контракте v1.0 его нет.
@@ -418,6 +420,20 @@ CPA (`high_cpa`: `high_cpa_target@N` / `high_cpa_baseline@N`), площадки 
 
 AI в v1.0 — только `explanation` рекомендации (§5): утверждения → доказательства, непрозрачные ссылки вместо ID
 Яндекса (AI_GOVERNANCE.md §2). Эндпоинта вопросов к AI нет; «Спросить AI» — v1.1.
+
+`GET /workspaces/{ws}/agents` — команда анализа (Chief Analyst и детерминированные специалисты из реестра,
+`intelligence/agents`), любая роль. Статус области — по последнему аудиту workspace:
+
+```json
+{"mode": "recommendations_only",
+ "coordinator": {"id": "chief_analyst", "name": "Chief Analyst", "enabled": false},
+ "specialists": [{"id": "rsya_placements", "name": "РСЯ и площадки", "domain": "network",
+                  "status": "issue_found", "findings": 2, "missing_data": []}],
+ "limitations": ["Изменения в рекламных кабинетах не выполняются", "…"]}
+```
+
+`status`: `issue_found` · `no_material_issue` · `insufficient_data` · `not_supported` (правила области не запускались —
+это не «проблем нет»). Чисел, кроме количества находок, ответ не содержит.
 
 ## 10. Организация, команда, роли
 
@@ -432,6 +448,15 @@ AI в v1.0 — только `explanation` рекомендации (§5): утв
 
 `owner` / `admin` получают все workspace организации с `ws_role: null` (полные права по `org_role`); `member` — только
 те, где есть `ws_role`. Агентство переключает клиентов сменой `{workspace_id}` в пути — «активного workspace» в сессии нет.
+Дополнительно `/me` отдаёт плоский список `workspaces` (те же элементы, что внутри `organizations`) для экрана выбора.
+Сейчас `user.phone` всегда `null`: номер телефона AdPilot не хранит (вход по SMS на юридическом HOLD, §11).
+
+Онбординг собственника бизнеса:
+- `POST /workspaces` `{name}` → `201 {id, name, organization_id}` — личный workspace в организации `business`;
+  повторный вызов возвращает уже созданный (идемпотентно по пользователю).
+- `GET · PUT /workspaces/{ws}/business-profile` — отрасль, модель бизнеса, сайт (только хранится, не загружается),
+  регион, цели, `budget` и `target_cpa` (десятичные строки, ₽); `target_cpa` пишется и в настройки workspace.
+  Изменять — `owner` / `admin` (иначе `403`); чужой workspace — `404`; лишние поля и не-строковые суммы — `422`.
 
 | Роль | Смотреть | decide (`accept`, `mark_done_manually`, `check`, `postpone`, `reject`) | Команда, интеграции, биллинг |
 |---|---|---|---|
