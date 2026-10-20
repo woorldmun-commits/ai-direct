@@ -12,6 +12,8 @@ URL.revokeObjectURL=()=>{};
 const names=['=1+1','+1','-1','@SUM(1)','\ttext','\rtext','\n=1+1','  =1+1','\u00a0+1','\u0000=1+1','Обычный «текст»; "кавычки"'];
 exportCSV(names.map((name,i)=>({id:String(i),name,spend:0,conversions:0,revenue:0})),'\n=1+1');
 const csv=await result.text();
+assert(csv.includes('AdPilot · Демо'));
+assert(!csv.includes('Rekvero'));
 for(const name of names.slice(0,-1))assert(csv.includes('"\''+name.replaceAll('"','""')+'"'),JSON.stringify(name)+' must be neutralized');
 assert(csv.includes('"Обычный «текст»; ""кавычки"""'));
 assert(csv.includes('"Итого";"0";"0";"—";"0"'));
