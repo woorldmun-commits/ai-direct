@@ -40,6 +40,7 @@ def main():
                 '--host','127.0.0.1','--port','8081','--no-access-log','--no-proxy-headers'],cwd=ROOT/'backend',env=env))
         if env.get('WORKER_ENABLED')=='1':
             env.setdefault('RELEASE_COMMIT_SHA',env.get('RENDER_GIT_COMMIT',''))
+            env.setdefault('RELEASE_BUILD_ID',env.get('RENDER_GIT_COMMIT',''))
             children.append(subprocess.Popen([sys.executable,'-m','app.worker.runner'],cwd=ROOT/'backend',env=env))
         web_env={**env,'HOSTNAME':'0.0.0.0','PORT':env.get('PORT','10000')}
         children.append(subprocess.Popen(['node','server.js'],cwd=ROOT/'web',env=web_env))

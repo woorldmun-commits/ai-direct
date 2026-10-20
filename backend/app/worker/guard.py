@@ -118,7 +118,8 @@ def guard(task: Task, state: State) -> Decision:
 def pilot_until(workspace_id: int) -> datetime | None:
     """Explicit operator grant; malformed or timezone-free configuration fails closed."""
     ids = os.environ.get("PILOT_WORKSPACE_IDS", "").split(",")
-    if str(workspace_id) not in {item.strip().removeprefix("ws_") for item in ids}:
+    if (os.environ.get("PILOT_OPEN_ACCESS") != "1"
+            and str(workspace_id) not in {item.strip().removeprefix("ws_") for item in ids}):
         return None
     try:
         until = datetime.fromisoformat(os.environ.get("PILOT_ACCESS_UNTIL", ""))

@@ -3,6 +3,8 @@ WORKDIR /web
 COPY ["designe 1.0/package.json", "designe 1.0/package-lock.json", "./"]
 RUN npm ci
 COPY ["designe 1.0/", "./"]
+ARG NEXT_PUBLIC_SITE_URL
+ENV NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
 RUN npm run build
 
 FROM node:22-bookworm-slim
