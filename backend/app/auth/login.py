@@ -63,10 +63,20 @@ def fetch_user(http: httpx.Client, app: OAuthApp, access_token: str) -> YandexUs
         raise ReauthorizationRequired("invalid_token")
     if r.status_code != 200:
         raise OAuthError("yandex_unavailable" if r.status_code >= 500 else f"http_{r.status_code}")
-    body = r.json()
+    try:
+        body = r.json()
+        if not isinstance(body, dict):
+            raise ValueError
+        uid, login, email = body.get("id"), body.get("login"), body.get("default_email")
+        if (not isinstance(uid, str) or not uid.strip() or len(uid) > 128
+                or not isinstance(login, str) or not login.strip() or len(login) > 256
+                or (email is not None and (not isinstance(email, str) or len(email) > 320))):
+            raise ValueError
+    except (ValueError, TypeError):
+        raise OAuthError("bad_response") from None
     if body.get("client_id") != app.client_id:
         raise LoginError("foreign_token")  # токен выдан другому приложению — не наш вход
-    return YandexUser(str(body["id"]), body["login"], body.get("default_email"))
+    return YandexUser(uid, login, email)
 
 
 def sign_in(conn: psycopg.Connection, http: httpx.Client, app: OAuthApp, *, code: str, state: str,

@@ -130,8 +130,10 @@ def _retry(conn: psycopg.Connection, run: _Run, e: RetryLater, now: datetime) ->
     """retryIn → в очередь; но не бесконечно: дольше MAX_REPORT_WAIT от первого запроса — отказ."""
     if now + timedelta(seconds=e.retry_in) - (run.started_at or now) > MAX_REPORT_WAIT:
         return _fail(conn, run, SyncFailure(run.login, "report_timeout", e.reason), now)
-    conn.execute("""UPDATE sync_runs SET status = 'waiting_report', attempts = attempts + 1, last_retry_at = %s
-                    WHERE id = %s""", (now, run.id))
+    updated = conn.execute("""UPDATE sync_runs SET status = 'waiting_report', attempts = attempts + 1, last_retry_at = %s
+                    WHERE id = %s AND status IN ('queued', 'running', 'waiting_report')""", (now, run.id))
+    if updated.rowcount == 0:
+        return Skipped("already_finished")
     return RetryAt(e.retry_in, e.reason)
 
 
@@ -181,8 +183,10 @@ def _run_sync(conn: psycopg.Connection, sync_run_id: int, *, direct: DirectSourc
 
 def _execute(conn: psycopg.Connection, run: _Run, *, direct: DirectSource, metrika: MetrikaSource | None,
              release_id: int, period_to: date, now: datetime) -> Outcome:
-    conn.execute("UPDATE sync_runs SET status = 'running', started_at = coalesce(started_at, %s) WHERE id = %s",
-                 (now, run.id))
+    updated = conn.execute("""UPDATE sync_runs SET status = 'running', started_at = coalesce(started_at, %s)
+                              WHERE id = %s AND status IN ('queued', 'running', 'waiting_report')""", (now, run.id))
+    if updated.rowcount == 0:
+        return Skipped("already_finished")
     try:
         snap = _fetch(run, direct, metrika, period_to)  # сеть — без блокировок
     except RetryLater as e:

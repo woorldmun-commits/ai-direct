@@ -74,6 +74,35 @@ def test_first_failing_check_is_the_reason():
         Skip("workspace_inactive", "deactivated")
 
 
+@pytest.mark.parametrize("status", ["active", "past_due", "canceled"])
+def test_future_subscription_does_not_enable_tasks(rw, chain, status):
+    rw.execute("""INSERT INTO subscriptions
+                  (workspace_id, plan, status, price, current_period_start, current_period_end, canceled_at)
+                  VALUES (%s, 'start', %s, 4990, %s, %s, %s)""",
+               (chain["ws"], status, NOW + timedelta(days=1), NOW + timedelta(days=31),
+                NOW if status == "canceled" else None))
+    assert guard(Task.AUDIT, load_state(rw, chain["ws"], None, NOW)) == Skip("subscription_inactive", "none")
+
+
+def test_subscription_starts_at_exact_period_boundary(rw, chain):
+    rw.execute("""INSERT INTO subscriptions
+                  (workspace_id, plan, status, price, current_period_start, current_period_end)
+                  VALUES (%s, 'start', 'active', 4990, %s, %s)""", (chain["ws"], NOW, NOW + timedelta(days=30)))
+    assert guard(Task.AUDIT, load_state(rw, chain["ws"], None, NOW - timedelta(microseconds=1))) == \
+        Skip("subscription_inactive", "none")
+    assert guard(Task.AUDIT, load_state(rw, chain["ws"], None, NOW)) == Allow()
+
+
+def test_future_renewal_preserves_expired_subscription_reason(rw, chain):
+    rw.execute("""INSERT INTO subscriptions
+                  (workspace_id, plan, status, price, current_period_start, current_period_end)
+                  VALUES (%s, 'start', 'expired', 4990, %s, %s),
+                         (%s, 'start', 'active', 4990, %s, %s)""",
+               (chain["ws"], NOW - timedelta(days=40), NOW - timedelta(days=10),
+                chain["ws"], NOW + timedelta(days=1), NOW + timedelta(days=31)))
+    assert guard(Task.AUDIT, load_state(rw, chain["ws"], None, NOW)) == Skip("subscription_inactive", "expired")
+
+
 # --- Воркер синхронизации ------------------------------------------------------------------------
 
 class Spy(DirectFixture):

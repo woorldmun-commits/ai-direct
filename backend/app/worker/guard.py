@@ -114,10 +114,11 @@ def load_state(conn: psycopg.Connection, workspace_id: int, direct_account_id: i
     if now.tzinfo is None:
         raise ValueError("now: нужна дата с часовым поясом — сравнивается с timestamptz из БД")
     ws = conn.execute("SELECT status FROM workspaces WHERE id = %s", (workspace_id,)).fetchone()
-    # Приоритет: действующая на сейчас (active · past_due · canceled, период уже начался) > последняя по окончании
-    # периода > нет. «expired» и «none» — разные действия в UI («продлить» / «оформить»).
+    # Будущие периоды не дают доступ. Среди начавшихся: действующая > последняя по окончании.
+    # «expired» и «none» — разные действия в UI («продлить» / «оформить»).
     sub = conn.execute("""SELECT status, current_period_end FROM subscriptions WHERE workspace_id = %s
-                          ORDER BY (status IN ('active', 'past_due', 'canceled') AND current_period_start <= %s) DESC,
+                          AND current_period_start <= %s
+                          ORDER BY (status IN ('active', 'past_due', 'canceled')) DESC,
                                    current_period_end DESC, id DESC
                           LIMIT 1""", (workspace_id, now)).fetchone()
     direct = conn.execute("""SELECT c.status, a.status, a.unavailable_reason FROM direct_accounts a
