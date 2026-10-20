@@ -9,7 +9,8 @@ from psycopg.conninfo import make_conninfo
 def provision(env):
     admin = env['BOOTSTRAP_DATABASE_URL']
     roles = ('app_migrator','app_rw','app_token','app_system','app_deleter')
-    with psycopg.connect(admin, autocommit=True) as conn:
+    print('Database: connecting for startup checks.', flush=True)
+    with psycopg.connect(admin, autocommit=True, connect_timeout=10) as conn:
         # Only one bootstrapper may initialize a shared database at a time.
         conn.execute('SELECT pg_advisory_lock(735891321)')
         try:
@@ -30,10 +31,12 @@ def provision(env):
             conn.execute('GRANT USAGE ON SCHEMA public TO app_rw,app_token,app_system,app_deleter')
             urls = {role:make_conninfo(admin,user=role,password=env[role.upper()+'_PASSWORD']) for role in roles}
             from migrations import migrate
-            with psycopg.connect(urls['app_migrator']) as migration_conn:
+            print('Database: checking schema migrations.', flush=True)
+            with psycopg.connect(urls['app_migrator'], connect_timeout=10) as migration_conn:
                 migrate(migration_conn)
         finally:
             conn.execute('SELECT pg_advisory_unlock(735891321)')
+    print('Database: startup checks complete.', flush=True)
     return {'API_DATABASE_URL':urls['app_rw'], 'WORKER_DATABASE_URL':urls['app_token'],
             'WORKER_QUEUE_DATABASE_URL':urls['app_system']}
 
