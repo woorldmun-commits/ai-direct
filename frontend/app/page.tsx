@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 const jsonLd = {
   "@context": "https://schema.org",
   "@graph": [
-    { "@type": "Organization", "@id": `${SITE_URL}/#org`, name: "AdPilot", url: SITE_URL },
+    { "@type": "Organization", "@id": `${SITE_URL ?? ""}/#org`, name: "AdPilot", ...(SITE_URL && { url: SITE_URL }) },
     {
       "@type": "SoftwareApplication",
       name: "AdPilot",
@@ -21,7 +21,7 @@ const jsonLd = {
       operatingSystem: "Web",
       inLanguage: "ru",
       description: "Доказательный контроль кабинетов Яндекс Директа и Метрики для малых агентств и директологов",
-      publisher: { "@id": `${SITE_URL}/#org` },
+      publisher: { "@id": `${SITE_URL ?? ""}/#org` },
     },
     {
       "@type": "FAQPage",

@@ -31,30 +31,13 @@ export default async function LegalPage({ params }: PageProps<"/legal/[slug]">) 
       </header>
       <main className="mx-auto max-w-[860px] px-4 pb-20">
         <h1 className="text-[32px] leading-tight font-bold tracking-tight">{doc.title}</h1>
-        {slug === "requisites" ? (
-          <dl className="card mt-6 grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 p-6 text-sm">
-            {[
-              ["Наименование", "[ИП Фамилия И. О. / ООО «Название»]"],
-              ["ИНН", "[__________]"],
-              ["ОГРН / ОГРНИП", "[_____________]"],
-              ["Адрес", "[____]"],
-              ["E-mail", "[support@…]"],
-            ].map(([k, v]) => (
-              <div key={k} className="contents">
-                <dt className="text-muted">{k}</dt>
-                <dd>{v}</dd>
-              </div>
-            ))}
-          </dl>
-        ) : (
-          <div className="card mt-6 p-6">
-            <p className="font-semibold">Редакция документа готовится.</p>
-            <p className="mt-2 text-sm text-muted">
-              Текст утверждает юрист. Документ будет опубликован здесь до начала приёма пользователей; версия и дата редакции будут
-              указаны в начале документа.
-            </p>
-          </div>
-        )}
+        <div className="card mt-6 p-6">
+          <p className="font-semibold">Редакция документа готовится.</p>
+          <p className="mt-2 text-sm text-muted">
+            Текст утверждает юрист. Документ будет опубликован здесь до начала приёма пользователей; версия и дата редакции будут
+            указаны в начале документа.
+          </p>
+        </div>
       </main>
       <Footer />
     </>

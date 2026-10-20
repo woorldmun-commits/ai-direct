@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, Manrope } from "next/font/google";
 import { headers } from "next/headers";
 import { CookieBanner } from "@/components/cookie-banner";
-import { SITE_URL } from "@/lib/site";
+import { METADATA_BASE } from "@/lib/site";
 import "./globals.css";
 
 const manrope = Manrope({
@@ -20,10 +20,10 @@ const plexMono = IBM_Plex_Mono({
 
 const TITLE = "AdPilot — контроль кабинетов Яндекс Директа для агентств и директологов";
 const DESCRIPTION =
-  "AdPilot каждый день проверяет кабинеты Яндекс Директа и Метрики и показывает расход с признаками неэффективности в рублях — с доказательством на данных. Решение и изменения — за специалистом. Первый аудит бесплатно, без карты.";
+  "AdPilot проверяет кабинеты Яндекс Директа и Метрики и показывает расход с признаками неэффективности в рублях — с доказательством на данных. Решение и изменения — за специалистом. Закрытый пилот для агентств и директологов.";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(SITE_URL),
+  metadataBase: new URL(METADATA_BASE),
   title: { default: TITLE, template: "%s — AdPilot" },
   description: DESCRIPTION,
   applicationName: "AdPilot",

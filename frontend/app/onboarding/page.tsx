@@ -1,16 +1,11 @@
 import type { Metadata } from "next";
-import { AuthLayout } from "@/components/auth";
-import { ConnectSources } from "@/components/connect-sources";
+import { ClosedAccess } from "@/components/auth";
 
 export const metadata: Metadata = {
-  title: "Подключите рекламу",
+  title: "Подключение рекламы",
   robots: { index: false, follow: false },
 };
 
-export default function OnboardingPage() {
-  return (
-    <AuthLayout title="Подключите рекламу" sub="Чтобы AdPilot смог провести аудит, подключите источники данных. Изменения в рекламу AdPilot не вносит.">
-      <ConnectSources />
-    </AuthLayout>
-  );
+export default function Page() {
+  return <ClosedAccess />;
 }

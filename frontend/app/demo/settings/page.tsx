@@ -120,13 +120,13 @@ export default function SettingsPage() {
           <Block id="notify" title="Уведомления">
             <div className="divide-y divide-line">
               <div>
-                <Toggle label="Новые проблемы — в Telegram" defaultOn />
+                <Toggle label="Новые проблемы — на email" defaultOn />
                 <p className="pb-2.5 text-xs text-muted">
                   Пример: «🔴 Новая проблема · Расход с признаками неэффективности <ValueView v={RECOMMENDATIONS[0].exposure} hint={false} className="font-semibold" /> · Открыть AdPilot». Без названий
                   клиентов, кампаний и запросов — подробности после входа.
                 </p>
               </div>
-              <Toggle label="Утренний дайджест в Telegram" />
+              <Toggle label="Утренний дайджест на email" />
               <Toggle label="Замер эффекта после решения" defaultOn />
             </div>
           </Block>
