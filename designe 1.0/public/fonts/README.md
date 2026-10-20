@@ -1,0 +1,1 @@
+Local copies of the existing project font assets (Manrope and IBM Plex Mono), restored from frontend/.next/static/media. No build-time Google Fonts request. These font families are distributed under SIL OFL 1.1; upstream source/licensing: https://github.com/google/fonts/tree/main/ofl/manrope and https://github.com/google/fonts/tree/main/ofl/ibmplexmono .

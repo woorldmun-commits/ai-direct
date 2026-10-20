@@ -84,7 +84,7 @@ def _available(conn, ws, data):
     state = load_state(conn, ws.id, None, datetime.now(timezone.utc))
     if ws.role not in DECIDERS:
         return [], "role_forbidden"
-    if state.workspace_status != "active" or not state.paid:
+    if state.workspace_status != "active" or not state.has_analysis_access:
         return [], "access_inactive"
     if data["status"] not in ("new", "postponed"):
         return [], "already_decided"

@@ -11,12 +11,13 @@ from app.auth.login import DOCUMENTS
 from app.legal.documents import UnknownDocument, text_path
 
 router = APIRouter(prefix="/legal")
+PUBLIC_DOCUMENTS = DOCUMENTS | {"privacy", "cookies", "requisites"}
 
 
 @router.get("/documents/{document}")
 def document_text(request: Request, document: str,
                   version: Annotated[str, Query(max_length=32)], locale: Literal["ru-RU"] = "ru-RU"):
-    if document not in DOCUMENTS:
+    if document not in PUBLIC_DOCUMENTS:
         raise not_found()
     try:
         raw = text_path(document, version, locale).read_bytes()

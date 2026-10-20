@@ -2,6 +2,8 @@
 .env
 .env.local
 .env.*.local
+.env.*
+!.env.example
 .claude-flow/data/
 .claude-flow/logs/
 .claude-flow/sessions/
@@ -32,3 +34,13 @@ graphify-out/
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
+
+# Disposable integration-test databases (reports outside these paths stay visible).
+/artifacts/
+/designe 1.0/artifacts/
+deploy/.env
+artifacts/launch-audit/runtime/
+artifacts/launch-security-tmp/
+artifacts/full-audit-*/red-*/
+artifacts/full-audit-*/green-*/
+artifacts/full-audit-*/final-*/

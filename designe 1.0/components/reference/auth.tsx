@@ -36,8 +36,8 @@ export function ReferenceAuth({ callbackError = false, registrationReady = false
   }
   return <main id="main-content" className="ref-ui ref-auth-page"><div className="ref-auth-glow" aria-hidden="true" /><div className="ref-auth-shell">
     <section className="ref-auth-form-panel">
-      <Link href="/" aria-label="AdPilot — главная"><ReferenceLogo /></Link>
-      <div className="ref-auth-heading"><h1>{mode==='signup'?'Создайте аккаунт AdPilot':mode==='verify'?'Подтвердите почту':mode==='forgot'?'Восстановите доступ':mode==='reset'?'Новый пароль':'Вход в AdPilot'}</h1><p>{mode==='signup'?'Зарегистрируйтесь по email и подтвердите адрес.':mode==='verify'?'Повторите выбранный пароль, чтобы завершить регистрацию.':mode==='forgot'?'Получите ссылку для смены пароля.':mode==='reset'?'Выберите новый уникальный пароль.':'Войдите по email и паролю, чтобы открыть свой кабинет.'}</p></div>
+      <Link href="/" aria-label="inrou — главная"><ReferenceLogo /></Link>
+      <div className="ref-auth-heading"><h1>{mode==='signup'?'Создайте аккаунт inrou':mode==='verify'?'Подтвердите почту':mode==='forgot'?'Восстановите доступ':mode==='reset'?'Новый пароль':'Вход в inrou'}</h1><p>{mode==='signup'?'Зарегистрируйтесь по email и подтвердите адрес.':mode==='verify'?'Повторите выбранный пароль, чтобы завершить регистрацию.':mode==='forgot'?'Получите ссылку для смены пароля.':mode==='reset'?'Выберите новый уникальный пароль.':'Войдите по email и паролю, чтобы открыть свой кабинет.'}</p></div>
       <EmailForm mode={mode} enabled={emailEnabled} registrationReady={registrationReady} localPreview={localPreview}/>
       {mode==='login'&&<details className="ref-auth-alternative"><summary>Или войти через Яндекс ID</summary><form onSubmit={signIn} className="ref-auth-signin">
         <p className="ref-auth-note">{registrationReady ? 'Уже есть аккаунт? Войдите без повторного согласия. Для создания нового аккаунта примите оба документа.' : 'Вход для существующих аккаунтов. Регистрация откроется после утверждения и публикации документов.'}</p>

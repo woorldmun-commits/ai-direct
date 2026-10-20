@@ -233,6 +233,10 @@ class DirectApi:
             r = self.http.post(f"{API_URL[self.env]}/v5/campaigns", json=body, headers=self._headers(login), timeout=30)
         except httpx.TransportError:
             raise RetryLater(DEFAULT_RETRY_IN, "api_unavailable") from None
-        if r.status_code == 200 and "error" not in json_body(r):
+        body = json_body(r)
+        if r.status_code == 200 and "error" not in body:
+            result = body.get("result")
+            if not isinstance(result, dict) or not isinstance(result.get("Campaigns"), list):
+                raise DirectApiError(502, r.headers.get("RequestId"))
             return
         raise_for_direct_error(r, login)

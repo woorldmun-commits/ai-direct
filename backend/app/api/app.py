@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from psycopg_pool import ConnectionPool
 
 from app.api import errors
+from app.api.direct_connect import router as direct_router
 from app.api.auth import router as auth_router
 from app.api.email_auth import router as email_auth_router
 from app.api.db import create_pool
@@ -43,6 +44,7 @@ def create_app(settings: Settings | None = None, pool: ConnectionPool | None = N
     app.state.email_kdf_slots = BoundedSemaphore(2)
     errors.install(app)
     app.include_router(router, prefix=PREFIX)
+    app.include_router(direct_router, prefix=PREFIX)
     app.include_router(today_router, prefix=PREFIX)
     app.include_router(auth_router, prefix=PREFIX)
     app.include_router(email_auth_router, prefix=PREFIX)

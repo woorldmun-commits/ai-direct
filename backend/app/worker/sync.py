@@ -130,8 +130,8 @@ def _retry(conn: psycopg.Connection, run: _Run, e: RetryLater, now: datetime) ->
     """retryIn → в очередь; но не бесконечно: дольше MAX_REPORT_WAIT от первого запроса — отказ."""
     if now + timedelta(seconds=e.retry_in) - (run.started_at or now) > MAX_REPORT_WAIT:
         return _fail(conn, run, SyncFailure(run.login, "report_timeout", e.reason), now)
-    updated = conn.execute("""UPDATE sync_runs SET status = 'waiting_report', attempts = attempts + 1, last_retry_at = %s
-                    WHERE id = %s AND status IN ('queued', 'running', 'waiting_report')""", (now, run.id))
+    updated = conn.execute("""UPDATE sync_runs SET status = 'waiting_report', attempts = attempts + 1, last_retry_at = %s, available_at = %s
+                    WHERE id = %s AND status IN ('queued', 'running', 'waiting_report')""", (now, now + timedelta(seconds=e.retry_in), run.id))
     if updated.rowcount == 0:
         return Skipped("already_finished")
     return RetryAt(e.retry_in, e.reason)

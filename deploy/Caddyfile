@@ -1,0 +1,6 @@
+# Use this only on your own HTTPS host. Keep the Next.js port private.
+{$APP_HOST} {
+    reverse_proxy 127.0.0.1:10000 {
+        header_up X-Real-IP {remote_host}
+    }
+}

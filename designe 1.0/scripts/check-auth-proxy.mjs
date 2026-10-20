@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 import * as crypto from 'node:crypto';
+import * as net from 'node:net';
 
 function load(file, dependencies = {}) {
   const exports = {};
@@ -13,7 +14,8 @@ function load(file, dependencies = {}) {
   return exports;
 }
 const origin = load('../lib/api-origin.ts');
-const { proxyAuth: requestAuth } = load('../lib/auth-proxy.ts', { './api-origin': origin });
+const proxyClient = load('../lib/proxy-client.ts', {'node:crypto':crypto,'node:net':net});
+const { proxyAuth: requestAuth } = load('../lib/auth-proxy.ts', { './api-origin': origin, './proxy-client':proxyClient });
 const proxyAuth = async (...args) => {
   const response = await requestAuth(...args);
   assert.equal(response.headers.get('referrer-policy'), 'no-referrer');

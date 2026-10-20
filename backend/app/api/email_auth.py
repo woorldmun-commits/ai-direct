@@ -68,7 +68,7 @@ def _throttle(request, identity, operation):
     config = _config(request)
     def digest(purpose, value):
         return hmac.new(config.hmac_key.encode(), (purpose+'\x00'+value).encode(), hashlib.sha256).digest()
-    # shortcut: this is the observed API peer (often Next.js); configure rate limits at a trusted edge for visitor IPs.
+    # BoundaryMiddleware verifies the frontend's IP signature; arbitrary forwarded headers are ignored.
     peer = request.client.host if request.client else 'unknown'
     with _connection(request) as conn:
         allowed = conn.execute('SELECT email_auth_attempt(%s,%s,%s)',

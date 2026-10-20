@@ -6,5 +6,5 @@ export const metadata:Metadata={title:'Регистрация',robots:{index:fal
 export const dynamic='force-dynamic';
 export default async function Page(){
  const [email,offer,consent]=await Promise.all([emailEnabled(),legalDocument('offer'),legalDocument('pd_consent')]);
- return <ReferenceAuth mode='signup' emailEnabled={email} registrationReady={!!offer?.approved&&!!consent?.approved} localPreview={process.env.REKVERO_LOCAL_PREVIEW==='true'}/>;
+ return <ReferenceAuth mode='signup' emailEnabled={email} registrationReady={!!offer?.approved&&!!consent?.approved} localPreview={process.env.NODE_ENV!=='production'&&process.env.REKVERO_LOCAL_PREVIEW==='true'}/>;
 }

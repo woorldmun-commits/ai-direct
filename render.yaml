@@ -1,0 +1,50 @@
+# Temporary public preview. Real registration stays disabled until the operator supplies approved documents.
+services:
+  - type: web
+    name: inrou-pilot
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: NODE_ENV
+        value: production
+      - key: YANDEX_LOGIN_ENABLED
+        value: "0"
+      - key: YANDEX_API_ENABLED
+        value: "0"
+      - key: REKVERO_EMAIL_ENABLED
+        value: "false"
+      - key: WORKER_ENABLED
+        value: "0"
+      - key: API_HSTS
+        value: "1"
+      - key: API_POOL_MAX
+        value: "3"
+      - key: BOOTSTRAP_DATABASE_URL
+        fromDatabase:
+          name: inrou-pilot-db
+          property: connectionString
+      - key: APP_MIGRATOR_PASSWORD
+        generateValue: true
+      - key: APP_RW_PASSWORD
+        generateValue: true
+      - key: APP_TOKEN_PASSWORD
+        generateValue: true
+      - key: APP_SYSTEM_PASSWORD
+        generateValue: true
+      - key: APP_DELETER_PASSWORD
+        generateValue: true
+      - key: TOKEN_ENCRYPTION_KEY_VERSION
+        value: "1"
+      - key: API_PROXY_HMAC_KEY
+        generateValue: true
+databases:
+  - name: inrou-pilot-db
+    plan: free
+    region: frankfurt
+    databaseName: inrou
+    user: inrou_bootstrap

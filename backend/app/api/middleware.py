@@ -10,6 +10,7 @@ import uuid
 
 from app.api.errors import MESSAGES, error_body
 from app.api.settings import Settings
+from app.api.proxy_client import verified_client
 
 log = logging.getLogger("app.api")
 
@@ -57,6 +58,9 @@ class BoundaryMiddleware:
             await self.app(scope, receive, send)
             return
         headers = scope.get("headers", [])
+        visitor = verified_client(headers, scope['method'], scope['path'], self.settings.proxy_hmac_key)
+        if visitor:
+            scope = {**scope, 'client': (visitor, 0)}
         request_id = request_id_from(headers)
         scope.setdefault("state", {})["request_id"] = request_id
         started = False

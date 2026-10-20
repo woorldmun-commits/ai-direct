@@ -47,6 +47,12 @@ def ready(text):
     return (200, text, {"RequestId": "111"})
 
 
+@pytest.mark.parametrize('body',[{},[],{'result':{}},{'result':{'Campaigns':'invalid'}}])
+def test_access_check_rejects_malformed_success(body):
+    with pytest.raises(DirectApiError):
+        api(FakeReports(campaigns=(200,body))).check_access('client-a')
+
+
 def error(status, code):
     return (status, {"error": {"request_id": "8695244274068608439", "error_code": code,
                                "error_string": "…", "error_detail": "…"}}, {"RequestId": "8695244274068608439"})

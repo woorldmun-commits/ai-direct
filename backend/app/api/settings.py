@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 from app.auth.login import SCOPES
 from app.auth.yandex_oauth import OAuthApp
 from app.auth.email_config import EmailAuthConfig
+from app.auth.tokens import EnvKeys, KeyProvider
 
 DEFAULT_MAX_BODY = 64 * 1024
 SESSION_COOKIE = "session"
@@ -45,7 +46,20 @@ class Settings:
     signup_approved_hashes: dict[str, str] = field(default_factory=dict, repr=False)
     email_auth: EmailAuthConfig | None = field(default=None, repr=False)
 
+    oauth_direct: OAuthApp | None = field(default=None, repr=False)
+    token_keys: KeyProvider | None = field(default=None, repr=False)
+    proxy_hmac_key: str = field(default='', repr=False)
+
     def __post_init__(self):
+        if self.proxy_hmac_key and len(self.proxy_hmac_key) < 32:
+            raise SettingsError('API_PROXY_HMAC_KEY: минимум 32 символа')
+        if self.oauth_direct:
+            uri = urlsplit(self.oauth_direct.redirect_uri)
+            if (f"{uri.scheme}://{uri.netloc}" not in self.allowed_origins
+                    or uri.path != "/api/direct/callback" or uri.query or uri.fragment
+                    or uri.username or uri.password or self.token_keys is None
+                    or (uri.scheme != "https" and uri.hostname not in ("localhost", "127.0.0.1", "::1"))):
+                raise SettingsError("YANDEX_API_REDIRECT_URI: нужен доверенный HTTPS callback и ключ токенов")
         if not self.database_url:
             raise SettingsError("API_DATABASE_URL не задан")
         if not self.allowed_origins:
@@ -77,7 +91,14 @@ class Settings:
         if not isinstance(approvals, dict) or any(not isinstance(k, str) or not isinstance(v, str)
                                                 for k, v in approvals.items()):
             raise SettingsError("API_SIGNUP_APPROVED_HASHES: нужен JSON объект хэшей документов")
+        direct = None
+        keys = None
+        if _flag(env.get("YANDEX_API_ENABLED")):
+            direct = OAuthApp.from_env("YANDEX_API", ("direct:api", "metrika:read"), env)
+            keys = EnvKeys(env)
         return cls(
+            proxy_hmac_key=env.get('API_PROXY_HMAC_KEY',''),
+            oauth_direct=direct, token_keys=keys,
             database_url=env.get("API_DATABASE_URL", ""),
             allowed_origins=origins,
             hsts=_flag(env.get("API_HSTS")),
