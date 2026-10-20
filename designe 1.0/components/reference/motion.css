@@ -1,0 +1,33 @@
+/* Feedback stays quick; data and reading surfaces do not move. */
+.ap-app {
+  --ease-out: cubic-bezier(.23,1,.32,1);
+  --motion-feedback: 140ms;
+}
+.ap-app .ref-button.ref-button {
+  transition: transform var(--motion-feedback) var(--ease-out), background-color var(--motion-feedback) ease, border-color var(--motion-feedback) ease;
+}
+.ap-app .ref-button.ref-button:active { transform: scale(.98); }
+.ap-app .ap-landing-header nav a,
+.ap-app .ap-landing-header nav button,
+.ap-app .ap-sidebar nav a,
+.ap-app .ap-tabs button {
+  transition: color var(--motion-feedback) ease, background-color var(--motion-feedback) ease, border-color var(--motion-feedback) ease;
+}
+.ap-app dialog.ref-modal {
+  animation-duration: 220ms;
+  animation-timing-function: var(--ease-out);
+}
+.ap-app dialog.ref-modal::backdrop { animation-duration: 180ms; }
+@media (hover:hover) and (pointer:fine) {
+  .ap-app .ap-benefits>button .ap-benefit-arrow { transition: transform var(--motion-feedback) var(--ease-out); }
+  .ap-app .ap-benefits>button:hover .ap-benefit-arrow { transform: translateX(3px); }
+}
+@media (prefers-reduced-motion:reduce) {
+  .ap-app *, .ap-app *::before, .ap-app *::after {
+    animation:none!important;
+    transition:none!important;
+    scroll-behavior:auto!important;
+  }
+  .ap-app .ref-button.ref-button:active,
+  .ap-app .ap-benefits>button:hover .ap-benefit-arrow { transform:none; }
+}

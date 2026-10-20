@@ -1,0 +1,56 @@
+.ap-app .ref-portrait { display:block;border-radius:50%;overflow:hidden;flex:none; }
+.ap-app .ap-laptop-image {
+  mask-image:linear-gradient(to right,transparent,#000 12%,#000 92%,transparent),linear-gradient(to bottom,transparent,#000 4%,#000 86%,transparent);
+  mask-composite:intersect;
+}
+.ap-app .ap-profile .ref-portrait { width:clamp(26px,3.2vw,33px);height:auto; }
+.ap-app .ap-analyst-top>.ref-portrait { background:transparent; }
+.ap-app .ap-channel-legend .ref-platform { width:clamp(10px,1.2vw,16px)!important;height:clamp(10px,1.2vw,16px)!important; }
+.ap-app .ap-donut small.ap-green { font-size:clamp(10px,1.6vw,15px);font-weight:600;line-height:1.3; }
+.ap-app .ap-tabs button { display:inline-flex;align-items:center;justify-content:center;gap:5px; }
+.ap-app .ap-tab-count { font-weight:500;background:#e7ebf7;color:#536391;border:1px solid #d9e0f2;border-radius:5px;min-width:14px;padding:0 3px;font-size:.9em;line-height:1.3; }
+.ap-app .ap-tabs .is-active .ap-tab-count { color:#fff;background:#a18aff;border-color:#b9a7ff; }
+.ap-app .ap-tabs .ref-platform { width:14px!important;height:14px!important;border-radius:3px; }
+@media(min-width:701px) {
+ .ap-app .ap-campaign-panel .ap-inline-search { width:24px;max-width:180px;margin:0;gap:0;position:relative;flex:none; }
+ .ap-app .ap-campaign-panel .ap-inline-search svg { position:absolute;left:3px;pointer-events:none; }
+ .ap-app .ap-campaign-panel .ap-inline-search input { width:24px;min-width:0;padding:6px 0 6px 24px;color:transparent;background:transparent;border-color:transparent; }
+ .ap-app .ap-campaign-panel .ap-inline-search input::placeholder { color:transparent; }
+ .ap-app .ap-campaign-panel .ap-inline-search:focus-within,
+ .ap-app .ap-campaign-panel .ap-inline-search:has(input:not(:placeholder-shown)) { width:180px; }
+ .ap-app .ap-campaign-panel .ap-inline-search:focus-within input,
+ .ap-app .ap-campaign-panel .ap-inline-search input:not(:placeholder-shown) { width:180px;color:var(--text); }
+ .ap-app .ap-campaign-panel .ap-inline-search:focus-within input::placeholder { color:var(--muted); }
+}
+.ap-app .ap-source-row>.ap-connection-status { margin-left:auto;border:0;white-space:nowrap;min-height:28px; }
+.ap-app .ap-source-row>.ap-connection-status:hover { outline:1px solid currentColor;outline-offset:2px; }
+.ap-app .ap-page-heading h1.ap-heading-title { display:flex;align-items:center;gap:8px; }
+.ap-app .ap-section-mark { display:inline-flex;align-items:center;justify-content:center;width:clamp(20px,2.3vw,28px);height:clamp(23px,2.6vw,32px);flex:none;color:#6242ff;background:radial-gradient(ellipse,#dceaff,transparent 75%); }
+.ap-app .ap-section-mark>svg { width:85%;height:85%;stroke-width:2;filter:drop-shadow(0 1px 2px #7760ff40); }
+.ap-app .ap-section-mark .ref-logo>span:last-child { display:none; }
+.ap-app .ap-section-mark .ref-logo { gap:0; }
+.ap-app .ap-section-mark .ref-logo-mark { transform:scale(.8);transform-origin:center; }
+.ap-app .ap-floating-card { border:1px solid #ffffffc9;box-shadow:inset 0 0 9px #ffffff40,0 3px 12px #8f78c540; }
+.ap-app .ap-growth {
+ background:linear-gradient(130deg,#bba6ffc9,#865deab8 55%,#5d438cb8);
+ backdrop-filter:blur(10px);transform:rotate(-3deg);width:39%;
+ box-shadow:inset 0 0 8px #ffffff60,0 0 14px #aa91ff55;
+}
+.ap-app .ap-cpa {
+ background:linear-gradient(120deg,#a67195c9,#e5a2a1bd 55%,#ffd0afca);
+ backdrop-filter:blur(10px);transform:rotate(-2deg);width:39%;
+ box-shadow:inset 0 0 8px #ffffff60,0 0 14px #ffd3ba55;
+}
+.ap-app .ap-floating-card>div { text-align:center; }
+.ap-app .ap-floating-card span { white-space:nowrap; }
+@media(min-width:701px) {
+ .ap-content:has(.ap-recommendations,.ap-campaign-panel,.ap-analyst,.ap-effect-stats,.ap-connections,.ap-report-panel,.ap-pricing,.ap-history)>.ap-page-heading h1 { font-size:clamp(18px,2.5vw,28px); }
+ .ap-content:has(.ap-recommendations,.ap-campaign-panel,.ap-analyst,.ap-effect-stats,.ap-connections,.ap-report-panel,.ap-pricing,.ap-history)>.ap-page-heading { margin-bottom:10px; }
+}
+@media(max-width:700px) {
+ .ap-app .ap-profile .ref-portrait { width:30px; }
+ .ap-app .ap-source-row>.ap-connection-status { min-height:44px; }
+ .ap-app .ap-dynamics .ap-card-heading .ap-tabs { flex-wrap:wrap;justify-content:flex-start; }
+ .ap-app .ap-chart text { font-size:28px; }
+ .ap-app .ap-effect-chart .ap-chart text { font-size:30px; }
+}

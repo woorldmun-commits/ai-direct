@@ -1,0 +1,37 @@
+name: AdPilot launch frontend
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  launch-frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: designe 1.0
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: designe 1.0/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - name: Model and private API contracts
+        run: |
+          npm run test:model
+          npm run test:pilot
+          node scripts/check-workspace-proxy.mjs
+          node --experimental-strip-types scripts/check-chart-geometry.mjs
+      - run: npm run build
+      - name: HTTP security headers
+        run: npm run test:headers
+        env:
+          HTTP_ONLY: '1'
+      - name: Production dependency advisories
+        run: npm audit --audit-level=high --package-lock-only --omit=dev

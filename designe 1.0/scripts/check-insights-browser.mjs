@@ -1,0 +1,48 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const root = path.resolve(import.meta.dirname, '..');
+const base = process.env.BASE_URL || 'http://127.0.0.1:3130';
+const fixture = JSON.parse(await fs.readFile(path.join(root,'artifacts/.runtime/fixture.json'),'utf8'));
+const out = path.join(root,'artifacts/insights'); await fs.mkdir(out,{recursive:true});
+const browser = await chromium.launch({channel:'msedge',headless:true});
+const errors=[];
+try {
+ const context=await browser.newContext({viewport:{width:1440,height:1000},reducedMotion:'reduce'});
+ await context.addCookies([{name:'session',value:fixture.tokens.owner,url:base,httpOnly:true,sameSite:'Lax'}]);
+ await context.addInitScript(()=>{window.__violations=[];document.addEventListener('securitypolicyviolation',event=>window.__violations.push(event.violatedDirective));});
+ const page=await context.newPage(); page.on('pageerror',error=>errors.push(error.message));
+ const location=base+'/workspace?workspace='+fixture.workspaces.a1;
+ const response=await page.goto(location,{waitUntil:'networkidle'});
+ assert.match(response.headers()['cache-control'],/no-store/);
+ assert.equal(await page.locator('.pilot-metric').count(),3);
+ assert(await page.getByRole('heading',{name:'Контроль данных и бюджета'}).isVisible());
+ assert(await page.getByRole('heading',{name:'Качество заявок',exact:true}).isVisible());
+ assert.match(await page.locator('meta[name=robots]').getAttribute('content'),/noindex/);
+ assert(!(await page.content()).includes(fixture.tokens.owner));
+ await page.getByText('Задать или изменить план',{exact:true}).click();
+ await page.locator('input[name=amount]').fill('5001.25');
+ await Promise.all([page.waitForNavigation({waitUntil:'networkidle'}),page.getByRole('button',{name:'Сохранить план',exact:true}).click()]);
+ assert.match(await page.locator('#insights').innerText(),/5\s?001,25/);
+ assert.equal(await page.getByRole('button',{name:'Сохраняем…',exact:true}).count(),0);
+ for(const width of [1440,834,390,320]) {
+  await page.setViewportSize({width,height:1000});
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`overflow at ${width}`);
+  await page.screenshot({path:path.join(out,`workspace-${width}.png`),fullPage:true});
+ }
+ await page.goto(base+`/workspace/recommendations/${fixture.recommendation}?workspace=${fixture.workspaces.a1}`,{waitUntil:'networkidle'});
+ assert(await page.getByRole('heading',{name:'Решение специалиста'}).isVisible());
+ assert(await page.getByRole('heading',{name:'Что проверить или изменить вручную'}).isVisible());
+ assert.match(await page.locator('main').innerText(),/Автоматическая сверка пока недоступна/);
+ assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+ await page.screenshot({path:path.join(out,'passport-320.png'),fullPage:true});
+ assert.deepEqual(await page.evaluate(()=>window.__violations),[]);
+ const denied=await context.request.post(base+`/api/workspaces/${fixture.workspaces.a1}/budget-plan`,{headers:{Origin:'https://foreign.example'},data:{period_from:'2026-09-20',period_to:'2026-09-26',amount:'1.00'}});
+ assert.equal(denied.status(),403);
+ await context.close(); assert.deepEqual(errors,[]);
+ await fs.writeFile(path.join(out,'checks.json'),JSON.stringify({synthetic:true,backend:'FastAPI and disposable PostgreSQL',passed:['SSR insights','no-store/noindex/no token leak','budget mutation through same-origin BFF','1440/834/390/320 no overflow','validated recommendation instructions','CSRF denied','no page errors or CSP violations'],errors},null,2));
+ console.log('PASS insights browser: real local API, budget mutation, passport, mobile layouts, CSRF and private headers');
+} finally {await browser.close();}

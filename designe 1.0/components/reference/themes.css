@@ -1,0 +1,103 @@
+/* Light surfaces share the existing application tokens; the editorial hero stays dark. */
+[data-theme] .ref-ui:not(.ref-landing) .ref-logo { color:var(--text); }
+[data-theme] .ref-ui:not(.ref-landing) .ref-card,
+[data-theme] .ref-modal { background:var(--surface);border-color:var(--border);color:var(--text);box-shadow:var(--shadow-sm); }
+[data-theme] .ref-ui:not(.ref-landing) .ref-button:not(.ref-primary):not(.ap-amber),
+[data-theme] .ref-ui:not(.ref-landing) input:not([type=checkbox]):not([type=range]),
+[data-theme] .ref-ui:not(.ref-landing) select,
+[data-theme] .ref-ui:not(.ref-landing) textarea { background:var(--surface);color:var(--text);border-color:var(--border); }
+[data-theme] .ref-ui:not(.ref-landing) .ref-button:not(.ref-primary):not(.ap-amber):hover { background:var(--surface-2); }
+[data-theme] .ref-ui:not(.ref-landing) .ref-badge { background:var(--brand-soft);color:var(--brand);border-color:var(--border); }
+[data-theme] .rc-cabinet { background:radial-gradient(ellipse at 85% 0%,#dbe8ff30,transparent 48%),var(--bg);color:var(--text); }
+[data-theme] .rc-sidebar,
+[data-theme] .rc-topbar,
+[data-theme] .rc-bottom-nav { background:var(--surface);border-color:var(--border); }
+[data-theme] .rc-nav-link,
+[data-theme] .rc-profile,
+[data-theme] .rc-top-actions>button,
+[data-theme] .rc-section-title>button,
+[data-theme] .rc-mobile-menu { color:var(--text); }
+[data-theme] .rc-nav-link:hover,
+[data-theme] .rc-nav-link.is-active,
+[data-theme] .rc-filters button.is-active,
+[data-theme] .rc-settings-nav .is-active { background:var(--brand-soft);color:var(--brand);border-color:var(--border); }
+[data-theme] .rc-period,
+[data-theme] .rc-section-title select,
+[data-theme] .rc-period option,
+[data-theme] .rc-section-title option,
+[data-theme] .rc-small-button,
+[data-theme] .rc-filters button,
+[data-theme] .rc-finding,
+[data-theme] .rc-health-row,
+[data-theme] .rc-settings-form input:not([type=checkbox]),
+[data-theme] .rc-settings-form select,
+[data-theme] .rc-connection-steps li>span,
+[data-theme] .rc-demo-explanation,
+[data-theme] .rc-ai-card,
+[data-theme] .rc-ai-form,
+[data-theme] .rc-ai-reply { background:var(--surface-2);color:var(--text);border-color:var(--border); }
+[data-theme] .rc-small-button:hover,
+[data-theme] .rc-filters button:hover { background:var(--brand-soft); }
+[data-theme] .rc-chart-tooltip { background:var(--surface);border-color:var(--border);box-shadow:var(--shadow-md); }
+[data-theme] .rc-chart-tooltip strong { color:var(--text); }
+[data-theme] .rc-page-heading p,
+[data-theme] .rc-metric>span,
+[data-theme] .rc-chart-legend,
+[data-theme] .rc-channel small,
+[data-theme] .rc-health-row small,
+[data-theme] .rc-finding small,
+[data-theme] .rc-data-note,
+[data-theme] .rc-campaigns th,
+[data-theme] .rc-campaigns td small,
+[data-theme] .rc-rec-summary p,
+[data-theme] .rc-rec-summary small,
+[data-theme] .rc-disclosure p,
+[data-theme] .rc-effect-summary small,
+[data-theme] .rc-effect-actions small,
+[data-theme] .rc-before-after strong small,
+[data-theme] .rc-source p,
+[data-theme] .rc-connection-steps small,
+[data-theme] .rc-settings-form label,
+[data-theme] .rc-toggle-row small,
+[data-theme] .rc-profile-large small,
+[data-theme] .rc-plan>span:last-of-type,
+[data-theme] .rc-plan a,
+[data-theme] .rc-help,
+[data-theme] .rc-profile small,
+[data-theme] .rc-empty,
+[data-theme] .rc-ai-card ul,
+[data-theme] .rc-bottom-nav a,
+[data-theme] .rc-settings-nav>a,
+[data-theme] .rc-settings-nav>button { color:var(--muted); }
+[data-theme] .rc-metric small,
+[data-theme] .rc-channel em,
+[data-theme] .rc-rec-actions em,
+[data-theme] .rc-before-after p,
+[data-theme] .ref-ui .green { color:var(--success)!important; }
+[data-theme] .ref-ui .red { color:var(--danger)!important; }
+[data-theme] .rc-status-good { background:var(--success-bg);color:var(--success);border-color:var(--border); }
+[data-theme] .rc-priority.high { background:var(--danger-bg);color:var(--danger);border-color:var(--border); }
+[data-theme] .rc-priority.medium { background:var(--warning-bg);color:var(--warning);border-color:var(--border); }
+[data-theme] .rc-decision-status { background:var(--success-bg);color:var(--success);border-color:var(--border); }
+[data-theme] .rc-decision-status button { color:var(--brand); }
+[data-theme] .rc-campaigns td { color:var(--text);border-color:var(--border); }
+[data-theme] .rc-campaigns th { background:var(--surface-2); }
+[data-theme] .rc-channel,
+[data-theme] .rc-source,
+[data-theme] .rc-effect-actions>div,
+[data-theme] .rc-disclosure p,
+[data-theme] .rc-settings-form .rc-toggle-row { border-color:var(--border); }
+[data-theme] .ref-auth-page { background:radial-gradient(ellipse at 58% 0,#dce6f830,transparent 65%),var(--bg); }
+[data-theme] .ref-auth-shell { background:linear-gradient(110deg,var(--surface) 36%,var(--surface-2));border-color:var(--border);box-shadow:var(--shadow-md); }
+[data-theme] .ref-auth-heading p,
+[data-theme] .ref-auth-demo,
+[data-theme] .ref-auth-tagline p,
+[data-theme] .ref-auth-registration { color:var(--muted); }
+[data-theme] .ref-auth-registration a,
+[data-theme] .ref-auth-back { color:var(--brand); }
+.rc-legal-link { font-size:11px;color:var(--muted);margin-top:14px; }
+.rc-disclosure[inert] { visibility:hidden; }
+.rc-cabinet .rc-small-button,.rc-filters button,.rc-top-actions>button,.rc-mobile-menu { min-height:44px; }
+.rc-top-actions>button,.rc-mobile-menu { min-width:44px; }
+.rc-metric strong { font-variant-numeric:tabular-nums; }
+@media(max-width:620px){.rc-topbar{padding:0 10px;gap:4px}.rc-top-actions{gap:3px}.rc-account{display:none}.rc-top-actions .theme-control>span{display:none}.rc-top-actions .theme-control select{max-width:125px}.rc-profile{display:none}.rc-top-actions>button:nth-of-type(1){display:none}}

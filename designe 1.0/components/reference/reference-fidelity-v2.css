@@ -1,0 +1,135 @@
+/* Photo is a separate asset; every overlaid label, card and action remains HTML/CSS. */
+.ap-app.ap-landing .ap-landing-surface { position:relative;isolation:isolate; }
+.ap-app.ap-landing .ap-landing-scene { object-fit:cover;object-position:center top;z-index:-1;pointer-events:none; }
+.ap-app.ap-landing .ap-laptop-art { background:none; }
+.ap-app.ap-landing .ap-laptop-art::before { display:none; }
+.ap-app.ap-landing .ap-laptop-art .ap-floating-card { backdrop-filter:blur(10px); }
+.ap-app.ap-landing .ap-hero-copy { isolation:isolate; }
+.ap-app.ap-landing .ap-hero-copy::before { content:'';position:absolute;inset:-12px 0 -12px -28px;background:linear-gradient(90deg,#ffffffe6 25%,#ffffffd9 90%,transparent);filter:blur(12px);z-index:-1;pointer-events:none; }
+.ap-app.ap-landing .ap-hero-first-line { color:inherit;background:none;-webkit-text-fill-color:currentColor; }
+.ap-app.ap-landing .ap-floating-card { right:16px; }
+.ap-app .ap-sidebar-home { display:inline-flex;align-items:center;justify-content:center;color:#6476ab;margin-left:auto; }
+.ap-app .ap-table-hint[hidden] { display:none; }
+.ap-app .ap-dynamics .ap-tooltip { --ap-tooltip-width:185px;width:var(--ap-tooltip-width);min-width:0; }
+.ap-app .ap-heading-title { white-space:nowrap; }
+.ap-app .ap-analyst-context { display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:10px;color:#64749d;font-size:10px; }
+.ap-app .ap-analyst-context .ap-account { padding:6px 10px;font-size:10px;min-width:140px; }
+.ap-app .ap-history-row>.ap-icon.telegram { color:#fff;background:linear-gradient(145deg,#14c9ff,#0076ff); }
+.ap-app .ap-pricing>.ap-price-first>.ref-button { color:#83500a;border-color:#f2d09b;background:linear-gradient(115deg,#fff1d8,#ffd79e);box-shadow:inset 0 1px #fff9,0 2px 5px #a9741510; }
+.ap-app .ap-pricing>.ap-price-first>.ref-button:hover { background:linear-gradient(115deg,#fff6e8,#ffca7e); }
+.ap-app .ap-effect-chart { background:transparent;border-color:transparent;box-shadow:none;padding-left:0;padding-right:0; }
+.ap-app .ap-recommendations .ap-icon.red { color:#fff;background:linear-gradient(145deg,#ff3c62,#f91249);box-shadow:0 3px 9px #ff365940; }
+.ap-app .ap-history-row>.ap-icon .ref-platform { background:transparent;box-shadow:none; }
+.ap-app .ap-question { display:grid;grid-template-columns:minmax(0,1fr) 34px;gap:8px;border:0;background:transparent;padding:0; }
+.ap-app .ap-question-field { min-width:0;display:flex;align-items:center;gap:9px;border:1px solid #dce3f4;border-radius:9px;background:#ffffffc9;padding:5px 10px; }
+.ap-app .ap-question-field>svg { flex:none;width:15px;height:15px;color:#647aaa; }
+.ap-app .ap-question-field input { width:100%;padding:3px 0;min-width:0;outline:0;border:0;background:transparent; }
+.ap-app .ap-question-field:focus-within { outline:2px solid #7950ff;outline-offset:2px; }
+.ap-app .ap-question:focus-within { outline:none; }
+.ap-app .ap-question>.ref-button { width:34px;min-height:34px; }
+.ap-app .ap-question>.ref-button:disabled { opacity:1;filter:saturate(.85);cursor:not-allowed; }
+.ap-app .ap-content:has(.ap-analyst) .ap-page-heading h1 { display:flex;align-items:center;gap:8px; }
+.ap-app .ap-beta { color:#6341e8;background:#e5e0ff;font-size:10px;line-height:1;padding:5px 7px;border-radius:5px;font-weight:500; }
+.ap-app .ap-effect-chart .ap-chart-grid { stroke:#edf1fb;stroke-width:1; }
+@media(min-width:701px) and (max-width:900px) {
+ .ap-app.ap-landing .ap-hero h1 { position:relative;left:-2px;top:4px;font-size:48px;letter-spacing:-1.75px; }
+ .ap-app.ap-landing .ap-hero h1>.ap-hero-first-line { font-size:47px; }
+ .ap-app.ap-landing .ap-floating-card { width:38.2%;height:22.5%; }
+ .ap-app.ap-landing .ap-growth { top:calc(36% + 4px);background:linear-gradient(130deg,#ad91fff0,#8458eae8 55%,#49346be8); }
+ .ap-app.ap-landing .ap-cpa { top:calc(63% + 4px);background:linear-gradient(120deg,#a67195e8,#e5a2a1e8 55%,#ffb594e8); }
+ .ap-app.ap-landing .ap-hero-copy>p { font-size:13px;line-height:18px; }
+ .ap-app.ap-landing .ap-demo-button { padding-left:12px;padding-right:12px;gap:6px; }
+ .ap-app.ap-landing .ap-landing-header nav { justify-content:flex-start;padding-left:18px; }
+ .ap-app.ap-landing .ap-platform-strip { gap:10px; }
+ .ap-app.ap-landing .ap-platform-strip>span { padding-left:0;padding-right:8px;background:#ffffff85; }
+ .ap-app.ap-landing .ap-floating-card { right:0; }
+}
+@media(min-width:701px) and (max-width:1100px) {
+ .ap-app .ap-sidebar nav { width:calc(128 * var(--ap-u));max-width:100%;min-width:0;margin-inline:calc(3 * var(--ap-u)); }
+ .ap-app .ap-sidebar nav a { min-width:0;gap:calc(9 * var(--ap-u));padding-left:calc(17 * var(--ap-u));padding-right:calc(5 * var(--ap-u)); }
+ .ap-app .ap-sidebar .ref-logo { font-size:calc(21 * var(--ap-u)); }
+ .ap-app .ap-content:has(>.ap-metrics)>.ap-page-heading h1 { font-size:calc(26 * var(--ap-u));letter-spacing:-.5px;position:relative;left:2px; }
+ .ap-app .ap-dynamics .ap-tooltip { --ap-tooltip-width:calc(129 * var(--ap-u));top:calc(17 * var(--ap-u));padding:calc(8 * var(--ap-u));font-size:calc(8 * var(--ap-u));line-height:1.25;border-radius:calc(9 * var(--ap-u)); }
+ .ap-app .ap-dynamics .ap-tooltip strong { font-size:calc(7.5 * var(--ap-u));margin-bottom:calc(4 * var(--ap-u)); }
+ .ap-app .ap-dynamics .ap-tooltip span { gap:calc(4 * var(--ap-u));margin-top:calc(3 * var(--ap-u)); }
+ .ap-app .ap-dynamics .ap-tooltip i { width:calc(6 * var(--ap-u));height:calc(6 * var(--ap-u)); }
+}
+@media(min-width:701px) {
+ @container(max-width:680px) {
+  .ap-app .ap-rec-featured .ap-rec-stats>.ap-text-button { position:absolute;right:12px;bottom:4px;margin:0;padding:1px 0;min-height:14px;font-size:8px;line-height:1.3; }
+  .ap-app .ap-rec-stats small { white-space:nowrap;font-size:8px; }
+  .ap-app .ap-rec-stats { margin-bottom:8px; }
+  .ap-app .ap-rec-stats>div { padding-inline:6px; }
+  .ap-app .ap-campaign-panel .ap-table-toolbar { padding:7px 9px;gap:6px;flex-wrap:nowrap; }
+  .ap-app .ap-campaign-panel .ap-table-toolbar .ap-tabs { flex-wrap:nowrap;gap:3px;min-width:0; }
+  .ap-app .ap-campaign-panel .ap-table-toolbar .ap-tabs button { font-size:8px;min-height:25px;padding:5px 6px;gap:3px; }
+  .ap-app .ap-campaign-panel .ap-tabs button[data-tab="Другое"] { width:25px;min-width:25px;padding:4px; }
+  .ap-app .ap-campaign-panel .ap-tabs button[data-tab="Другое"]>span,.ap-app .ap-campaign-panel .ap-tabs button[data-tab="Другое"]>.ref-platform,.ap-app .ap-campaign-panel .ap-tabs button[data-tab="Другое"]>.ap-tab-count { display:none; }
+  .ap-app .ap-campaign-panel .ap-tabs button[data-tab="Другое"]::after { content:'⋯';font-size:12px;line-height:1; }
+  .ap-app .ap-analyst-response,.ap-app .ap-analyst-response p,.ap-app .ap-analyst-response ol,.ap-app .ap-analyst-response ul { font-size:10px;line-height:1.4; }
+  .ap-app .ap-analyst-response { padding:10px 12px; }
+  .ap-app .ap-ai-sources { min-width:116px;padding:10px; }
+  .ap-app .ap-ai-sources h2,.ap-app .ap-ai-sources>div { font-size:9px;line-height:1.4; }
+  .ap-app .ap-ai-sources .ref-platform,.ap-app .ap-ai-sources .ref-platform>svg { width:15px!important;height:15px!important; }
+ }
+ @container(max-width:520px) {
+  .ap-app .ap-rec-stats { margin-bottom:0; }
+  .ap-app .ap-rec-featured { padding:12px 13px; }
+  .ap-app .ap-rec-featured .ap-rec-top { gap:12px; }
+  .ap-app .ap-rec-featured .ap-icon.large { width:36px;height:36px; }
+  .ap-app .ap-recommendation:not(.ap-rec-featured) { padding:5px 10px; }
+  .ap-app .ap-campaign-panel input[type=checkbox] { width:10px;height:10px; }
+  .ap-app .ap-campaign-panel .ap-table td { padding-top:3px;padding-bottom:3px; }
+  .ap-app .ap-report-panel>.ap-tabs { flex-wrap:nowrap;gap:3px;margin:0 8px 8px; }
+  .ap-app .ap-report-panel>.ap-tabs button { flex:0 1 auto;white-space:nowrap;font-size:7px;min-height:23px;padding:5px 6px; }
+  .ap-app .ap-report-panel .ap-table { width:100%;min-width:0;table-layout:auto; }
+  .ap-app .ap-report-panel .ap-table th { font-size:7px;padding:5px 4px; }
+  .ap-app .ap-report-panel .ap-table td { font-size:8px;padding:5px 4px; }
+  .ap-app .ap-report-panel .ap-name-cell { gap:4px; }
+  .ap-app .ap-report-panel .ap-name-cell strong { font-size:7px; }
+  .ap-app .ap-report-panel .ap-name-cell .ref-platform { width:12px!important;height:12px!important; }
+  .ap-app .ap-report-panel .ap-name-cell .ref-platform>svg { width:9px;height:9px; }
+  .ap-app .ap-report-panel .ap-name-cell .ref-platform>b { font-size:9px!important;line-height:1; }
+  .ap-app .ap-report-panel .ref-metrika-bars { width:12px;height:12px; }
+  .ap-app .ap-history-row { padding-block:5px;gap:7px; }
+  .ap-app .ap-history-row h2 { font-size:7.5px;line-height:1.35; }
+  .ap-app .ap-history-row p,.ap-app .ap-history-row time { font-size:7px;line-height:1.4; }
+  .ap-app .ap-history-row time { font-size:6.5px; }
+  .ap-app .ap-report-panel .ap-table tfoot td { font-size:9px;padding:8px 4px; }
+  .ap-app .ap-report-panel .ap-report-period { font-size:7px;line-height:1.4;margin:0 8px 5px!important; }
+  .ap-app .ap-price-value strong { font-size:18px; }
+  .ap-app .ap-price li { font-size:8px;line-height:1.5; }
+  .ap-app .ap-price ul { gap:4px;margin:10px 0; }
+  .ap-app .ap-price-first>.ref-button { color:#8b5600;border-color:#f1d6aa;background:linear-gradient(#fff1d5,#f8dca6);box-shadow:inset 0 1px #fff8,0 2px 5px #a9741510; }
+  .ap-app .ap-analyst { padding:8px 9px; }
+  .ap-app .ap-analyst .ap-analyst-top { gap:9px; }
+  .ap-app .ap-analyst .ap-ai-sources { padding:9px; }
+  .ap-app .ap-analyst .ap-suggestions { gap:5px;margin:10px 0 7px; }
+  .ap-app .ap-analyst .ap-suggestions button { font-size:8px;padding:5px 8px;min-height:24px; }
+  .ap-app .ap-analyst .ap-question { grid-template-columns:minmax(0,1fr) 30px; }
+  .ap-app .ap-analyst .ap-question>.ref-button { width:30px;min-height:30px;height:30px; }
+  .ap-app .ap-analyst .ap-question-field { padding:4px 9px; }
+  .ap-app .ap-analyst .ap-question-field input { font-size:9px; }
+ }
+ @container(min-width:521px) and (max-width:680px) {
+  .ap-app .ap-campaign-panel .ap-table th { font-size:9px;padding:8px; }
+  .ap-app .ap-campaign-panel .ap-table td { font-size:10px;padding:7px 8px; }
+  .ap-app .ap-campaign-panel .ap-name-cell { gap:8px; }
+  .ap-app .ap-campaign-panel .ap-name-cell strong { font-size:10px; }
+  .ap-app .ap-campaign-panel .ap-name-cell small { font-size:9px; }
+  .ap-app .ap-campaign-panel .ap-status { font-size:9px;padding:3px 5px; }
+  .ap-app .ap-campaign-panel .ref-platform { width:25px!important;height:25px!important; }
+  .ap-app .ap-campaign-panel .ap-table td .ap-spark { width:64px;height:22px; }
+ }
+}
+@media(max-width:700px) {
+ .ap-app.ap-landing .ap-hero-copy::before { display:none; }
+ .ap-app.ap-landing .ap-floating-card { right:0; }
+ .ap-app .ap-sidebar-home { display:none; }
+ .ap-app.ap-landing .ap-landing-scene { display:none; }
+ .ap-app.ap-landing .ap-laptop-art { background:none; }
+ .ap-app.ap-landing .ap-laptop-art::after { content:'';position:absolute;inset:0;z-index:-1;background:url('/reference/rekvero-hero-scene.png') 97% 27%/210% auto no-repeat;mask-image:linear-gradient(to bottom,transparent,#000 7%,#000 88%,transparent),linear-gradient(to right,transparent,#000 5%,#000 95%,transparent);mask-composite:intersect; }
+ .ap-app .ap-question { grid-template-columns:minmax(0,1fr) 44px; }
+ .ap-app .ap-question>.ref-button { width:44px;min-height:44px;height:44px; }
+ .ap-app .ap-question-field { min-height:44px; }
+}

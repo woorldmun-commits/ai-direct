@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import ts from 'typescript';
+function load(file, dependencies = {}) {
+  const exports = {};
+  const code = ts.transpileModule(readFileSync(new URL(file, import.meta.url), 'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
+  new Function('exports', 'require', code)(exports, name => {assert(name in dependencies); return dependencies[name];});
+  return exports;
+}
+const base = load('../lib/pilot-contract.ts');
+const { isInsights, isPassport } = load('../lib/insights-contract.ts', {'./pilot-contract':base});
+const period = {from:'2026-09-01',to:'2026-09-07'};
+const value = {amount:null,unit:'rub',source:'yandex_direct',period,calculation_type:'unavailable',data_status:'complete',data_sufficiency:'insufficient',unavailable_reason:'no_data',rule_version:null,formula:null};
+const data = {period,ad_accounts:[{id:'acc_1'}],health:{checks:[]},budget:{plan:null,actual:value,variance:value},lead_quality:{counts:{total:0,qualified:0,unresolved:0,matched:0},coverage:{matched_pct:null,qualification_complete:false,cohort_complete:false},qcpl:value,reason:'no_imported_leads'},summary:{period,generated_at:'2026-09-08T12:00:00Z',delivery:'manual_pull',facts:[],limitations:[]}};
+assert(isInsights(data));
+assert(isInsights({...data,lead_quality:{...data.lead_quality,reason:null}}));
+assert(!isInsights({...data,budget:{...data.budget,actual:{...value,amount:0}}}));
+assert(!isInsights({...data,period:{from:'2026-02-31',to:'2026-03-03'}}));
+assert(!isInsights({...data,ad_accounts:[{id:'../acc_1'}]}));
+assert(!isInsights({...data,lead_quality:{...data.lead_quality,counts:{...data.lead_quality.counts,total:-1}}}));
+const passport = {id:'rec_1',version_id:'rv_1',state_version:'initial',status:'new',action:null,object:{type:'campaign',id:'1',name:null},evidence_current:true,title:'Synthetic test',action_level:'review',allowed_actions:['reject'],evidence:{cost:value},exposure:value,can_save:value,computed_at:'2026-09-08T12:00:00Z',explanation:null,history:[],verification:{status:'unavailable',reason:'verification_worker_not_implemented'}};
+assert(isPassport(passport));
+assert(isPassport({...passport,action:{type:'decrease_bid',execution:'manual',change_pct:'-10.00'}}));
+assert(!isPassport({...passport,action:{type:'decrease_bid',execution:'manual',change_pct:'-200.00'}}));
+assert(!isPassport({...passport,action:{type:'investigate',execution:'manual',checks:['unknown'],placements:null}}));
+assert(!isPassport({...passport,evidence:{cost:{...value,amount:1}}}));
+assert(!isPassport({...passport,explanation:{text:['unsafe'],source:'template'}}));
+assert(!isPassport({...passport,allowed_actions:['automatic_write']}));
+assert(!isPassport({...passport,computed_at:'invalid'}));
+console.log('PASS insights and passport: unavailable money, nullable reasons, periods, scope IDs and nested evidence');
