@@ -96,3 +96,13 @@ html[data-theme] body .mc-home .mc-reference-platforms .ref-metrika-bars i:nth-c
  .mc-home [id]{scroll-margin-top:88px}
 }
 @media(prefers-reduced-motion:no-preference){.mc-home .mc-button{transition:background 180ms,box-shadow 180ms}.mc-home .mc-button:hover{box-shadow:var(--shadow-md)}}
+@media(min-width:768px){
+ .mc-home .vr-benefits{grid-template-columns:repeat(6,minmax(0,1fr))}
+ .mc-home .vr-benefits>div{gap:8px;padding:14px 10px;font-size:11px}
+ .mc-home .vr-benefits svg{width:32px;height:32px;padding:7px}
+}
+@media(min-width:1024px){
+ html[data-theme] body .mc-home .mc-header-actions>.mc-button{display:inline-flex}
+ .mc-home .mc-header nav{gap:18px;font-size:11px}
+ .mc-home .mc-header-actions>.mc-button{padding-inline:18px;font-size:11px}
+}
