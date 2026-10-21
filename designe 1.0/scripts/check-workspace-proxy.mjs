@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import {readFileSync} from 'node:fs';
+import net from 'node:net';
 import ts from 'typescript';
 function load(file,dependencies={}){
  const exports={};const code=ts.transpileModule(readFileSync(new URL(file,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
  new Function('exports','require',code)(exports,name=>{assert(name in dependencies,name);return dependencies[name];});return exports;
 }
-const origin=load('../lib/api-origin.ts'),auth=load('../lib/auth-proxy.ts',{'./api-origin':origin}),paths=load('../lib/workspace-path.ts');
+const origin=load('../lib/api-origin.ts'),client=load('../lib/proxy-client.ts',{'node:crypto':crypto,'node:net':net}),auth=load('../lib/auth-proxy.ts',{'./api-origin':origin,'./proxy-client':client}),paths=load('../lib/workspace-path.ts');
 const {proxyWorkspace}=load('../lib/workspace-proxy.ts',{'./api-origin':origin,'./auth-proxy':auth,'./workspace-path':paths});
 const token='a'.repeat(43),base='https://rekvero.example',path='/workspaces/ws_1/insights';
 const request=(method='GET',overrides={})=>new Request(base+'/api'+path,{method,headers:{Cookie:'unrelated=private; session='+token,...(method==='POST'?{Origin:base,'Content-Type':'application/json'}:{})},...(method==='POST'?{body:'{}'}:{}),...overrides});
