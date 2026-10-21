@@ -192,16 +192,13 @@
 |---|---|
 | `backend/` | Весь серверный код, схема БД, миграции, тесты, evals |
 | `designe 1.0/` | **Активный фронтенд** |
-| `frontend/` | Legacy-фронтенд (не трогать без запроса) |
 | `docs/` | Каноническая документация: STRATEGY (верх иерархии), VERSION_SCOPE, PRD, ARCHITECTURE, DATA_MODEL, API_CONTRACT*, EXECUTION_SAFETY, ECONOMICS, LEGAL*, AI_GOVERNANCE, CLAIMS_REGISTRY, DISASTER_RECOVERY, DATA_FLOW_INVENTORY, PRODUCT_SPEC; `audits/` (аудиты 2026-10-17/18), `handoffs/`, `project-agents/` |
 | `_docs/` | Краткие выжимки: `project.md` (бизнес-контекст), `stack.md` |
 | `deploy/`, `Dockerfile`, `compose.yaml`, `render.yaml` | Деплой |
 | `.claude/agents/inrou/` | Субагенты Claude Code |
-| `brand/`, `design/`, `PRODUCT.md`, `DESIGN.md` | Бренд, голос, дизайн-система («midnight-champagne») |
-| `prov1/`, `sites/`, `results/`, `artifacts/`, `reference/`, `magicui-demo/` | Эксперименты, прототипы сайтов, отчёты проверок, артефакты аудитов — **не продакшн-код** |
-| `delo/`, `pipeline/`, `zasedaniya/` | Бизнес-заметки (компания, решения, цифры; контент-план). Поля «ЗАПОЛНИТЬ» — не заполнены |
-| `graphify-out/`, `graft/` | Автосгенерированные графы кода (не править руками) |
-| `ADPILOT_LAUNCH.md`, `VISUAL_AUDIT.md`, `AGENTS.md`, `CLAUDE.md` | Запуск, аудит, инструкции агентам |
+| `brand/`, `PRODUCT.md`, `DESIGN.md` | Бренд, голос, дизайн-система |
+| `graft/` | Автосгенерированный граф кода (не в git, не править руками) |
+| `AGENTS.md`, `CLAUDE.md` | Инструкции агентам |
 
 **Мусор в корне** (похоже на побочные продукты shell-ошибок; не использовать и не удалять без запроса владельца): `a{padding`, `div{flex`, `span{display`, `t)`, `str`, `{}]{25`, `0`, `Explanation\``, `tuple[Output`, `s.run`, `C:UserswoorlDocumentsclaudeai-directworkdir_env.txt`; аналогично в `designe 1.0/` (`44`, `500`, `div{flex`, `{}]{3`).
 
