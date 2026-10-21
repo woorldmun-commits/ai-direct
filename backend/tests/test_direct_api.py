@@ -47,6 +47,12 @@ def ready(text):
     return (200, text, {"RequestId": "111"})
 
 
+@pytest.mark.parametrize('body',[{},[],{'result':{}},{'result':{'Campaigns':'invalid'}}])
+def test_access_check_rejects_malformed_success(body):
+    with pytest.raises(DirectApiError):
+        api(FakeReports(campaigns=(200,body))).check_access('client-a')
+
+
 def error(status, code):
     return (status, {"error": {"request_id": "8695244274068608439", "error_code": code,
                                "error_string": "…", "error_detail": "…"}}, {"RequestId": "8695244274068608439"})
@@ -210,6 +216,8 @@ def test_worker_waits_for_offline_report_then_writes_snapshot(rw, ws):
     calls = []
 
     def handler(request):
+        if request.url.path.endswith('/campaigns'):
+            return httpx.Response(200, json={'result': {'Campaigns': []}})
         calls.append(json.loads(request.content)["params"]["ReportName"])
         if len(calls) == 1:
             return httpx.Response(201, headers={"retryIn": "10"})

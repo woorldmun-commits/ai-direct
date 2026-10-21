@@ -33,6 +33,7 @@ class Snapshot:
     conversion_definition: ConversionDefinition | None = None  # None: цели не выбраны, конверсий нет
     goal_rows: tuple[GoalRow, ...] = ()
     source_failures: Mapping[str, str] = field(default_factory=lambda: frozen({}))  # источник → код ошибки API
+    campaign_strategies: Mapping[str, str] = field(default_factory=lambda: frozen({}))
 
 
 @dataclass(frozen=True)

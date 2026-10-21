@@ -1,0 +1,17 @@
+html[data-theme] body .ref-auth-page .ref-auth-shell{grid-template-columns:46% 54%;max-width:1120px;min-height:740px}
+html[data-theme] body .ref-auth-page .ref-auth-art-panel{display:block;position:relative;padding:0;min-height:640px;background:#eeeaff;isolation:isolate}
+html[data-theme] body .ref-auth-page .ref-auth-orbit{display:block;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;animation:none;filter:none;z-index:-1}
+html[data-theme] body .ref-auth-page .ref-auth-tagline{position:absolute;bottom:36px;left:36px;right:36px;width:auto;max-width:none;padding:24px;border:1px solid #ffffffa0;border-radius:20px;background:#ffffffc9;backdrop-filter:blur(12px)}
+html[data-theme] body .ref-auth-page .ref-auth-tagline h2{font-size:32px;line-height:1.15;letter-spacing:-1px;color:#182447;margin-bottom:12px}
+html[data-theme] body .ref-auth-page .ref-auth-tagline p{color:#4e5b7c;font-size:14px}
+.ref-email-form fieldset{display:grid;gap:16px;min-width:0;margin:0;padding:0;border:0}
+.ref-email-form fieldset:disabled{opacity:.62}
+.ref-email-unavailable{padding:12px 14px;border:1px solid var(--border);background:var(--surface-2);border-radius:12px;line-height:1.6}
+@media(max-width:700px){
+ html[data-theme] body .ref-auth-page .ref-auth-shell{grid-template-columns:1fr;min-height:0}
+ html[data-theme] body .ref-auth-page .ref-auth-art-panel{min-height:320px}
+ html[data-theme] body .ref-auth-page .ref-auth-orbit{object-position:center 35%}
+ html[data-theme] body .ref-auth-page .ref-auth-tagline{left:20px;right:20px;bottom:20px;padding:18px}
+ html[data-theme] body .ref-auth-page .ref-auth-tagline h2{font-size:24px}
+ html[data-theme] body .ref-auth-page .ref-auth-tagline p{font-size:12px}
+}

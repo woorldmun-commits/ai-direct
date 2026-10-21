@@ -49,6 +49,8 @@ def _evaluate(conn: psycopg.Connection, workspace_id: int, inc: Included, settin
     view = load_view(conn, inc.snapshot_id)
     partial_from = conn.execute("SELECT partial_from FROM snapshots WHERE id = %s", (inc.snapshot_id,)).fetchone()[0]
     result = AccountResult(inc.account_id, inc.snapshot_id, partial_from)
+    result.strategies = conn.execute('SELECT campaign_strategies FROM snapshots WHERE id=%s',
+                                     (inc.snapshot_id,)).fetchone()[0]
     campaigns = {d.campaign_id for d in view.campaign_days}
     for rule in RULES:
         if not rule.applies(settings):

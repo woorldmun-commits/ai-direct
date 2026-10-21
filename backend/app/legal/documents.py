@@ -25,6 +25,9 @@ VERSIONS: dict[str, tuple[str, ...]] = {
     "pd_consent": ("2026-10-01",),
     "marketing": ("2026-10-01",),
     "agency_client_mandate": ("2026-10-01",),
+    "privacy": ("2026-10-01",),
+    "cookies": ("2026-10-01",),
+    "requisites": ("2026-10-01",),
 }
 WORKSPACE_DOCUMENTS = frozenset({"agency_client_mandate"})  # принимаются по конкретному workspace клиента
 

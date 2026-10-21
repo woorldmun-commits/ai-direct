@@ -151,3 +151,39 @@ def test_passport_cannot_mutate_evidence_and_invalid_ids(flow):
     assert one(flow['rw'],'SELECT evidence FROM findings WHERE id=%s',flow['ids']['rec_a1']['finding'])==before
     for recid in ['rec_0','rec_9223372036854775808','random']:
         assert flow['api'].get(flow['url'].rsplit('/',1)[0]+'/'+recid,headers=flow['headers']).status_code==404
+
+
+def test_activity_manual_lifecycle_and_isolation(flow):
+    url=flow['url'].split('/recommendations/')[0]+'/recommendation-activity'
+    assert flow['api'].get(url,headers=flow['headers']).json()=={'items':[], 'next_cursor':None}
+    assert post(flow,'/manual-execution',body(flow)).status_code==200
+    response=flow['api'].get(url,headers=flow['headers'])
+    assert response.status_code==200
+    item=response.json()['items'][0]
+    assert item['id']==read(flow)['id'] and item['execution_mode']=='manual'
+    assert item['measurement']['reason']=='window_open'
+    assert item['measurement']['next_check_on'] is not None
+    foreign=cookie(session(flow['rw'],flow['ids']['owner_b']))
+    assert flow['api'].get(url,headers=foreign).status_code==404
+    assert flow['api'].get(url).status_code==401
+    for query in ('?cursor=9223372036854775808','?limit=51','?cursor=0'):
+        assert flow['api'].get(url+query,headers=flow['headers']).status_code==400
+
+
+def test_activity_cursor_does_not_repeat_event(flow):
+    url=flow['url'].split('/recommendations/')[0]+'/recommendation-activity'
+    assert post(flow,'/decisions',body(flow,action='postpone',until=(today_msk()+timedelta(days=2)).isoformat())).status_code==200
+    page=flow['api'].get(url+'?limit=1',headers=flow['headers']).json()
+    assert len(page['items'])==1 and page['items'][0]['status']=='postponed'
+    event=read(flow)['history'][-1]['id'][3:]
+    assert flow['api'].get(url+'?cursor='+event,headers=flow['headers']).json()['items']==[]
+
+
+def test_closed_window_waits_for_data_without_promising_tomorrow(flow,monkeypatch):
+    from datetime import date
+    from app.api import recommendation_flow
+    assert post(flow,'/manual-execution',body(flow)).status_code==200
+    after=date.fromisoformat(read(flow)['latest_measurement']['after_period']['to'])
+    monkeypatch.setattr(recommendation_flow,'today_msk',lambda:after+timedelta(days=1))
+    measurement=read(flow)['latest_measurement']
+    assert measurement['reason']=='data_not_final' and measurement['next_check_on'] is None

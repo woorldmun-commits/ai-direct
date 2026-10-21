@@ -81,12 +81,12 @@ def write_snapshot(conn: psycopg.Connection, *, sync_run_id: int, workspace_id: 
                 raise SyncRunStateError(f"sync_run {sync_run_id}: нельзя записать снимок")
             snapshot_id = conn.execute(
                 """INSERT INTO snapshots (workspace_id, sync_run_id, release_id, period_from, period_to, data_until,
-                                          partial_from, sources, conversion_definition, source_failures)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                                          partial_from, sources, conversion_definition, source_failures, campaign_strategies)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
                 (workspace_id, sync_run_id, release_id, snapshot.period_from, snapshot.period_to, data_until,
                  snapshot.partial_from, sorted(snapshot.sources),
                  Jsonb(snapshot.conversion_definition.to_json()) if snapshot.conversion_definition else None,
-                 Jsonb(dict(snapshot.source_failures)))).fetchone()[0]
+                 Jsonb(dict(snapshot.source_failures)), Jsonb(dict(snapshot.campaign_strategies)))).fetchone()[0]
             last_seen: dict[str, date] = {}
             for r in snapshot.rows:
                 if r.query is not None:

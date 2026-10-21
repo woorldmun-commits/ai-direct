@@ -62,7 +62,7 @@ def snapshot_like(rw, ws, account, snap_id, *, shift=0, eval_cost=None, eval_con
         stat.append(StatRow(level, cid, day, impr, clicks, cost, conv))
     from app.sources.conversion import ConversionDefinition
     snap = Snapshot("x", to - timedelta(36), to, to - timedelta(2), frozenset({"yandex_direct"}), tuple(stat),
-                    ConversionDefinition(555, (111, 222)))
+                    ConversionDefinition(555, (111, 222)), campaign_strategies={"12345":"manual_bidding"})
     run_id = one(rw, """INSERT INTO sync_runs (workspace_id, direct_account_id, kind, status, started_at)
                         VALUES (%s, %s, 'resync', 'running', now()) RETURNING id""", ws["ws"], account)
     return write_snapshot(rw, sync_run_id=run_id, workspace_id=ws["ws"], release_id=ws["release"], snapshot=snap,

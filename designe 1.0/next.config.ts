@@ -13,6 +13,7 @@ const SECURITY_HEADERS = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  output: 'standalone',
   async headers() {
     return [{ source: "/:path*", headers: SECURITY_HEADERS }];
   },

@@ -4,6 +4,7 @@ from email.message import EmailMessage
 from email.utils import parseaddr
 import smtplib
 import ssl
+import httpx
 from urllib.parse import urlsplit
 
 
@@ -11,11 +12,13 @@ from urllib.parse import urlsplit
 class EmailAuthConfig:
     origin: str
     hmac_key: str = field(repr=False)
-    smtp_host: str
+    smtp_host: str = ''
     smtp_port: int = 587
     smtp_user: str = ''
     smtp_password: str = field(default='', repr=False)
     smtp_from: str = ''
+    provider: str = 'smtp'
+    api_key: str = field(default='', repr=False)
 
     def __post_init__(self):
         u = urlsplit(self.origin)
@@ -23,7 +26,9 @@ class EmailAuthConfig:
                 or u.path or u.query or u.fragment
                 or (u.scheme != 'https' and u.hostname not in ('127.0.0.1', 'localhost', '::1'))):
             raise ValueError('Email origin must be a trusted HTTPS origin')
-        if len(self.hmac_key.encode()) < 32 or not self.smtp_host or not 1 <= self.smtp_port <= 65535:
+        if (len(self.hmac_key.encode()) < 32 or self.provider not in ('smtp', 'unisender')
+                or (self.provider == 'smtp' and (not self.smtp_host or not 1 <= self.smtp_port <= 65535))
+                or (self.provider == 'unisender' and not self.api_key.strip())):
             raise ValueError('Incomplete email configuration')
         if any(c in self.smtp_from for c in '\r\n') or parseaddr(self.smtp_from)[1] != self.smtp_from or '@' not in self.smtp_from:
             raise ValueError('Invalid sender address')
@@ -37,15 +42,32 @@ class EmailAuthConfig:
         return cls(env.get('REKVERO_EMAIL_ORIGIN', ''), env.get('REKVERO_AUTH_HMAC_KEY', ''),
                    env.get('REKVERO_SMTP_HOST', ''), int(env.get('REKVERO_SMTP_PORT', '587')),
                    env.get('REKVERO_SMTP_USER', ''), env.get('REKVERO_SMTP_PASSWORD', ''),
-                   env.get('REKVERO_SMTP_FROM', ''))
+                   env.get('REKVERO_SMTP_FROM', ''), env.get('REKVERO_MAIL_PROVIDER', 'smtp'),
+                   env.get('REKVERO_MAIL_API_KEY', ''))
 
 
 def send(config: EmailAuthConfig, recipient: str, purpose: str, url: str):
     message = EmailMessage()
     message['From'], message['To'] = config.smtp_from, recipient
-    message['Subject'] = 'Rekvero: подтверждение почты' if purpose == 'verify' else 'Rekvero: восстановление пароля'
+    message['Subject'] = 'inrou: подтверждение почты' if purpose == 'verify' else 'inrou: восстановление пароля'
     message.set_content(('Подтвердите email и повторно введите выбранный пароль: ' if purpose == 'verify'
                          else 'Установите новый пароль: ') + url + '\nЕсли вы не запрашивали это письмо, ничего не делайте.')
+    if config.provider == 'unisender':
+        # A fixed Russian API endpoint avoids SMTP blocks and cannot redirect credentials.
+        try:
+            with httpx.Client(timeout=10, follow_redirects=False, trust_env=False) as client:
+                response = client.post('https://goapi.unisender.ru/ru/transactional/api/v1/email/send.json',
+                    headers={'X-API-KEY': config.api_key}, json={'message': {
+                        'recipients': [{'email': recipient}], 'from_email': config.smtp_from,
+                        'from_name': 'inrou', 'subject': str(message['Subject']),
+                        'body': {'plaintext': message.get_content()}, 'track_links': 0, 'track_read': 0}})
+                response.raise_for_status()
+                result = response.json()
+                if not isinstance(result, dict) or result.get('status') != 'success':
+                    raise ValueError('Mail delivery unavailable')
+        except Exception:
+            raise RuntimeError('Mail delivery unavailable') from None
+        return
     context = ssl.create_default_context()
     if config.smtp_port == 465:
         client = smtplib.SMTP_SSL(config.smtp_host, config.smtp_port, timeout=10, context=context)

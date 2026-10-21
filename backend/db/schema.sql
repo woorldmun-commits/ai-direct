@@ -552,7 +552,8 @@ CREATE TABLE snapshots (
   sealed_at    timestamptz,
   CHECK ((status = 'complete') = (sealed_at IS NOT NULL)),
   CHECK (period_from <= period_to),
-  CHECK (partial_from BETWEEN period_from AND period_to + 1)
+  CHECK (partial_from BETWEEN period_from AND period_to + 1),
+  campaign_strategies jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(campaign_strategies) = 'object')
 );
 
 CREATE TABLE stat_rows (
@@ -2178,3 +2179,10 @@ DECLARE old_n integer; n integer; total integer:=0; BEGIN
 END $$;
 REVOKE ALL ON FUNCTION purge_personal_data(timestamptz) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION purge_personal_data(timestamptz) TO app_deleter;
+
+-- Durable pilot queue; old runs are not replayed by the new runner.
+ALTER TABLE sync_runs ADD COLUMN available_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE sync_runs ADD COLUMN period_to date;
+ALTER TABLE sync_runs ADD COLUMN runner_managed boolean NOT NULL DEFAULT false;
+CREATE INDEX sync_runs_runner_ready ON sync_runs(available_at,id)
+  WHERE runner_managed AND status IN ('queued','running','waiting_report');

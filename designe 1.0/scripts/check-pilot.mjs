@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { isValue, isMe, isToday, isRecommendations, workspaceId, cursor } from '../lib/pilot-contract.ts';
-import { formatAmount } from '../lib/value.ts';
+import { formatAmount, valueText } from '../lib/value.ts';
 const fact = { amount:'9007199254740993.01', unit:'rub', source:'yandex_direct', period:{from:'2026-10-01',to:'2026-10-07'}, calculation_type:'actual', data_status:'complete', data_sufficiency:'sufficient', rule_version:null, formula:null, unavailable_reason:null };
 assert(isValue(fact));
 assert.equal(formatAmount(fact.amount,'rub'),'9 007 199 254 740 993,01 ₽');
@@ -29,3 +29,8 @@ assert(isRecommendations({items:[rec],next_cursor:'o50'}));
 assert(!isRecommendations({items:[{...rec,computed_at:null}],next_cursor:null}));
 assert(!isRecommendations({items:[{...rec,action_level:['change']}],next_cursor:null}));
 console.log('PASS: pilot Value boundaries, Decimal precision, workspace/cursor IDs, freshness and list-only contract.');
+
+assert.match(valueText({...fact,calculation_type:'estimated',formula:'sum(cost)',data_status:'partial'}),/Оценка: ≈/);
+assert.match(valueText({...fact,data_status:'partial'}),/могут уточниться/);
+assert.match(valueText(missing),/Недостаточно данных/);
+assert(!valueText(missing).includes('0,00'));

@@ -6,6 +6,7 @@ import { isMe } from '@/lib/pilot-contract';
 import { isPassport, type RecommendationPassport } from '@/lib/insights-contract';
 import { ValueView } from '@/components/value-view';
 import { ActionInstructions } from '@/components/workspace/action-instructions';
+import { MeasurementView } from '@/components/workspace/measurement';
 import { DecisionForm } from '@/components/workspace/actions';
 import '@/components/reference/reference.css';
 import '../../pilot.css';
@@ -31,7 +32,7 @@ export default async function PassportPage({params,searchParams}:{params:Promise
       <section className="pilot-card"><h2>Расход с признаками неэффективности</h2><ValueView v={data.exposure} caption/><p>Это оценка по правилу, а не подтверждённая экономия.</p>{data.explanation && <p>{data.explanation.text}</p>}</section>
       <section className="pilot-card"><h2>Основания</h2><div className="pilot-grid">{Object.entries(data.evidence).map(([key,value])=><article key={key}><h3>{({clicks:'Клики',cost:'Расход',conversions:'Конверсии',cpa:'Стоимость конверсии'} as Record<string,string>)[key]??key}</h3><ValueView v={value} caption/></article>)}</div></section>
       <section className="pilot-card"><h2>Решение специалиста</h2><p>Объект: {data.object.type === 'campaign' ? 'кампания' : data.object.type === 'account' ? 'аккаунт' : 'площадка'} · {data.object.id}</p>{!data.evidence_current && <p className="pilot-warning">Основания относятся к предыдущему аудиту или исключённому аккаунту. Новое выполнение недоступно.</p>}<ActionInstructions action={data.action}/><p>Действия в рекламном кабинете выполняются вручную. Отметка выполнения не подтверждает изменение, экономию или причинный эффект. Автоматическая сверка пока недоступна.</p>{data.allowed_actions.length ? <DecisionForm workspace={workspace} rec={id} version={data.version_id} state={data.state_version} allowed={data.allowed_actions}/> : <p>Для текущего состояния, роли или доступа новые решения недоступны.</p>}</section>
-      <section className="pilot-card"><h2>История</h2>{data.history.length ? <ol>{data.history.map(event=><li key={event.id}>{labels[event.type]??'Событие рекомендации'} · {new Intl.DateTimeFormat('ru-RU',{dateStyle:'medium',timeStyle:'short',timeZone:'Europe/Moscow'}).format(new Date(event.created_at))} МСК</li>)}</ol> : <p>Решений ещё нет.</p>}</section>
+      <MeasurementView measurement={data.latest_measurement}/><section className="pilot-card"><h2>История</h2>{data.history.length ? <ol>{data.history.map(event=><li key={event.id}>{labels[event.type]??'Событие рекомендации'} · {new Intl.DateTimeFormat('ru-RU',{dateStyle:'medium',timeStyle:'short',timeZone:'Europe/Moscow'}).format(new Date(event.created_at))} МСК</li>)}</ol> : <p>Решений ещё нет.</p>}</section>
     </> : <section className="pilot-card" role="status"><h1>Рекомендация недоступна</h1><p>{message}</p></section>}
   </main></div>;
 }

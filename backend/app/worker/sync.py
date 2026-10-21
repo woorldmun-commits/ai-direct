@@ -6,13 +6,13 @@ guard ещё раз → запись снимка. Бизнес-логики з�
 ошибка API: вернуть в очередь на N секунд, не спать в процессе)."""
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 
 import psycopg
 
 from app.sources.conversion import ConversionDefinition
-from app.sources.direct import DirectSource, RetryLater
+from app.sources.direct import AccountUnavailable, ConnectionUnavailable, DirectApiError, DirectSource, RetryLater
 from app.sources.metrika import MetrikaSource
 from app.sync.snapshot import Snapshot, SyncFailure, sync_account, sync_metrika, with_metrika
 from app.sync.store import SyncRunStateError, record_failure, write_snapshot
@@ -130,8 +130,8 @@ def _retry(conn: psycopg.Connection, run: _Run, e: RetryLater, now: datetime) ->
     """retryIn → в очередь; но не бесконечно: дольше MAX_REPORT_WAIT от первого запроса — отказ."""
     if now + timedelta(seconds=e.retry_in) - (run.started_at or now) > MAX_REPORT_WAIT:
         return _fail(conn, run, SyncFailure(run.login, "report_timeout", e.reason), now)
-    updated = conn.execute("""UPDATE sync_runs SET status = 'waiting_report', attempts = attempts + 1, last_retry_at = %s
-                    WHERE id = %s AND status IN ('queued', 'running', 'waiting_report')""", (now, run.id))
+    updated = conn.execute("""UPDATE sync_runs SET status = 'waiting_report', attempts = attempts + 1, last_retry_at = %s, available_at = %s
+                    WHERE id = %s AND status IN ('queued', 'running', 'waiting_report')""", (now, now + timedelta(seconds=e.retry_in), run.id))
     if updated.rowcount == 0:
         return Skipped("already_finished")
     return RetryAt(e.retry_in, e.reason)
@@ -189,8 +189,15 @@ def _execute(conn: psycopg.Connection, run: _Run, *, direct: DirectSource, metri
         return Skipped("already_finished")
     try:
         snap = _fetch(run, direct, metrika, period_to)  # сеть — без блокировок
+        if not isinstance(snap, SyncFailure) and hasattr(direct, 'fetch_campaign_strategies'):
+            ids = sorted({row.campaign_id for row in snap.rows})
+            snap = replace(snap, campaign_strategies=direct.fetch_campaign_strategies(run.login, ids))
     except RetryLater as e:
         return _retry(conn, run, e, now)
+    except (AccountUnavailable, ConnectionUnavailable) as e:
+        return _fail(conn, run, SyncFailure(run.login, e.error_code), now)
+    except DirectApiError as e:
+        return _fail(conn, run, SyncFailure(run.login, 'invalid_request', request_id=e.request_id), now)
     if isinstance(snap, SyncFailure):
         return _fail(conn, run, snap, now)
 

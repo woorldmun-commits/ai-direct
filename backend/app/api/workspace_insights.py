@@ -1,5 +1,6 @@
 """Tenant-scoped manual insights; no billing or external advertising writes."""
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import Annotated
 
 from fastapi import APIRouter
@@ -49,6 +50,21 @@ def insights(conn: Conn, ws: CurrentWorkspace):
     return report.build(conn, ws.id, today_msk(), datetime.now(timezone.utc))
 
 
+@router.get('/workspaces/{workspace_id}/weekly-report')
+def weekly_report(conn: Conn, ws: CurrentWorkspace):
+    today = today_msk()
+    frm, to = today-timedelta(days=7), today-timedelta(days=1)
+    counts = conn.execute('''SELECT e.type,count(*) FROM recommendation_events e
+        JOIN recommendations r ON r.id=e.recommendation_id JOIN issues i ON i.id=r.issue_id
+        WHERE i.workspace_id=%s AND e.created_at >= %s AND e.created_at < %s
+        AND e.type IN ('done','checked','rejected','postponed','measured','measurement_skipped')
+        GROUP BY e.type ORDER BY e.type''',
+        (ws.id, datetime.combine(frm, datetime.min.time(), ZoneInfo('Europe/Moscow')),
+         datetime.combine(today, datetime.min.time(), ZoneInfo('Europe/Moscow')))).fetchall()
+    return {'insights': report.build(conn, ws.id, today, datetime.now(timezone.utc), period=(frm,to), allow_partial=True),
+            'decisions': [{'type': kind, 'count': count} for kind,count in counts]}
+
+
 @router.post('/workspaces/{workspace_id}/budget-plan')
 def budget_plan(body: BudgetPlan, conn: Conn, ws: CurrentWorkspace):
     _write_role(ws)
@@ -69,6 +85,15 @@ def budget_plan(body: BudgetPlan, conn: Conn, ws: CurrentWorkspace):
 
 @router.post('/workspaces/{workspace_id}/lead-import')
 def lead_import_csv(body: LeadImport, conn: Conn, ws: CurrentWorkspace):
+    return _import(body, conn, ws)
+
+
+@router.post('/workspaces/{workspace_id}/lead-import/preview')
+def preview_import(body: LeadImport, conn: Conn, ws: CurrentWorkspace):
+    return _import(body, conn, ws, preview=True)
+
+
+def _import(body, conn, ws, *, preview=False):
     _write_role(ws)
     try:
         if (body.period_from is None) != (body.period_to is None) or (body.cohort_complete and body.period_from is None):
@@ -77,7 +102,7 @@ def lead_import_csv(body: LeadImport, conn: Conn, ws: CurrentWorkspace):
         if to and to >= today_msk():
             raise lead_import.InvalidImport('cohort_period_not_closed')
         rows = lead_import.parse(body.csv, today_msk())
-        return lead_import.store(conn, ws.id, rows, body.csv, frm, to, body.cohort_complete)
+        return lead_import.store(conn, ws.id, rows, body.csv, frm, to, body.cohort_complete, preview=preview)
     except lead_import.InvalidImport as exc:
         raise _invalid(exc) from None
 

@@ -22,10 +22,9 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const LEGAL_PAGES = ["/legal", ...["privacy", "terms", "offer", "consents", "pd-consent", "marketing-consent", "cookies", "requisites"].map(slug => `/legal/${slug}`)];
 const AUTH_PAGES=["/login","/signup","/verify-email","/forgot-password","/reset-password"];
-const PAGES = ["/", ...AUTH_PAGES, "/demo", "/demo/recommendations", "/demo/changes", "/demo/integrations", "/demo/settings", ...LEGAL_PAGES];
+const PAGES = ["/", ...AUTH_PAGES, ...LEGAL_PAGES];
 const REDIRECTS = new Map([
   ["/onboarding", "/workspace"], ["/prisma-preview", "/"],
-  ["/demo/ai", "/workspace"],
 ]);
 const STATIC_HEADERS = {
   "strict-transport-security": "max-age=63072000; includeSubDomains",
@@ -162,17 +161,18 @@ async function httpChecks(base) {
     if (!/no-store/.test(redirect.headers.get("cache-control") ?? "")) fail(`${route}: retired account route must not be cached`);
   }
   const anonymous = await fetch(base + "/workspace", { redirect: "manual" });
-  if (process.env.ADPILOT_API_URL) {
-    if (anonymous.status !== 307 || anonymous.headers.get("location") !== "/login") fail("/workspace: anonymous visitor must redirect to /login");
-  } else {
-    const html = await anonymous.text();
-    if (anonymous.status !== 200 || !html.includes("Сервис временно недоступен") || html.includes('class="pilot-card pilot-metric"')) fail("/workspace: missing API configuration must show unavailable without metrics");
-  }
+  if (anonymous.status !== 307 || new URL(anonymous.headers.get('location') || '/invalid', base).pathname !== '/login') fail('/workspace: anonymous visitor must redirect to /login before streaming');
   if (!/no-store/.test(anonymous.headers.get("cache-control") ?? "")) fail("/workspace: anonymous response must not be cached");
   const forged = await fetch(base + "/api/auth/logout", { method: "POST", headers: { Origin: "https://untrusted.example" }, redirect: "manual" });
   if (forged.status !== 403 || forged.headers.get("cache-control") !== "no-store") fail("auth: foreign-origin POST must fail closed without caching");
 
+  for (const route of ['/demo', '/demo/recommendations', '/demo/reports', '/demo/settings', '/demo/ai']) {
+    const retired = await fetch(base + route, {redirect:'manual'});
+    if (retired.status !== 404) fail(`${route}: removed demo must return 404, got ${retired.status}`);
+  }
   const html = await (await fetch(base + "/")).text();
+  if (/href=["']\/demo(?:[\/"'?#])/.test(html) || html.includes('mc-demo-window')) fail('/: demo links or interactive demo remain');
+  if (!html.includes('adpilot-laptop.png')) fail('/: retained product illustration is missing');
   const asset = /\/_next\/static\/[^"']+\.js/.exec(html)?.[0];
   if (!asset) fail("/: no /_next/static script found");
   else checkStatic(asset, (await fetch(base + asset)).headers);

@@ -1,0 +1,648 @@
+/* AdPilot light direction. Load after midnight.css and route styles. */
+:root,
+html[data-theme="light"],
+html[data-theme="light"] body .ap-app,
+html[data-theme="light"] body .ref-ui,
+html[data-theme="light"] body .mc-public {
+  --bg: #f5f6f8;
+  --page-bg: var(--bg);
+  --surface: #ffffff;
+  --surface-1: var(--surface);
+  --surface-2: #f0f4f9;
+  --surface-3: #e6eef9;
+  --sidebar-bg: #1d2735;
+  --text: #232b37;
+  --text-primary: var(--text);
+  --muted: #596879;
+  --text-secondary: var(--muted);
+  --text-muted: #637185;
+  --brand: #2864b7;
+  --brand-hover: #1e529b;
+  --brand-soft: #eaf2ff;
+  --on-brand: #ffffff;
+  --border: #dfe5ed;
+  --border-subtle: #e9edf3;
+  --border-active: #91b4e7;
+  --focus-ring: #2864b7;
+  --success: #246d55;
+  --success-bg: #eaf5ef;
+  --danger: #a23f54;
+  --danger-bg: #fbeef1;
+  --warning: #83520e;
+  --warning-bg: #fff4dd;
+  --info: #2864b7;
+  --info-bg: #eaf2ff;
+  --glass: #fffffff5;
+  --glass-border: #dfe5ed;
+  --shadow-sm: 0 2px 7px #1d355006;
+  --shadow-md: 0 12px 32px #1d35500d;
+  --shadow-lg: 0 24px 64px #1d35501c;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 24px;
+  --chart-spend: #2864b7;
+  --chart-conversions: #526b8b;
+  --chart-cpa: #7656a4;
+  --chart-revenue: #246d55;
+  --chart-other: #637185;
+  color-scheme: light;
+}
+
+html[data-theme="dark"],
+html[data-theme="dark"] body .ap-app,
+html[data-theme="dark"] body .ref-ui,
+html[data-theme="dark"] body .mc-public {
+  --bg: #101722;
+  --page-bg: var(--bg);
+  --surface: #182231;
+  --surface-1: var(--surface);
+  --surface-2: #202e42;
+  --surface-3: #293b54;
+  --sidebar-bg: #111c2a;
+  --text: #edf3fc;
+  --text-primary: var(--text);
+  --muted: #b2c0d3;
+  --text-secondary: var(--muted);
+  --text-muted: #9dafc5;
+  --brand: #9bc2ff;
+  --brand-hover: #bbd6ff;
+  --brand-soft: #233d61;
+  --on-brand: #152842;
+  --border: #35465d;
+  --border-subtle: #2c3b50;
+  --border-active: #739ace;
+  --focus-ring: #9bc2ff;
+  --success: #8ed0b5;
+  --success-bg: #173b32;
+  --danger: #f0a4b1;
+  --danger-bg: #442932;
+  --warning: #e5c08a;
+  --warning-bg: #403523;
+  --info: #9bc2ff;
+  --info-bg: #233d61;
+  --glass: #182231f5;
+  --glass-border: #35465d;
+  --shadow-sm: 0 2px 7px #00000018;
+  --shadow-md: 0 12px 32px #00000028;
+  --shadow-lg: 0 24px 64px #00000040;
+  --chart-spend: #9bc2ff;
+  --chart-conversions: #c0cee1;
+  --chart-cpa: #c3a7ec;
+  --chart-revenue: #8ed0b5;
+  --chart-other: #9dafc5;
+  color-scheme: dark;
+}
+
+html[data-theme] body,
+html[data-theme] body .ap-app,
+html[data-theme] body .ref-ui {
+  font-family: Manrope, Inter, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+html[data-theme] body .ap-app :is(h1,h2,h3,p),
+html[data-theme] body .ref-ui :is(h1,h2,h3,p) {
+  font-family: inherit;
+}
+html[data-theme] body :focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 4px;
+}
+html[data-theme] body :is(button,a,select,input,summary) {
+  touch-action: manipulation;
+}
+html[data-theme] body :is(.ref-button,.btn,.mc-button) {
+  min-height: 44px;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  box-shadow: none;
+  font-size: 13px;
+}
+html[data-theme] body :is(.ref-primary,.btn-primary,.mc-gold),
+html[data-theme] body .ap-app :is(.ref-primary,.ap-amber),
+html[data-theme] body .mc-public :is(.mc-gold,.ref-primary) {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--on-brand);
+  box-shadow: none;
+}
+html[data-theme] body :is(.ref-primary,.btn-primary,.mc-gold):hover,
+html[data-theme] body .ap-app :is(.ref-primary,.ap-amber):hover {
+  background: var(--brand-hover);
+  border-color: var(--brand-hover);
+  filter: none;
+}
+html[data-theme] body :is(.ref-button,.btn,.mc-button):disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+/* White work surfaces; blue is reserved for decisions and selected controls. */
+html[data-theme] body .ap-app :is(.ap-card,.pilot-card,.mc-source-card,.mc-empty),
+html[data-theme] body .card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-primary);
+}
+html[data-theme] body .ap-app :is(.ap-topbar,.pilot-header) {
+  background: var(--surface);
+  border-color: var(--border);
+}
+html[data-theme] body .ap-app :is(.ap-global-search,.ap-date,.ap-icon-button,.ap-account),
+html[data-theme] body .theme-control select {
+  background: var(--surface);
+  color: var(--text-primary);
+  border-color: var(--border);
+  min-height: 44px;
+}
+html[data-theme] body .ap-app .ap-global-search {
+  height: 44px;
+  padding: 0 4px 0 14px;
+}
+html[data-theme] body .ap-app .ap-global-search button {
+  min-height: 44px;
+  min-width: 44px;
+}
+html[data-theme] body .ap-app :is(.ap-icon-button,.ap-sidebar-home) {
+  min-width: 44px;
+  min-height: 44px;
+}
+html[data-theme] body .ap-app :is(.ap-page-heading h1,.pilot-heading h1) {
+  font-size: 29px;
+  font-weight: 650;
+  letter-spacing: -1px;
+}
+html[data-theme] body .ap-app .ap-metric {
+  padding: 20px 20px 48px;
+  min-height: 160px;
+}
+html[data-theme] body .ap-app .ap-metric strong {
+  font-size: clamp(24px,2.1vw,30px);
+  font-weight: 600;
+  letter-spacing: -.8px;
+}
+html[data-theme] body .ap-app .ap-dynamics { padding: 24px; }
+html[data-theme] body .ap-app :is(.ap-rec-featured,.ap-price-first) {
+  background: var(--surface);
+  border-color: var(--border-active);
+}
+html[data-theme] body .ap-app .ap-tabs {
+  gap: 6px;
+  flex-wrap: wrap;
+}
+html[data-theme] body .ap-app .ap-tabs button {
+  min-height: 44px;
+  padding: 9px 12px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: none;
+  font-size: 12px;
+}
+html[data-theme] body .ap-app .ap-tabs button.is-active {
+  color: var(--brand);
+  background: var(--brand-soft);
+  border-color: var(--border-active);
+  box-shadow: none;
+}
+html[data-theme] body .ap-app .ap-icon {
+  background: var(--brand-soft);
+  color: var(--brand);
+  box-shadow: none;
+}
+html[data-theme] body .ap-app :is(.ap-icon.coral,.ap-icon.red) {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+html[data-theme] body .ap-app :is(.ap-beta,.ap-tab-count) {
+  color: var(--brand);
+  background: var(--brand-soft);
+}
+
+/* The expanded navigation and the tablet rail share a dark, stable anchor. */
+html[data-theme] body :is(.ap-sidebar,.mc-live-sidebar) {
+  background: var(--sidebar-bg);
+  color: #e7edf7;
+  border-color: #ffffff16;
+}
+html[data-theme] body :is(.ap-sidebar,.mc-live-sidebar) .ref-logo {
+  color: #ffffff;
+}
+html[data-theme] body :is(.ap-sidebar,.mc-live-sidebar) nav a {
+  color: #c3cfdf;
+  min-height: 44px;
+  font-size: 13px;
+}
+html[data-theme] body :is(.ap-sidebar,.mc-live-sidebar) nav a:hover {
+  background: #ffffff0b;
+}
+html[data-theme] body .ap-sidebar nav a.is-active,
+html[data-theme] body .mc-live-sidebar nav a[aria-current="page"] {
+  color: #ffffff;
+  background: #30496c;
+  border-color: #678bbd;
+  box-shadow: inset 2px 0 #a8caff;
+}
+html[data-theme] body :is(.ap-sidebar,.mc-live-sidebar) nav a :is(svg,b) {
+  color: inherit;
+  filter: none;
+}
+html[data-theme] body .ap-sidebar nav a b {
+  background: #1e344f;
+  color: #dbeaff;
+}
+html[data-theme] body .ap-sidebar .ap-health {
+  background: #ffffff08;
+  border-color: #ffffff20;
+}
+html[data-theme] body .ap-sidebar :is(.ap-health,.ap-health small,.ap-sidebar-home),
+html[data-theme] body .mc-live-sidebar footer {
+  color: #c3cfdf;
+}
+
+/* Tables keep their data and legibility; excess columns scroll. */
+html[data-theme] body .ap-app :is(.ap-campaign-panel .ap-table-toolbar,.ap-rec-stats) {
+  background: var(--surface);
+  border-color: var(--border);
+}
+html[data-theme] body .ap-app .ap-table {
+  min-width: 650px;
+  font-size: 13px;
+}
+html[data-theme] body .ap-app .ap-table :is(td,th) {
+  padding: 13px 14px;
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+html[data-theme] body .ap-app .ap-table th {
+  background: var(--surface-2);
+  font-weight: 600;
+}
+html[data-theme] body .ap-app .ap-table th button {
+  min-height: 44px;
+  color: inherit;
+  font: inherit;
+}
+html[data-theme] body .ap-app .ap-table :is(input[type="checkbox"]) {
+  min-width: 24px;
+  min-height: 24px;
+  width: 24px;
+  height: 24px;
+  accent-color: var(--brand);
+}
+html[data-theme] body .ap-app .ap-table .ap-name-cell strong {
+  font-size: 12px;
+  white-space: normal;
+  min-width: 130px;
+}
+html[data-theme] body .ap-app :is(.ap-name-cell small,.ap-table-hint,.ap-history-row time,.ap-report-period) {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+html[data-theme] body .ap-app :is(.ap-rec-top p,.ap-history-row p,.ap-price li) {
+  font-size: 13px;
+  line-height: 1.65;
+}
+html[data-theme] body .ap-app :is(.ap-rec-stats small,.ap-status) { font-size: 12px; }
+html[data-theme] body .ap-app .ap-rec-stats > .ap-text-button {
+  position: static;
+  min-height: 44px;
+  font-size: 12px;
+  padding: 10px 0;
+}
+html[data-theme] body .ap-app .ap-history-row h2 { font-size: 15px; }
+
+/* Only the assistant uses a restrained blue surface. */
+html[data-theme] body .ap-app :is(.ap-analyst-response,.ap-ai-sources,.ap-question-field) {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  border-radius: 14px;
+}
+html[data-theme="light"] body .ap-app .ap-analyst-response {
+  background: linear-gradient(135deg,#f3f7ff,#eaf2ff);
+}
+html[data-theme] body .ap-app .ap-analyst-response :is(p,ol,ul) {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+html[data-theme] body .ap-app .ap-analyst-response :is(h2,strong),
+html[data-theme] body .ap-app .ap-ai-sources :is(h2,div) {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+html[data-theme] body .ap-app .ap-analyst .ap-suggestions button {
+  min-height: 44px;
+  font-size: 12px;
+  padding: 10px 12px;
+  color: var(--text-primary);
+  background: var(--surface);
+  border-color: var(--border);
+}
+html[data-theme] body .ap-app .ap-analyst .ap-question {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 44px;
+  gap: 10px;
+}
+html[data-theme] body .ap-app .ap-analyst .ap-question > .ref-button {
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+}
+html[data-theme] body .ap-app .ap-question-field {
+  min-height: 44px;
+  padding: 6px 12px;
+}
+html[data-theme] body .ap-app .ap-question-field input {
+  color: var(--text-primary);
+  background: transparent;
+  font-size: 14px;
+}
+html[data-theme] body .ap-app .ap-question-field:focus-within {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+/* Public pages use the same palette, spacing and readable product preview. */
+html[data-theme] body .mc-public {
+  --text-primary: var(--text);
+  --text-secondary: var(--muted);
+  --surface-1: var(--surface);
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: Manrope, Inter, system-ui, sans-serif;
+}
+html[data-theme] body .mc-public .mc-header {
+  background: var(--surface);
+  border-color: var(--border);
+  backdrop-filter: none;
+}
+html[data-theme] body .mc-public :is(.ref-logo,h1,h2,h3) { color: var(--text-primary); }
+html[data-theme] body .mc-public :is(p,.mc-header nav,.mc-trust span,.mc-footer,.mc-hero-benefits > span) {
+  color: var(--text-secondary);
+}
+html[data-theme] body .mc-public :is(.mc-eyebrow,.mc-section-heading > span,.mc-security > div > span,.mc-steps b,.mc-faq summary > span,.mc-text-link) {
+  color: var(--brand);
+}
+html[data-theme] body .mc-public .mc-hero h1 span { color: var(--brand); }
+html[data-theme] body .mc-public .mc-hero::after,
+html[data-theme] body .mc-public .mc-hero-art::before,
+html[data-theme] body .mc-public .mc-art-main::after,
+html[data-theme] body .mc-public .mc-art-back { display: none; }
+html[data-theme] body .mc-public :is(.mc-feature,.mc-integrations article,.mc-security,.mc-demo-window,.ap-launch-price) {
+  background: var(--surface);
+  color: var(--text-primary);
+  border-color: var(--border);
+  border-radius: 20px;
+  box-shadow: var(--shadow-sm);
+}
+html[data-theme] body .mc-public :is(.mc-trust,.mc-footer,.mc-problems article,.mc-feature-chart,.mc-demo-bar,.mc-steps li,.mc-faq details) {
+  border-color: var(--border);
+}
+html[data-theme] body .mc-public :is(.mc-login,.mc-menu) {
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+html[data-theme] body .mc-public .mc-button {
+  color: var(--text-primary);
+  background: var(--surface);
+  border-color: var(--border);
+  min-height: 48px;
+}
+html[data-theme] body .mc-public :is(.mc-hero-actions .mc-gold,.mc-header .mc-gold,.mc-final .mc-gold) {
+  color: var(--on-brand);
+  background: var(--brand);
+  border-color: var(--brand);
+}
+html[data-theme] body .mc-public :is(.mc-hero-benefits svg,.mc-feature > svg,.mc-security-list svg,.mc-final > svg,.mc-trust svg) {
+  color: var(--brand);
+  border-color: var(--border);
+  background: transparent;
+}
+html[data-theme] body .mc-public .mc-hero-art {
+  height: 460px;
+  perspective: none;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+}
+html[data-theme] body .mc-public .mc-art-main {
+  inset: 24px 20px 70px;
+  transform: none;
+  background: var(--surface);
+  color: var(--text-primary);
+  border-color: var(--border);
+  border-radius: 20px;
+  box-shadow: var(--shadow-md);
+}
+html[data-theme] body .mc-public :is(.mc-art-top > span,.mc-art-roas > span,.mc-art-kpis span,.mc-art-assistant small) {
+  color: var(--text-secondary);
+}
+html[data-theme] body .mc-public :is(.mc-art-roas small,.mc-art-kpis small,.mc-available) { color: var(--success); }
+html[data-theme] body .mc-public .mc-planned { color: var(--text-secondary); }
+html[data-theme] body .mc-public .mc-art-kpis > div {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+html[data-theme] body .mc-public .mc-art-assistant {
+  right: 28px;
+  bottom: 18px;
+  padding: 14px 20px;
+  background: var(--surface);
+  color: var(--text-primary);
+  border-color: var(--border-active);
+  box-shadow: var(--shadow-sm);
+}
+html[data-theme] body .mc-public .mc-art-assistant > span {
+  background: var(--brand-soft);
+  color: var(--brand);
+  border-color: var(--border-active);
+}
+html[data-theme] body .mc-public .mc-art-graph .ap-chart-line { stroke: var(--chart-revenue); }
+html[data-theme] body .mc-public :is(.mc-final,.mc-faq) { background: transparent; }
+html[data-theme] body .mc-public .mc-faq details p { color: var(--text-secondary); }
+html[data-theme] body .mc-public .ap-launch-price {
+  background: var(--surface);
+  color: var(--text-primary);
+}
+html[data-theme] body .mc-public .ap-launch-price.is-recommended {
+  border-color: var(--border-active);
+  box-shadow: var(--shadow-sm);
+}
+html[data-theme] body .mc-public :is(.ap-launch-price p,.ap-launch-price li,.ap-launch-price-value span,.ap-launch-price-note,.ap-launch-section-heading p) {
+  color: var(--text-secondary);
+}
+html[data-theme] body .mc-public .ap-launch-plan-label {
+  color: var(--on-brand);
+  background: var(--brand);
+}
+html[data-theme] body .mc-public .ap-launch-price li svg { color: var(--brand); }
+html[data-theme] body .mc-public .ap-launch-price .ref-button {
+  background: var(--surface-2);
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+html[data-theme] body .mc-public .ap-launch-price .ref-primary {
+  background: var(--brand);
+  color: var(--on-brand);
+  border-color: var(--brand);
+}
+html[data-theme] body .mc-public :is(.ap-tooltip,.mc-skip) {
+  color: var(--text-primary);
+  background: var(--surface);
+  border-color: var(--border-active);
+}
+html[data-theme] body .mc-public .ap-tooltip :is(b,strong) { color: var(--text-primary); }
+html[data-theme] body .mc-public .ap-chart text { fill: var(--text-secondary); }
+html[data-theme] body .mc-public .ap-legend :is(button,small) { color: var(--text-secondary); }
+
+/* Auth, legal pages and status surfaces inherit this same system. */
+html[data-theme] body .ref-auth-page { background: var(--bg); }
+html[data-theme] body .ref-auth-shell {
+  background: var(--surface);
+  border-color: var(--border);
+  border-radius: 24px;
+  box-shadow: var(--shadow-md);
+}
+html[data-theme] body :is(.ref-auth-glow,.ref-auth-shell::after,.ref-auth-art-panel::before,.ref-auth-glass) {
+  display: none;
+}
+html[data-theme] body .ref-auth-art-panel {
+  background: var(--surface-2);
+  border-color: var(--border);
+  align-items: center;
+  justify-content: center;
+}
+html[data-theme] body .ref-auth-tagline {
+  width: 100%;
+  max-width: 340px;
+}
+html[data-theme] body .ref-auth-tagline h2 {
+  font-size: clamp(30px,3vw,44px);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+html[data-theme] body :is(.ref-auth-tagline p,.ref-auth-heading p,.ref-auth-note,.ref-email-local) {
+  color: var(--text-secondary);
+}
+html[data-theme] body .ref-auth-page :is(a,button,input):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 4px;
+}
+html[data-theme] body .ref-ui input::placeholder { color: var(--text-muted); }
+
+@media (min-width: 768px) and (max-width: 1199px) {
+  html[data-theme] body :is(.ap-sidebar,.mc-live-sidebar) { width: 72px; padding-inline: 10px; }
+  html[data-theme] body :is(.ap-workspace,.mc-live-body) { margin-left: 72px; }
+  html[data-theme] body .ap-app .ap-sidebar nav {
+    width: auto;
+    margin-inline: 0;
+  }
+  html[data-theme] body :is(.ap-sidebar,.mc-live-sidebar) nav a {
+    justify-content: center;
+    padding: 12px;
+  }
+  html[data-theme] body :is(.ap-sidebar,.mc-live-sidebar) nav a svg { width: 18px; height: 18px; }
+  html[data-theme] body .mc-public .mc-hero { gap: 24px; }
+  html[data-theme] body .mc-public .mc-hero-art { height: 420px; }
+  html[data-theme] body .mc-public .mc-art-main { inset: 18px 14px 78px; padding: 20px; }
+  html[data-theme] body .mc-public .mc-art-assistant { right: 14px; min-width: 0; }
+}
+
+@media (max-width: 767px) {
+  /* Match the menu JS media query to this 767px threshold when integrating. */
+  html[data-theme] body :is(.ap-workspace,.mc-live-body) { margin-left: 0; }
+  html[data-theme] body .ap-sidebar {
+    width: 250px;
+    transform: translateX(-100%);
+    visibility: hidden;
+    overflow-y: auto;
+    z-index: 61;
+  }
+  html[data-theme] body .ap-sidebar.is-open {
+    transform: translateX(0);
+    visibility: visible;
+  }
+  html[data-theme] body .ap-app :is(.ap-menu-button,.ap-close-menu) {
+    display: inline-flex;
+    min-width: 44px;
+    min-height: 44px;
+  }
+  html[data-theme] body .ap-app .ap-sidebar nav { width: auto; margin-inline: 0; }
+  html[data-theme] body .ap-app .ap-sidebar nav a {
+    justify-content: flex-start;
+    min-height: 44px;
+    padding: 12px;
+  }
+  html[data-theme] body .ap-app .ap-topbar {
+    height: auto;
+    min-height: 64px;
+    gap: 8px;
+    padding: 10px 16px;
+    flex-wrap: wrap;
+  }
+  html[data-theme] body .ap-app .ap-date {
+    order: 6;
+    width: 100%;
+    justify-content: center;
+  }
+  html[data-theme] body .ap-app .ap-global-search { flex-basis: calc(100% - 110px); }
+  html[data-theme] body .ap-app :is(.ap-content,.pilot-main) { padding: 24px 16px; }
+  html[data-theme] body .ap-app .ap-dynamics { padding: 18px; }
+  html[data-theme] body .ap-app :is(.ap-page-heading,.pilot-heading) {
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+  html[data-theme] body .ap-app :is(.ap-page-heading h1,.pilot-heading h1) {
+    font-size: 25px;
+    white-space: normal;
+  }
+  html[data-theme] body .ap-app .ap-heading-actions { flex-wrap: wrap; }
+  html[data-theme] body .ap-app .ap-analyst-top { display: grid; grid-template-columns: minmax(0,1fr); }
+  html[data-theme] body .ap-app .ap-ai-sources { width: 100%; min-width: 0; }
+  html[data-theme] body .ap-app input:not([type="checkbox"]),
+  html[data-theme] body .ap-app select,
+  html[data-theme] body .ref-auth-page input:not([type="checkbox"]) {
+    font-size: 16px;
+    min-height: 44px;
+  }
+  html[data-theme] body .mc-public .mc-header nav {
+    background: var(--surface);
+    border-color: var(--border);
+    box-shadow: var(--shadow-md);
+  }
+  html[data-theme] body .mc-public .mc-hero h1 { font-size: clamp(36px,9vw,56px); }
+  html[data-theme] body .mc-public .mc-hero-art { height: 350px; }
+  html[data-theme] body .mc-public .mc-art-main { inset: 14px 12px 65px; padding: 18px; }
+  html[data-theme] body .mc-public .mc-art-assistant {
+    right: 12px;
+    bottom: 12px;
+    min-width: 0;
+    max-width: calc(100% - 24px);
+    padding: 10px 14px;
+  }
+  html[data-theme] body .ref-auth-art-panel { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme] body *,
+  html[data-theme] body *::before,
+  html[data-theme] body *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+  html[data-theme] body .ref-button:active { transform: none; }
+}
+
+.launch-charts{margin-block:24px}.launch-charts figure{margin:16px 0}.launch-charts figcaption{font-size:12px;color:var(--text-secondary);margin-bottom:16px}.launch-bar-row{display:grid;grid-template-columns:140px minmax(50px,1fr) auto;gap:14px;align-items:center;margin:16px 0;font-size:13px}.launch-bar-row meter{width:100%;height:18px;accent-color:var(--brand)}.launch-bar-row meter::-webkit-meter-bar{background:var(--surface-3);border:0;border-radius:8px}.launch-bar-row meter::-webkit-meter-optimum-value{background:var(--brand);border-radius:8px}@media(max-width:767px){.launch-bar-row{grid-template-columns:1fr auto}.launch-bar-row meter{grid-row:2;grid-column:1/-1}}
+
+html[data-theme] body .ap-app :is(.ap-sidebar,.mc-live-sidebar) .ref-logo,html[data-theme] body .ap-app :is(.ap-sidebar,.mc-live-sidebar) .ref-logo span{color:#fff}.ap-secondary-nav{margin-top:16px;color:#c3cfdf;font-size:12px}.ap-secondary-nav summary{min-height:44px;cursor:pointer;padding:12px}.ap-secondary-nav a{display:block;padding:10px 12px;color:#c3cfdf;text-decoration:none}.ap-secondary-nav a:hover{background:#ffffff0b}.ap-sidebar{overflow-y:auto}
+html[data-theme] body .ap-app .ap-sidebar nav a.is-active svg{color:#fff}

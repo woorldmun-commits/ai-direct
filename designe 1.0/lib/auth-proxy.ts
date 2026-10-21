@@ -1,4 +1,5 @@
 import { apiOrigin, appOrigin } from './api-origin';
+import {proxyClientHeaders} from './proxy-client';
 
 const responseHeaders = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' };
 const failure = (status: number) => Response.json({ error: { message: 'Вход временно недоступен. Попробуйте позже.' } }, { status, headers: responseHeaders });
@@ -48,6 +49,7 @@ export async function proxyAuth(request: Request, path: string): Promise<Respons
     }
   }
   const headers = new Headers({ Accept: 'application/json' });
+  for(const [name,value] of Object.entries(proxyClientHeaders(request,target.pathname))) headers.set(name,value);
   const userAgent = request.headers.get('user-agent');
   if (userAgent) headers.set('User-Agent', userAgent.slice(0, 1024));
   // Forward only the cookies required by this account flow.

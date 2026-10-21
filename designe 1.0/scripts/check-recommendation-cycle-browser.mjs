@@ -1,0 +1,71 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {createRequire} from 'node:module';
+const require=createRequire(import.meta.url);
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const root=path.resolve(import.meta.dirname,'..'),base='http://127.0.0.1:3130';
+const fixture=JSON.parse(await fs.readFile(path.join(root,'artifacts/.runtime/fixture.json'),'utf8'));
+const out=path.resolve(root,'../results/recommendations-20261020/browser');await fs.mkdir(out,{recursive:true});
+const browser=await chromium.launch({channel:'msedge',headless:true});
+const errors=[];let debugPage;
+try{
+ const context=await browser.newContext({viewport:{width:1440,height:1000},reducedMotion:'reduce'});
+ await context.addCookies([{name:'session',value:fixture.tokens.owner,url:base,httpOnly:true,sameSite:'Lax'}]);
+ const page=await context.newPage();debugPage=page;page.on('pageerror',e=>errors.push(e.message));
+ const workspace=fixture.workspaces.a1,home=`${base}/workspace?workspace=${workspace}`;
+ const response=await page.goto(home,{waitUntil:'networkidle'});
+ assert.equal(response.status(),200);assert.match(response.headers()['cache-control'],/no-store/);
+ assert(await page.getByRole('heading',{name:'Что проверить сегодня'}).isVisible());
+ assert(!(await page.content()).includes(fixture.tokens.owner));
+ await page.getByText('Импортировать или обновить статусы',{exact:true}).click();
+ const lead=page.locator('#lead-quality');
+ const from=lead.locator('input[name=from]'),to=lead.locator('input[name=to]');
+ await from.fill('2026-09-20');await to.fill('2026-09-26');
+ const header='external_id,created_on,status,updated_on,direct_account_id,acquired_on,campaign_id\n';
+ const csv=header+`11111111-1111-4111-8111-111111111111,2026-09-23,qualified,2026-09-24,${fixture.account},2026-09-22,12345\n`;
+ await lead.locator('input[type=file]').setInputFiles({name:'synthetic.csv',mimeType:'text/csv',buffer:Buffer.from(csv)});
+ await lead.getByRole('button',{name:'Предпросмотр импорта'}).click();
+ await lead.getByRole('heading',{name:'Проверка пройдена: 1 строк'}).waitFor();
+ let data=await context.request.get(`${base}/api/workspaces/${workspace}/insights`);
+ assert.equal((await data.json()).lead_quality.counts.total,0,'preview wrote data');
+ await to.fill('2026-09-27');assert.equal(await lead.getByRole('button',{name:'Подтвердить импорт'}).count(),0);
+ await to.fill('2026-09-26');await lead.getByRole('button',{name:'Предпросмотр импорта'}).click();
+ await lead.getByRole('button',{name:'Подтвердить импорт'}).waitFor();
+ await page.setViewportSize({width:320,height:1000});
+ assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'preview overflow');
+ await page.screenshot({path:path.join(out,'import-preview-320.png'),fullPage:true});
+ await Promise.all([page.waitForNavigation({waitUntil:'networkidle'}),lead.getByRole('button',{name:'Подтвердить импорт'}).click()]);
+ data=await context.request.get(`${base}/api/workspaces/${workspace}/insights`);
+ assert.equal((await data.json()).lead_quality.counts.total,1);
+ await page.goto(`${base}/workspace/recommendations/${fixture.recommendation}?workspace=${workspace}`,{waitUntil:'networkidle'});
+ const manual=page.locator('form').filter({has:page.getByRole('button',{name:'Отметить ручное выполнение'})});
+ await manual.getByRole('checkbox').check();
+ await Promise.all([page.waitForNavigation({waitUntil:'networkidle'}),manual.getByRole('button',{name:'Отметить ручное выполнение'}).click()]);
+ await page.getByRole('heading',{name:'Ожидаем результат'}).waitFor();
+ assert.match(await page.locator('main').innerText(),/Период наблюдения ещё не завершён/);
+ await page.goto(`${base}/workspace?view=effect&workspace=${workspace}`,{waitUntil:'networkidle'});
+ await page.getByRole('heading',{name:'Ожидаем результат'}).waitFor();
+ assert.match(await page.locator('main').innerText(),/Ручное выполнение заявлено/);
+ for(const width of [320,834,1440]){
+  await page.setViewportSize({width,height:1000});
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`effect overflow ${width}`);
+  await page.screenshot({path:path.join(out,`effect-${width}.png`),fullPage:true});
+ }
+ await page.goto(`${base}/workspace?view=reports&workspace=${workspace}`,{waitUntil:'networkidle'});
+ assert(await page.getByRole('heading',{name:'Недельный отчёт',exact:true}).isVisible());
+ assert(await page.getByRole('heading',{name:'Решения за неделю'}).isVisible());
+ const download=page.waitForEvent('download');await page.getByRole('button',{name:'Скачать недельный отчёт'}).click();
+ const file=await download;await file.saveAs(path.join(out,'weekly-report.txt'));
+ const report=await fs.readFile(path.join(out,'weekly-report.txt'),'utf8');
+ assert.match(report,/7 завершённых дней/);assert(!report.includes(fixture.tokens.owner));
+ for(const width of [1440,834,320]){
+  await page.setViewportSize({width,height:1000});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`report overflow ${width}`);
+  await page.screenshot({path:path.join(out,`report-${width}.png`),fullPage:true});
+ }
+ const denied=await context.request.post(`${base}/api/workspaces/${workspace}/lead-import/preview`,{headers:{Origin:'https://foreign.example'},data:{csv}});assert.equal(denied.status(),403);
+ assert.deepEqual(errors,[]);
+ await fs.writeFile(path.join(out,'checks.json'),JSON.stringify({synthetic:true,passed:['priority overview','preview writes nothing','preview invalidated on change','import persisted','manual execution to pending measurement','effect states','weekly report on site and download','320/834/1440 layouts','CSRF denied','no page errors'],errors},null,2));
+ console.log('PASS browser: preview, import, manual lifecycle, effect, onsite weekly report and download, responsive layout, CSRF');
+ await context.close();
+}catch(e){if(debugPage){await debugPage.screenshot({path:path.join(out,'failure.png'),fullPage:true});console.log((await debugPage.locator('main').innerText()).slice(-1800));console.log('Page errors:',errors);}throw e;}finally{await browser.close();}

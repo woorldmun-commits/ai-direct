@@ -222,3 +222,67 @@ def test_csv_exact_row_limit_and_nonrub_refund_validation():
     txt += f'{uuid4()},2026-09-22,refunded,2026-09-24,acc_1,10.00,RUB,11.00\n'
     with pytest.raises(InvalidImport):
         parse(txt, date(2026,10,18))
+
+
+def test_preview_validates_without_writing_and_commit_revalidates(insights_api, rw, funded):
+    uid=str(uuid4())
+    body={'csv':csv_for(funded,uid=uid),**PERIOD,'cohort_complete':True}
+    response=req(insights_api,rw,funded,'lead-import/preview',body)
+    assert response.status_code==200,response.text
+    assert response.json()['counts']['qualified']==1
+    assert response.json()['accepted_rows']==1
+    assert uid not in response.text
+    assert one(rw,'SELECT count(*) FROM workspace_leads WHERE workspace_id=%s',funded['ws'])==0
+    assert one(rw,'SELECT count(*) FROM workspace_lead_imports WHERE workspace_id=%s',funded['ws'])==0
+    assert req(insights_api,rw,funded,'lead-import',body).status_code==200
+    stale={**body,'csv':csv_for(funded,uid=uid,updated='2026-09-23')}
+    assert req(insights_api,rw,funded,'lead-import/preview',stale).status_code==400
+    assert req(insights_api,rw,funded,'lead-import',stale).status_code==400
+
+
+def test_preview_permissions_and_bad_rows(insights_api,rw,funded,world):
+    response=req(insights_api,rw,funded,'lead-import/preview',{'csv':csv_for(funded,status='invented')})
+    assert response.status_code==400 and response.json()['error']['reason']=='status_enum'
+    assert 'invented' not in response.text
+    assert req(insights_api,rw,funded,'lead-import/preview',{'csv':csv_for(funded)},actor=world['owner_b']).status_code==404
+    assert req(insights_api,rw,{'ws':world['a1'],'user':world['viewer']},'lead-import/preview',{'csv':csv_for(funded)}).status_code==403
+
+
+def test_weekly_report_has_closed_moscow_period_and_isolated_events(insights_api,rw,funded,world):
+    from datetime import timedelta
+    from app.api.active import today_msk
+    response=req(insights_api,rw,funded,'weekly-report')
+    assert response.status_code==200,response.text
+    data=response.json()
+    assert data['insights']['period']=={'from':str(today_msk()-timedelta(days=7)),'to':str(today_msk()-timedelta(days=1))}
+    assert data['decisions']==[]
+    assert any('заявки ещё не импортированы' in text for text in data['insights']['summary']['limitations'])
+    assert all('no_imported_leads' not in text for text in data['insights']['summary']['limitations'])
+    assert req(insights_api,rw,funded,'weekly-report',actor=world['owner_b']).status_code==404
+
+
+def test_weekly_report_does_not_compare_unrelated_budget_plan(insights_api,rw,funded):
+    assert req(insights_api,rw,funded,'budget-plan',{**PERIOD,'amount':'1000'}).status_code==200
+    data=req(insights_api,rw,funded,'weekly-report').json()['insights']
+    assert data['budget']['plan'] is None and data['budget']['variance']['amount'] is None
+
+
+def test_weekly_report_shows_preliminary_spend_without_unlocking_strict_qcpl(insights_api,rw,funded):
+    from datetime import timedelta
+    from decimal import Decimal
+    from app.api.active import today_msk
+    from app.sync.snapshot import Snapshot
+    from app.sync.parse import StatRow
+    from app.sync.store import write_snapshot
+    today=today_msk()
+    snapshot=Snapshot('synthetic',today-timedelta(days=37),today-timedelta(days=1),today-timedelta(days=3),frozenset({'yandex_direct'}),(StatRow('campaign',12345,today-timedelta(days=1),10,1,Decimal('100'),None),))
+    run=one(rw,"INSERT INTO sync_runs(workspace_id,direct_account_id,kind,status,started_at) VALUES(%s,%s,'resync','running',now()) RETURNING id",funded['ws'],funded['account'])
+    from datetime import datetime,timezone
+    write_snapshot(rw,sync_run_id=run,workspace_id=funded['ws'],release_id=funded['release'],snapshot=snapshot,data_until=datetime.now(timezone.utc))
+    body=req(insights_api,rw,funded,'weekly-report').json()['insights']
+    assert body['budget']['actual']['amount']=='100.00'
+    assert body['budget']['actual']['data_status']=='partial'
+    assert any('предварительные' in reason for reason in body['summary']['limitations'])
+    strict,_,reason=spend(rw,funded['ws'],today-timedelta(days=7),today-timedelta(days=1),[funded['account']])
+    assert strict['amount'] is None and reason=='period_not_fully_covered'
+    assert body['lead_quality']['qcpl']['amount'] is None

@@ -1,5 +1,5 @@
 // Only a server-controlled origin can receive account credentials.
-export function apiOrigin(configured = process.env.REKVERO_API_URL ?? process.env.ADPILOT_API_URL): URL | null {
+export function apiOrigin(configured = process.env.REKVERO_API_URL || process.env.ADPILOT_API_URL): URL | null {
   if (!configured) return null;
   try {
     const base = new URL(configured);
@@ -12,5 +12,5 @@ export function apiOrigin(configured = process.env.REKVERO_API_URL ?? process.en
 
 // Reverse proxies may give Next.js an internal URL; never trust forwarded Host as the public origin.
 export function appOrigin(request: Request): string | null {
-  return apiOrigin(process.env.REKVERO_APP_ORIGIN ?? process.env.ADPILOT_APP_ORIGIN ?? new URL(request.url).origin)?.origin ?? null;
+  return apiOrigin(process.env.REKVERO_APP_ORIGIN || process.env.ADPILOT_APP_ORIGIN || new URL(request.url).origin)?.origin ?? null;
 }

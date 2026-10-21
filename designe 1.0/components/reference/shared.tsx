@@ -8,7 +8,7 @@ import "./motion.css";
 import "./reference-details.css";
 
 export function ReferenceLogo() {
-  return <span className="ref-logo"><BrandMark/><span>AdPilot</span></span>;
+  return <span className="ref-logo"><BrandMark/><span>inrou</span></span>;
 }
 
 export function ReferencePortrait({size=40,className=''}:{size?:number;className?:string}) {

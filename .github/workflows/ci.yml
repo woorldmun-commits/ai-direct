@@ -56,12 +56,16 @@ jobs:
         run: python -m pytest -q -p no:cacheprovider --ignore=tests/test_migrations.py
 
   frontend:
-    name: frontend (lint, build, headers)
+    name: frontend ${{ matrix.directory }} (lint, build, headers)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        directory: ["designe 1.0"]
     defaults:
       run:
-        working-directory: frontend
+        working-directory: ${{ matrix.directory }}
     env:
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
@@ -70,9 +74,19 @@ jobs:
         with:
           node-version: lts/*
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: ${{ matrix.directory }}/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - name: Auth and metric contracts
+        run: |
+          node scripts/check-auth-proxy.mjs
+          node --experimental-strip-types scripts/check-pilot.mjs
+      - name: Candidate indexing rules
+        if: matrix.directory == 'designe 1.0'
+        run: |
+          node scripts/check-site.mjs
+          node scripts/check-workspace-proxy.mjs
+          node scripts/check-insights.mjs
       - run: npm run build
       # Браузерная часть проверки (нарушения CSP в консоли) обязательна: без Playwright шаг падает, а не пропускается.
       - name: Install Playwright (Chromium)
@@ -121,10 +135,10 @@ jobs:
       # Блокирует high/critical в зависимостях, которые попадают в продакшен-сборку. Инструменты разработки
       # (eslint и т. п.) не исполняются в продакшене: их уязвимости видны в отчёте, но merge не блокируют —
       # иначе advisory без исправленной версии (например, braces через eslint-config-next) останавливает всю работу.
-      - name: npm audit (production, high and critical block)
-        working-directory: frontend
+      - name: npm audit active frontend (production, high and critical block)
+        working-directory: designe 1.0
         run: npm audit --audit-level=high --package-lock-only --omit=dev
-      - name: npm audit (dev tooling, report only)
-        working-directory: frontend
+      - name: npm audit active frontend (dev tooling, report only)
+        working-directory: designe 1.0
         continue-on-error: true
         run: npm audit --audit-level=high --package-lock-only
