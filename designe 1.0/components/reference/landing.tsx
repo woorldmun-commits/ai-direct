@@ -2,9 +2,9 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import {useEffect,useRef,useState} from 'react';
-import {ArrowRight,ChartNoAxesColumnIncreasing,ShieldCheck,Layers,Menu,X,Check,Search,Clock3,LockKeyhole,Link2} from 'lucide-react';
+import {ArrowRight,ChartNoAxesColumnIncreasing,ShieldCheck,Layers,Menu,X,Check,Sparkles,Search,Clock3,LockKeyhole,Link2} from 'lucide-react';
 import {ReferenceLogo,PlatformBadge} from './shared';
-import {LandingPricing,launchPlans} from './landing-pricing';
+import {LandingPricing} from './landing-pricing';
 import {CookieSettingsButton} from '../cookie-banner';
 import './midnight.css';
 import './home-offer.css';
@@ -29,14 +29,13 @@ function Section({section}:{section:SectionKey}){switch(section){case 'features'
 export function PublicSectionPage({section}:{section:SectionKey}){const [title,description]=pages[section];return <div className="mc-public"><PublicHeader/><main id="main-content" className="mc-container"><div className="mc-page-title"><Link href="/">Главная</Link><h1>{title}</h1><p>{description}</p></div><Section section={section}/></main><PublicFooter/></div>;}
 export function ReferenceLanding(){return <div className="mc-public mc-home"><PublicHeader/><main id="main-content">
  <section className="mc-hero mc-container"><div className="mc-hero-copy">
-  <span className="mc-eyebrow"><i/>Для бизнеса, директологов и агентств</span>
-  <h1>Поймите, на что<br/>уходит бюджет<br/><span>Яндекс Директа.</span></h1>
-  <p>inrou собирает расходы и рекомендации в одном кабинете. Вы видите, что требует проверки, на каких данных основан вывод и что делать дальше.</p>
-  <div className="mc-offer-price">Подписка от <strong>{new Intl.NumberFormat('ru-RU').format(launchPlans[0].price)} ₽</strong><span> / месяц за один проект</span><small>Планируемая цена · оплата готовится к запуску</small></div>
-  <div className="mc-hero-actions"><a href="#pricing" className="mc-button mc-gold">Выбрать подписку <ArrowRight size={18} aria-hidden="true"/></a><a href="#features" className="mc-button">Что я получу</a></div>
-  <div className="mc-hero-benefits"><span><Link2 aria-hidden="true"/>Директ<br/>и Метрика</span><span><Search aria-hidden="true"/>Рекомендации<br/>с объяснением</span><span><ShieldCheck aria-hidden="true"/>Без изменений<br/>вашей рекламы</span></div>
+  <span className="mc-eyebrow"><ChartNoAxesColumnIncreasing size={16} aria-hidden="true"/>Аналитика вашей рекламы</span>
+  <h1>Больше<br/><span>результатов.</span><br/>Меньше <span>затрат.</span></h1>
+  <p>inrou анализирует вашу рекламу, находит точки для проверки и даёт понятные рекомендации с основаниями. Директ и Метрика — в одном окне.</p>
+  <div className="mc-hero-actions"><a href="/signup" className="mc-button mc-gold">Создать аккаунт <ArrowRight size={18} aria-hidden="true"/></a><a href="#features" className="mc-button"><Search size={17} aria-hidden="true"/>Что внутри</a></div>
  </div><HeroInterface/></section>
- <section className="vr-platforms mc-connected" aria-label="Источники анализа"><span className="mc-connected-label">Ваши данные — вместе</span>{['Яндекс Директ','Яндекс Метрика'].map(name=><span key={name}><PlatformBadge platform={name} size={28}/><span>{name}<small>Источник данных для анализа</small></span></span>)}<span className="mc-connected-note">Рекламный бюджет оплачивается отдельно от подписки</span></section>
+ <section className="vr-platforms mc-reference-platforms" aria-label="Источники рекламы">{['Яндекс Директ','VK Ads','Telegram Ads','Авито','Яндекс Метрика'].map((name,i)=><Link href="/integrations" key={name}><PlatformBadge platform={name} size={28}/><span>{name}{i>0&&i<4&&<small>В разработке</small>}</span></Link>)}<Link href="/integrations" className="mc-more-platforms">Все источники</Link></section>
+ <section className="vr-benefits" aria-label="Возможности inrou">{[[Sparkles,'Анализ рекламы'],[Search,'Рекомендации с основаниями'],[Clock3,'Контроль расходов'],[ChartNoAxesColumnIncreasing,'Проверка показателей'],[Link2,'Подключение источников'],[ShieldCheck,'Контроль доступа']].map(([Icon,title])=>{const BenefitIcon=Icon as typeof Sparkles;return <div key={String(title)}><BenefitIcon size={24} aria-hidden="true"/><span>{String(title)}</span></div>;})}</section>
  <div className="mc-container">
   <section className="mc-section mc-problems"><div className="mc-section-heading"><span>Когда inrou особенно полезен</span><h2>Реклама работает.<br/>А что с результатом?</h2><p>Сервис помогает перейти от просмотра цифр к конкретной проверке рекламы.</p></div><div>{[['Бюджет уходит, а ясности нет','Сопоставьте расходы с планом и откройте рекомендации, связанные с вашими кампаниями.'],['Отчёты есть, но что проверять первым?','Изучите основания рекомендаций: период, источник, формулу и затронутые расходы.'],['Клиентов несколько — кабинетов тоже','Проверяйте каждый проект в отдельном пространстве и не смешивайте данные клиентов.']].map(([h,p])=><article key={h}><h3>{h}</h3><p>{p}</p></article>)}</div></section>
   <FeatureSection/>

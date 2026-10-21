@@ -7,6 +7,7 @@ import { useState, type FormEvent } from "react";
 import { ReferenceLogo } from "./shared";
 import "./reference.css";
 import "./auth.css";
+import "./auth-illustration.css";
 import {EmailForm,type EmailMode} from './email-form';
 
 export function ReferenceAuth({ callbackError = false, registrationReady = false, mode = 'login', emailEnabled = false, localPreview = false }: { callbackError?: boolean; registrationReady?: boolean; mode?:EmailMode; emailEnabled?:boolean; localPreview?:boolean }) {
@@ -37,9 +38,9 @@ export function ReferenceAuth({ callbackError = false, registrationReady = false
   return <main id="main-content" className="ref-ui ref-auth-page"><div className="ref-auth-glow" aria-hidden="true" /><div className="ref-auth-shell">
     <section className="ref-auth-form-panel">
       <Link href="/" aria-label="inrou — главная"><ReferenceLogo /></Link>
-      <div className="ref-auth-heading"><h1>{mode==='signup'?'Создайте аккаунт inrou':mode==='verify'?'Подтвердите почту':mode==='forgot'?'Восстановите доступ':mode==='reset'?'Новый пароль':'Вход в inrou'}</h1><p>{mode==='signup'?(emailEnabled?'Зарегистрируйтесь по email или через Яндекс ID.':'Зарегистрируйтесь через Яндекс ID.'):mode==='verify'?'Повторите выбранный пароль, чтобы завершить регистрацию.':mode==='forgot'?'Получите ссылку для смены пароля.':mode==='reset'?'Выберите новый уникальный пароль.':emailEnabled?'Войдите по email или через Яндекс ID, чтобы открыть свой кабинет.':'Войдите через Яндекс ID, чтобы открыть свой кабинет.'}</p></div>
-      {(emailEnabled || (mode!=='login' && mode!=='signup'))&&<EmailForm mode={mode} enabled={emailEnabled} registrationReady={registrationReady} localPreview={localPreview}/>}
-      {(mode==='login'||mode==='signup')&&<details open={!emailEnabled||mode==='signup'} className="ref-auth-alternative"><summary>{mode==='signup'?'Регистрация через Яндекс ID':emailEnabled?'Или войти через Яндекс ID':'Вход через Яндекс ID'}</summary><form onSubmit={signIn} className="ref-auth-signin">
+      <div className="ref-auth-heading"><h1>{mode==='signup'?'Создайте аккаунт inrou':mode==='verify'?'Подтвердите почту':mode==='forgot'?'Восстановите доступ':mode==='reset'?'Новый пароль':'Вход в inrou'}</h1><p>{mode==='signup'?'Создайте аккаунт по почте и подтвердите адрес.':mode==='verify'?'Повторите выбранный пароль, чтобы завершить регистрацию.':mode==='forgot'?'Получите ссылку для смены пароля.':mode==='reset'?'Выберите новый уникальный пароль.':'Войдите по почте или через Яндекс ID, чтобы открыть свой кабинет.'}</p></div>
+      <EmailForm mode={mode} enabled={emailEnabled} registrationReady={registrationReady} localPreview={localPreview}/>
+      {(mode==='login'||mode==='signup')&&<details  className="ref-auth-alternative"><summary>{mode==='signup'?'Регистрация через Яндекс ID':emailEnabled?'Или войти через Яндекс ID':'Вход через Яндекс ID'}</summary><form onSubmit={signIn} className="ref-auth-signin">
         <p className="ref-auth-note">{registrationReady ? mode==='signup'?'Для создания аккаунта примите оба документа.':'Уже есть аккаунт? Войдите без повторного согласия. Для создания нового аккаунта примите оба документа.' : 'Регистрация откроется после утверждения и публикации документов. Вход доступен для существующих аккаунтов.'}</p>
         {registrationReady && <>
         <label><input type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)} /><span>Принимаю условия <Link href="/legal/offer" target="_blank" rel="noopener">договора-оферты</Link> (редакция 01.10.2026).</span></label>
@@ -48,12 +49,12 @@ export function ReferenceAuth({ callbackError = false, registrationReady = false
         <button type="submit" disabled={accepted !== pdConsent || busy || (mode==='signup'&&(!registrationReady||!accepted||!pdConsent))} className="ref-button ref-primary ref-auth-submit">{busy ? 'Переходим в Яндекс…' : mode==='signup'?'Создать аккаунт через Яндекс ID':'Войти через Яндекс ID'} <ArrowRight size={17} /></button>
         {error && <p role="alert" className="ref-auth-error">{error}</p>}
       </form></details>}
-      {!emailEnabled&&(mode==='login'||mode==='signup')&&<div className="ref-email-links"><Link href={mode==='signup'?'/login':'/signup'}>{mode==='signup'?'Уже есть аккаунт? Войти':'Создать аккаунт'}</Link></div>}
+
       <p className="ref-auth-note">Рекламные источники подключаются отдельно от входа. Доступ к аккаунту не предоставляет доступ к рекламным кабинетам автоматически.</p>
       <ThemeControl />
       <div className="ref-auth-registration"><Link href="/legal">Правовая информация</Link></div>
       <Link href="/" className="ref-auth-back"><ArrowLeft size={14} />На главную</Link>
     </section>
-    <section className="ref-auth-art-panel" aria-label="Ваша реклама под контролем"><div className="ref-auth-glass ref-auth-glass-left" /><div className="ref-auth-glass ref-auth-glass-right" /><Image src="/reference/glass-orb.png" className="ref-auth-orbit" alt="Переливающаяся стеклянная скульптура" width={1536} height={1024} priority /><div className="ref-auth-tagline"><h2>Ваша реклама<br />под контролем</h2><p>Показатели. Источники.<br />Обоснованные решения.</p></div></section>
+    <section className="ref-auth-art-panel" aria-label="Ваша реклама под контролем"><div className="ref-auth-glass ref-auth-glass-left" /><div className="ref-auth-glass ref-auth-glass-right" /><Image src="/reference/auth-analytics-v1.png" className="ref-auth-orbit" alt="Стеклянная панель аналитики с фиолетовыми и голубыми графиками" width={1122} height={1402} priority /><div className="ref-auth-tagline"><h2>Ваша реклама<br />под контролем</h2><p>Показатели. Источники.<br />Обоснованные решения.</p></div></section>
   </div></main>;
 }
