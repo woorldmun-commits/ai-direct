@@ -28,6 +28,7 @@ e2e-result/
 # Локальные агентские/сессионные данные
 .claude/*
 !.claude/agents/
+!.claude/skills/
 .swarm/
 .claude-flow/
 .agents/
