@@ -50,7 +50,7 @@ function CycleCard({ r }: { r: Recommendation }) {
     <article className="card anim-fade p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted">
-          {formatDate(r.created_at.slice(0, 10))} · Rekvero нашёл: <b className="text-text">{r.title}</b>{" "}
+          {formatDate(r.created_at.slice(0, 10))} · inrou нашёл: <b className="text-text">{r.title}</b>{" "}
           <span className="font-mono text-xs">({r.evidence.rule_version})</span>
         </p>
         <StatusBadge r={r} />

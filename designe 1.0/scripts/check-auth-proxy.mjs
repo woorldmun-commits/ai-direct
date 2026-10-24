@@ -37,10 +37,10 @@ assert.equal(origin.apiOrigin('https://user:secret@example.com'), null);
 assert.equal(origin.apiOrigin('https://example.com/credentials'), null);
 assert.equal(origin.apiOrigin('http://127.0.0.1:8080').origin, 'http://127.0.0.1:8080');
 const originalFetch = globalThis.fetch;
-const previous = process.env.ADPILOT_API_URL;
-process.env.ADPILOT_API_URL = 'http://127.0.0.1:8080';
+const previous = process.env.INROU_API_URL;
+process.env.INROU_API_URL = 'http://127.0.0.1:8080';
 let calls = 0;
-const request = (path, options = {}) => new Request('https://rekvero.example/api/auth/' + path, options);
+const request = (path, options = {}) => new Request('https://inrou.example/api/auth/' + path, options);
 try {
   globalThis.fetch = async (url, options) => {
     calls++;
@@ -76,7 +76,7 @@ try {
   assert.equal((await proxyAuth(request('secret'), 'secret')).status, 404);
   assert.equal((await proxyAuth(request('logout'), 'logout')).status, 404);
   assert.equal(calls, 0);
-  const result = await proxyAuth(request('yandex/callback?code=valid&state=valid', { headers: { Cookie: 'unrelated=private; adpilot_oauth_flow=base64value==' } }), 'yandex/callback');
+  const result = await proxyAuth(request('yandex/callback?code=valid&state=valid', { headers: { Cookie: 'unrelated=private; inrou_oauth_flow=base64value==' } }), 'yandex/callback');
   assert.equal(result.status, 303);
   assert.equal(result.headers.get('location'), '/workspace');
   assert.match(result.headers.get('set-cookie'), /HttpOnly/);
@@ -89,24 +89,24 @@ try {
     globalThis.fetch=async (url,options)=>{
       assert.equal(new URL(url).pathname,'/api/v1/auth/'+path);
       assert.equal(options.body,'{}');
-      assert.equal(options.headers.get('Origin'),'https://rekvero.example');
+      assert.equal(options.headers.get('Origin'),'https://inrou.example');
       return Response.json({status:'ok'});
     };
-    assert.equal((await proxyAuth(request(path,{method:'POST',headers:{Origin:'https://rekvero.example','Content-Type':'application/json'},body:'{}'}),path)).status,200);
+    assert.equal((await proxyAuth(request(path,{method:'POST',headers:{Origin:'https://inrou.example','Content-Type':'application/json'},body:'{}'}),path)).status,200);
   }
   const {isPrivatePage}=load('../lib/private-page.ts');
   for(const path of ['/workspace','/workspace/recommendations/1','/signup','/login','/verify-email','/reset-password','/forgot-password']) assert(isPrivatePage(path),path);
   assert(!isPrivatePage('/')); assert(!isPrivatePage('/login-other'));
-  assert.equal((await proxyAuth(request('yandex/start', { method: 'POST', headers: { Origin: 'https://rekvero.example', 'Content-Type': 'application/json' }, body: 'a'.repeat(4097) }), 'yandex/start')).status, 413);
+  assert.equal((await proxyAuth(request('yandex/start', { method: 'POST', headers: { Origin: 'https://inrou.example', 'Content-Type': 'application/json' }, body: 'a'.repeat(4097) }), 'yandex/start')).status, 413);
   globalThis.fetch = async () => new Response('a'.repeat(8193), { headers: { 'Content-Type': 'application/json' } });
-  assert.equal((await proxyAuth(request('yandex/start', { method: 'POST', headers: { Origin: 'https://rekvero.example', 'Content-Type': 'application/json' }, body: '{}' }), 'yandex/start')).status, 502);
+  assert.equal((await proxyAuth(request('yandex/start', { method: 'POST', headers: { Origin: 'https://inrou.example', 'Content-Type': 'application/json' }, body: '{}' }), 'yandex/start')).status, 502);
   globalThis.fetch = async () => new Response(null, { status: 302, headers: { Location: 'https://evil.example' } });
   assert.equal((await proxyAuth(request('yandex/callback'), 'yandex/callback')).status, 502);
-  delete process.env.ADPILOT_API_URL;
-  assert.equal((await proxyAuth(request('logout', { method: 'POST', headers: { Origin: 'https://rekvero.example' } }), 'logout')).status, 503);
+  delete process.env.INROU_API_URL;
+  assert.equal((await proxyAuth(request('logout', { method: 'POST', headers: { Origin: 'https://inrou.example' } }), 'logout')).status, 503);
 } finally {
   globalThis.fetch = originalFetch;
-  if (previous === undefined) delete process.env.ADPILOT_API_URL;
-  else process.env.ADPILOT_API_URL = previous;
+  if (previous === undefined) delete process.env.INROU_API_URL;
+  else process.env.INROU_API_URL = previous;
 }
 console.log('PASS: auth proxy origin, path, method, configuration, callback, cookie, redirect and no-cache; exact legal bytes/hash/version/locale and bounded fail-closed fetching.');

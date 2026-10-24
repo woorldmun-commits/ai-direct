@@ -40,8 +40,8 @@ def test_unisender_requires_key_and_unknown_provider_rejected():
     for provider in ('unisender', 'unknown'):
         with pytest.raises(ValueError):
             EmailAuthConfig('https://example.test', 'x'*32, smtp_from='noreply@example.test', provider=provider)
-    config = EmailAuthConfig.from_env({'REKVERO_EMAIL_ENABLED': 'true',
-        'REKVERO_EMAIL_ORIGIN': 'https://example.test', 'REKVERO_AUTH_HMAC_KEY': 'x'*32,
-        'REKVERO_MAIL_PROVIDER': 'unisender', 'REKVERO_MAIL_API_KEY': 'synthetic-test-key',
-        'REKVERO_SMTP_FROM': 'noreply@example.test'})
+    config = EmailAuthConfig.from_env({'INROU_EMAIL_ENABLED': 'true',
+        'INROU_EMAIL_ORIGIN': 'https://example.test', 'INROU_AUTH_HMAC_KEY': 'x'*32,
+        'INROU_MAIL_PROVIDER': 'unisender', 'INROU_MAIL_API_KEY': 'synthetic-test-key',
+        'INROU_SMTP_FROM': 'noreply@example.test'})
     assert config.provider == 'unisender' and config.smtp_host == ''

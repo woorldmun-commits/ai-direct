@@ -183,7 +183,7 @@ def test_provider_redirect_config_is_fail_closed(db, uri):
 
 
 def test_oauth_config_is_opt_in_and_missing_config_stays_disabled():
-    env = {"API_DATABASE_URL": "postgresql://app_rw@localhost/adpilot", "API_ALLOWED_ORIGINS": ORIGIN,
+    env = {"API_DATABASE_URL": "postgresql://app_rw@localhost/inrou", "API_ALLOWED_ORIGINS": ORIGIN,
            "YANDEX_LOGIN_CLIENT_ID": "id", "YANDEX_LOGIN_CLIENT_SECRET": "synthetic-secret",
            "YANDEX_LOGIN_REDIRECT_URI": PROVIDER.redirect_uri}
     assert Settings.from_env(env).oauth_login is None

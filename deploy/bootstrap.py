@@ -27,8 +27,12 @@ def provision(env):
                     raise ValueError(f'{role}: unsafe existing role; review manually')
             conn.execute('GRANT app_rw TO app_token,app_system')
             conn.execute(sql.SQL('GRANT CREATE ON DATABASE {} TO app_migrator').format(sql.Identifier(database)))
+            # Only the schema owner can reliably revoke the legacy PUBLIC create privilege.
+            conn.execute('REVOKE CREATE ON SCHEMA public FROM PUBLIC')
             conn.execute('GRANT CREATE,USAGE ON SCHEMA public TO app_migrator')
             conn.execute('GRANT USAGE ON SCHEMA public TO app_rw,app_token,app_system,app_deleter')
+            if conn.execute("SELECT has_schema_privilege('app_rw','public','CREATE')").fetchone()[0]:
+                raise ValueError('app_rw must not have schema CREATE privileges')
             urls = {role:make_conninfo(admin,user=role,password=env[role.upper()+'_PASSWORD']) for role in roles}
             from migrations import migrate
             print('Database: checking schema migrations.', flush=True)

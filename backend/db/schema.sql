@@ -552,7 +552,8 @@ CREATE TABLE snapshots (
   sealed_at    timestamptz,
   CHECK ((status = 'complete') = (sealed_at IS NOT NULL)),
   CHECK (period_from <= period_to),
-  CHECK (partial_from BETWEEN period_from AND period_to + 1)
+  CHECK (partial_from BETWEEN period_from AND period_to + 1),
+  campaign_strategies jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(campaign_strategies) = 'object')
 );
 
 CREATE TABLE stat_rows (

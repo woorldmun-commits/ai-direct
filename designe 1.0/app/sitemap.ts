@@ -6,6 +6,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const lastModified = new Date("2026-10-19");
   return [
     { url: SITE_URL, lastModified, changeFrequency: "monthly", priority: 1 },
-    ...["features","how-it-works","integrations","pricing","security","faq","contact"].map(slug=>({url:SITE_URL+"/"+slug,lastModified,changeFrequency:"monthly" as const,priority:0.7})),
+    ...["features","how-it-works","agencies","business","integrations","pricing","security","faq","contact","about"].map(slug=>({url:SITE_URL+"/"+slug,lastModified,changeFrequency:"monthly" as const,priority:0.7})),
   ];
 }

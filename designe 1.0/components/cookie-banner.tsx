@@ -7,8 +7,8 @@ import { usePathname } from "next/navigation";
 
 // Bump when the banner/consent text changes: old choices are asked again.
 const VERSION = "v1";
-const COOKIE = "adpilot-consent";
-export const OPEN_EVENT = "adpilot:cookie-settings";
+const COOKIE = "inrou-consent";
+export const OPEN_EVENT = "inrou:cookie-settings";
 
 type Choice = "all" | "necessary";
 

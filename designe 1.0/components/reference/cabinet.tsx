@@ -8,7 +8,7 @@ import {ReferenceLogo,ReferencePortrait,PlatformBadge,ReferenceModal} from './sh
 import {ReferenceChart,MiniChart,chartMetrics} from './chart';
 import {ReferenceProvider,useReference} from './state';
 import {colors,num,platforms,recs,rub,signals,sum,seriesFor,comparisonFor,recommendationsFor} from './model';
-import './adpilot.css';
+import './inrou.css';
 import './reference-fidelity-v2.css';
 import './reference-panels.css';
 export {RecommendationsScreen,CampaignsScreen} from './optimization';

@@ -6,5 +6,5 @@ export const metadata:Metadata={title:'Новый пароль',robots:{index:fa
 export const dynamic='force-dynamic';
 export default async function Page(){
  const [email,offer,consent]=await Promise.all([emailEnabled(),legalDocument('offer'),legalDocument('pd_consent')]);
- return <ReferenceAuth mode='reset' emailEnabled={email} registrationReady={!!offer?.approved&&!!consent?.approved} localPreview={process.env.NODE_ENV!=='production'&&process.env.REKVERO_LOCAL_PREVIEW==='true'}/>;
+ return <ReferenceAuth mode='reset' emailEnabled={email} registrationReady={!!offer?.approved&&!!consent?.approved} localPreview={process.env.NODE_ENV!=='production'&&process.env.INROU_LOCAL_PREVIEW==='true'}/>;
 }

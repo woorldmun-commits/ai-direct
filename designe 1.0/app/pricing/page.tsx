@@ -1,3 +1,3 @@
-import {PublicSectionPage} from '@/components/reference/landing';
+import {PublicPage} from '@/components/ix/public/pages';
 export const metadata={title:'Тарифы'};
-export default function Page(){return <PublicSectionPage section="pricing"/>;}
+export default function Page(){return <PublicPage page="pricing"/>;}

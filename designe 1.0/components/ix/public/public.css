@@ -1,0 +1,181 @@
+/* Публичный сайт INROU в системе .ix: те же токены, Georgia для заголовков, карточки 19px. */
+.ix-pub{min-height:100vh;display:flex;flex-direction:column}
+.ix-pub main{flex:1;width:100%;max-width:1200px;margin:0 auto;padding:8px 30px 60px}
+.ix-pub{background:radial-gradient(ellipse at 83% 16%,#e9e3d7a6,transparent 42%),var(--bg)}
+[data-theme="dark"] .ix-pub{background:radial-gradient(ellipse at 83% 16%,#34423970,transparent 42%),var(--bg)}
+.ix-pub-header{display:flex;align-items:center;gap:24px;max-width:1200px;width:100%;margin:0 auto;padding:22px 30px;position:relative}
+.ix-pub-header .ix-logo{color:var(--ink);font-size:31px}
+.ix-pub-header .ix-logo small{color:var(--muted)}
+.ix-pub-header nav{display:flex;gap:4px;margin-left:auto}
+.ix-pub-header nav a{padding:9px 13px;border-radius:11px;text-decoration:none;color:var(--ink);transition:background .2s ease}
+.ix-pub-header nav a:hover{background:var(--panel)}
+.ix-pub-actions{display:flex;gap:9px;align-items:center}
+.ix-pub-menu{display:none}
+.ix-pub-footer{max-width:1200px;width:100%;margin:0 auto;padding:30px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap}
+.ix-pub-footer .ix-logo{color:var(--ink);font-size:26px}
+.ix-pub-footer .ix-logo small{color:var(--muted)}
+.ix-pub-footer nav{display:flex;gap:6px 18px;flex-wrap:wrap;align-items:center}
+.ix-pub-footer nav a,.ix-pub-footer nav button{color:var(--ink);text-decoration:none;background:none;border:0;padding:6px 0}
+.ix-pub-footer nav a:hover{text-decoration:underline}
+.ix-pub main>section{margin-top:56px}
+.ix-pub-lead{font-size:18px;max-width:680px;color:var(--muted);margin:0 0 20px}
+.ix-pub-kicker{display:block;margin-bottom:10px}
+.ix-pub-hero{margin-top:12px}
+.ix-pub-cols{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.ix-pub-cols--2{grid-template-columns:repeat(2,1fr)}
+.ix .ix-pub-steps{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.ix-pub-steps li{background:var(--panel);border:1px solid var(--line);border-radius:19px;padding:21px;box-shadow:var(--shadow)}
+.ix-pub-steps b{font:normal 30px Georgia,serif;color:var(--wine);display:block;margin-bottom:8px}
+.ix-pub-steps h3{font-size:16px}
+.ix-pub-faq details{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:4px 18px;margin-bottom:10px}
+.ix-pub-faq summary{padding:12px 0;font-weight:600}
+.ix-pub-faq details p{margin:0 0 14px;color:var(--muted)}
+.ix-pub-price{display:flex;flex-direction:column;gap:6px}
+.ix-pub-price strong{font:normal 34px Georgia,serif;letter-spacing:-1px}
+.ix-pub-price ul{padding-left:18px;margin:10px 0;flex:1}
+.ix-pub-final{text-align:center;padding:48px 24px}
+.ix-pub-final h2{font-size:clamp(26px,4vw,38px)}
+.ix-pub-final .ix-actions{justify-content:center}
+.ix-pub-strip{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.ix-legal{max-width:860px;margin:20px auto 0;overflow-wrap:anywhere}
+.ix-pub main>.ix-premium-hero{margin-top:8px;position:relative;display:grid;grid-template-columns:1.05fr 1fr;align-items:center;min-height:470px;gap:0}
+.ix-premium-hero h1{font:normal clamp(42px,4.2vw,62px)/1.05 Georgia,serif;color:var(--wine);letter-spacing:-2px;margin:12px 0 22px}
+.ix-hero-copy{position:relative;z-index:1;padding-block:24px;max-width:620px}
+.ix-hero-copy .ix-pub-lead{font-size:16px;line-height:1.65;max-width:510px}
+.ix-hero-copy .ix-eyebrow{display:inline-block;background:#eae3d9;padding:5px 10px;border-radius:20px;font-size:10px;letter-spacing:.3px}
+[data-theme="dark"] .ix-hero-copy .ix-eyebrow{background:#28352e}
+.ix-device-scene{position:relative;aspect-ratio:1.5;width:120%;margin-left:-20%;isolation:isolate}
+.ix-device-render{position:absolute;inset:0;width:100%;height:auto;z-index:0;filter:drop-shadow(0 22px 30px #443d2d1a)}
+.ix-device-ui{position:absolute;top:0;left:0;width:800px;height:500px;transform-origin:0 0;display:grid;grid-template-columns:108px 1fr;overflow:hidden;background:#fffdf8;color:#273b31;font:14px/1.4 Inter,sans-serif;z-index:1;pointer-events:none}
+.ix-device-ui aside{background:#23382d;color:#dce6dc;padding:20px 10px;display:flex;flex-direction:column;gap:20px;font-size:11px}
+.ix-device-ui aside b{font:22px Georgia,serif;color:#fffdf8;margin-bottom:16px}
+.ix-device-content{padding:20px 16px}
+.ix-device-content header{display:flex;justify-content:space-between;font-size:16px;margin-bottom:22px}
+.ix-device-content header span{font-size:10px;color:#647267}
+.ix-device-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+.ix-device-metrics>div{padding:12px 9px;border:1px solid #e9e4da;border-radius:6px;display:grid;gap:8px}
+.ix-device-metrics small{font-size:10px;color:#647267}
+.ix-device-metrics b{font-size:18px;white-space:nowrap}
+.ix-device-content>svg{width:100%;height:220px;display:block}
+.ix-device-content>svg>path{fill:none;stroke-width:2}
+.ix-device-table{font-size:11px;border-top:1px solid #e9e4da;margin-top:12px;padding-top:10px}
+.ix-device-table>div{display:flex;justify-content:space-between;padding-top:9px;color:#647267}
+.ix-float-kpi{position:absolute;z-index:2;display:grid;gap:3px;background:linear-gradient(140deg,#fffefaee,#f1eee4ee);border:1px solid #fffefa;box-shadow:0 16px 35px #42382c26;border-radius:11px;padding:16px 19px;color:#202a25;backdrop-filter:blur(8px)}
+.ix-float-kpi strong{font:600 29px/1.1 Inter,sans-serif;letter-spacing:-1px}
+.ix-float-kpi span{font-size:10px;color:#525f56}
+.ix-float-kpi--left{left:28%;top:56%;transform:rotate(-4deg)}
+.ix-float-kpi--right{right:0;top:17%;transform:rotate(3deg)}
+.ix-pub main>.ix-landing-kpis{margin-top:0;position:relative;z-index:2}
+.ix-demo-caption{font-size:10px;color:var(--muted);margin-bottom:8px}
+.ix-landing-kpis .ix-kpis{gap:12px;margin-bottom:12px}
+.ix-landing-kpis .ix-kpi{padding:15px 18px}
+.ix-landing-kpis .ix-value{font:600 24px/1.3 Inter,sans-serif;letter-spacing:-.7px}
+.ix-landing-kpis .ix-kpi>svg{height:25px}
+.ix-landing-values{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.ix-landing-values>div{display:flex;gap:12px;align-items:center;padding:15px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);font-size:12px}
+.ix-landing-values span{font-size:24px;color:var(--accent)}
+.ix-editorial-split{display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:36px;overflow:clip;min-height:650px}
+.ix-editorial-split h1,.ix-benefit-page h1{font:normal 54px/1.08 Georgia,serif;color:var(--wine);letter-spacing:-1.6px;max-width:630px}
+.ix-feature-rows{display:grid;gap:20px;margin-top:30px}.ix-feature-rows>div{display:flex;gap:16px;align-items:flex-start}.ix-feature-rows>div>span{flex:none;width:42px;height:42px;display:grid;place-items:center;background:linear-gradient(140deg,#62745d,#26382f);color:#f5f2ec;border-radius:10px;font-size:24px;box-shadow:0 6px 12px #26382f20}
+.ix-feature-rows h2{font:600 15px/1.4 Inter,sans-serif;margin:0 0 4px}.ix-feature-rows p{font-size:12px;color:var(--muted);margin:0;max-width:420px}
+.ix-process .ix-pub-steps{grid-template-columns:1fr;gap:22px;margin:28px 0}.ix-process .ix-pub-steps li{position:relative;box-shadow:none;background:none;border:0;padding:0 0 0 60px;min-height:45px}.ix-process .ix-pub-steps b{position:absolute;left:0;top:0;display:grid;place-items:center;width:40px;height:40px;border-radius:50%;font:500 15px Inter,sans-serif;background:var(--accent);color:var(--bg)}.ix-process .ix-pub-steps h2{margin:0 0 4px}.ix-process .ix-pub-steps p{font-size:12px}.ix-process-art img{width:100%;height:auto;max-height:650px;object-fit:contain}
+.ix-benefit-page{max-width:800px;padding:30px 10px 70px}.ix-benefit-page ul{list-style:none;padding:0;margin:35px 0;display:grid;gap:25px}.ix-benefit-page li{display:flex;gap:16px;align-items:center}.ix-benefit-page li>span{display:grid;place-items:center;width:23px;height:23px;background:var(--accent);color:var(--bg);border-radius:50%;font-size:13px;flex:none}
+.ix-pub-price{padding:26px 22px;gap:12px}.ix-pub-price li{font-size:13px;margin:10px 0}
+.ix-auth-shell{grid-template-columns:minmax(0,430px);justify-content:center;padding:28px 16px;min-height:100vh}.ix-auth-art{display:none}.ix-auth-form{padding:28px;border-radius:14px}.ix-auth .ref-auth-heading h1{font-size:28px;letter-spacing:-.6px}
+@media(max-width:720px){.ix-editorial-split{grid-template-columns:1fr;gap:12px;min-height:0}.ix-editorial-split h1,.ix-benefit-page h1{font-size:37px}.ix-editorial-split .ix-device-scene{margin-top:0}.ix-feature-rows{gap:18px}.ix-process-art img{max-height:430px}.ix-benefit-page{padding:10px 4px 30px}.ix-auth-form{padding:22px}.ix-auth-shell{padding:18px 12px}}
+@media(min-width:1440px){.ix-pub main,.ix-pub-header{max-width:1360px}.ix-premium-hero h1{font-size:62px}}
+@media(min-width:1101px){.ix-pub main>.ix-premium-hero{height:500px;min-height:0}.ix-premium-hero .ix-device-scene{width:110%;margin-left:-10%}.ix-premium-hero .ix-hero-copy{align-self:start;padding-top:44px}}
+@media(min-width:721px){.ix-pub main>.ix-premium-hero{grid-template-columns:45% 55%;overflow:clip}.ix-premium-hero h1{width:760px;max-width:calc(100vw - 100px);font-size:58px}}
+@media(max-width:720px){
+ .ix-pub main>.ix-premium-hero{grid-template-columns:1fr;min-height:0;margin-top:4px;overflow:hidden}
+ .ix-hero-copy{padding:14px 5px 0}.ix-premium-hero h1{font-size:37px;letter-spacing:-1.2px;line-height:1.07;margin:12px 0 16px}
+ .ix-hero-copy .ix-pub-lead{font-size:14px;line-height:1.6}
+ .ix-device-scene{width:125%;margin:-8px 0 -8px -13%}.ix-float-kpi{padding:10px 12px;border-radius:8px}.ix-float-kpi strong{font-size:22px}.ix-float-kpi span{font-size:9px}
+ .ix-float-kpi--left{left:10%;top:41%}.ix-float-kpi--right{right:3%;top:17%}
+ .ix-landing-kpis .ix-value{font-size:20px}.ix-landing-kpis .ix-kpi{padding:12px}.ix-landing-values{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.ix-landing-values>div{font-size:11px;padding:10px;gap:8px}
+}
+.ix .ix-legal-text{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.8}
+@media(max-width:860px){
+ .ix-pub-header nav{display:none;position:absolute;left:14px;right:14px;top:76px;margin:0;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow2);padding:8px;z-index:30}
+ .ix-pub-header nav.is-open{display:flex}
+ .ix-pub-header nav a{min-height:44px;display:flex;align-items:center}
+ .ix-pub-menu{display:inline-block;min-height:44px;min-width:44px}
+ .ix-pub-cta{display:none}
+ .ix-pub-header{padding:14px}
+ .ix-pub main{padding:8px 14px 48px}
+ .ix-pub-cols,.ix-pub-cols--2,.ix .ix-pub-steps{grid-template-columns:1fr}
+ .ix-pub-footer{padding:24px 14px}
+}
+
+/* Вход, регистрация и восстановление: существующая форма (ReferenceAuth/EmailForm) в системе .ix */
+.ix-auth{min-height:100vh}
+.ix-auth-shell{display:grid;grid-template-columns:minmax(360px,520px) minmax(0,1fr);gap:40px;max-width:1200px;margin:0 auto;padding:40px 30px;align-items:center;min-height:100vh}
+.ix-auth-form{padding:32px;display:grid;gap:14px}
+.ix-auth-form .ix-logo{color:var(--ink);font-size:28px}
+.ix-auth-form .ix-logo small{color:var(--muted)}
+.ix-auth-art h2{font-size:clamp(34px,4vw,52px)}
+.ix-auth-art p{font-size:18px;color:var(--muted)}
+.ix-auth-art .ix-card{max-width:420px;margin-top:24px}
+html[data-theme] body .ix-auth .ref-auth-heading h1{margin:8px 0 6px}
+html[data-theme] body .ix-auth .ref-auth-heading p,html[data-theme] body .ix-auth .ref-auth-note{color:var(--muted);margin:0}
+html[data-theme] body .ix-auth .ref-email-form{display:grid;gap:14px;margin:0}
+html[data-theme] body .ix-auth .ref-email-form fieldset{border:0;padding:0;margin:0;display:grid;gap:14px}
+html[data-theme] body .ix-auth .ref-email-form label{display:grid;gap:6px;color:var(--muted);font-size:13px}
+html[data-theme] body .ix-auth .ref-email-form input:not([type=checkbox]){width:100%;min-height:46px;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font-size:16px}
+html[data-theme] body .ix-auth .ref-email-password{display:flex;gap:8px;align-items:center;background:none;border:0;padding:0}
+html[data-theme] body .ix-auth :is(.ref-button,.ref-primary,.ref-auth-submit,.ref-email-form button[type=submit]){border:1px solid var(--line);border-radius:11px;padding:11px 14px;background:var(--panel);color:var(--ink);min-height:46px;display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;font-size:14px;box-shadow:none}
+html[data-theme] body .ix-auth :is(.ref-primary,.ref-auth-submit,.ref-email-form button[type=submit]){background:var(--accent);color:#fff;border-color:var(--accent)}
+html[data-theme="dark"] body .ix-auth :is(.ref-primary,.ref-auth-submit,.ref-email-form button[type=submit]){color:#1a281f}
+html[data-theme] body .ix-auth .ref-auth-error,html[data-theme] body .ix-auth [role=alert]{color:var(--ix-bad)}
+html[data-theme] body .ix-auth .ref-auth-alternative{border:1px solid var(--line);border-radius:14px;padding:4px 14px}
+html[data-theme] body .ix-auth .ref-auth-alternative summary{padding:10px 0}
+html[data-theme] body .ix-auth .ref-auth-signin{display:grid;gap:12px;padding-bottom:12px}
+html[data-theme] body .ix-auth .ref-auth-signin label{display:flex;gap:10px;align-items:flex-start;color:var(--ink)}
+html[data-theme] body .ix-auth a{color:var(--ink);text-decoration:underline}
+html[data-theme] body .ix-auth a.ix-logo{text-decoration:none}
+html[data-theme] body .ix-auth .ref-auth-back{display:inline-flex;gap:6px;align-items:center}
+html[data-theme] body .ix-auth .theme-control{display:flex;gap:8px;align-items:center;color:var(--muted)}
+html[data-theme] body .ix-auth .theme-control select{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:8px}
+@media(max-width:900px){.ix-auth-shell{grid-template-columns:1fr;padding:20px 14px;gap:24px;align-items:start}.ix-auth-form{padding:20px}.ix-auth-art{order:2}}
+
+/* Auth keeps the existing forms and server gates in a compact master-style card. */
+.ix-auth-shell{grid-template-columns:minmax(0,430px);justify-content:center;padding:28px 16px;min-height:100vh}.ix-auth-art{display:none}.ix-auth-form{padding:28px;border-radius:14px}.ix-auth .ref-auth-heading h1{font-size:28px;letter-spacing:-.6px}
+@media(max-width:720px){.ix-auth-shell{padding:18px 12px}.ix-auth-form{padding:22px}}
+html[data-theme="light"] body .ix-auth :is(.ref-primary,.ref-auth-submit,.ref-email-form button[type=submit]){color:#fff}
+@media(max-width:720px){.ix-device-scene{width:110%;margin:0 0 0 -8%}.ix-float-kpi--right{right:0;top:17%}}
+.ix-device-table,.ix-device-table b,.ix-device-table span{background:#fffdf8}
+.ix-editorial-split:not(.ix-process) h1,.ix-agency-page h1{color:var(--ink)}
+html[data-theme] body .ix-auth .ref-email-form label:has(input[type=checkbox]){display:flex;align-items:flex-start;gap:8px}html[data-theme] body .ix-auth .ref-email-form input[type=checkbox]{flex:none;margin-top:2px}
+.ix-auth-form{padding:24px}html[data-theme] body .ix-auth .ref-email-form{gap:12px}
+.ix-device-render{mask-image:linear-gradient(to right,transparent,#000 18%);border-radius:12px}
+.ix-device-render{mask-image:linear-gradient(to right,transparent,transparent 14%,#000 34%,#000 95%,transparent),linear-gradient(to bottom,transparent,#000 7%,#000 90%,transparent);mask-composite:intersect}@media(max-width:720px){.ix-float-kpi--right{right:18px;max-width:100px}.ix-device-render{mask-image:linear-gradient(to right,transparent,#000 12%,#000 95%,transparent),linear-gradient(to bottom,transparent,#000 5%,#000 92%,transparent)}}
+
+/* Public surfaces and entrances use the supplied master specification. */
+.ix-pub{--bg:var(--bg-page);background:radial-gradient(ellipse at 83% 16%,#e9e3d780,transparent 42%),var(--bg-page)}
+.ix-pub .ix-card{background:color-mix(in srgb,var(--panel) 92%,transparent)}
+.ix-float-kpi{background:rgba(255,253,248,.91);border:1px solid rgba(255,255,255,.65);box-shadow:var(--shadow-float);border-radius:13px;backdrop-filter:blur(14px) saturate(115%)}
+[data-theme=dark] .ix-float-kpi{background:rgba(25,40,35,.94);color:var(--ink);border-color:var(--line)}
+[data-theme=dark] .ix-float-kpi span{color:var(--muted)}
+.ix-pub-header{animation:inrou-fade 250ms var(--ease-out) both}
+.ix-hero-copy h1{animation:inrou-route 550ms var(--ease-out) both}
+.ix-hero-copy .ix-pub-lead{animation:inrou-route 550ms 80ms var(--ease-out) both}
+.ix-hero-copy .ix-actions{animation:inrou-route 550ms 140ms var(--ease-out) both}
+.ix-device-render{animation:inrou-device 700ms var(--ease-out) both}
+.ix-float-kpi--left{animation:inrou-fade 420ms 860ms var(--ease-out) both}
+.ix-float-kpi--right{animation:inrou-fade 420ms 960ms var(--ease-out) both}
+.ix-landing-kpis .ix-kpi{animation:inrou-route 560ms var(--ease-out) both}
+.ix-landing-kpis .ix-kpi:nth-child(2){animation-delay:70ms}.ix-landing-kpis .ix-kpi:nth-child(3){animation-delay:140ms}.ix-landing-kpis .ix-kpi:nth-child(4){animation-delay:210ms}
+.ix-landing-values>div{box-shadow:var(--shadow-xs)}
+.ix-feature-rows>div{animation:inrou-route 550ms var(--ease-out) both}.ix-feature-rows>div:nth-child(2){animation-delay:70ms}.ix-feature-rows>div:nth-child(3){animation-delay:140ms}.ix-feature-rows>div:nth-child(4){animation-delay:210ms}.ix-feature-rows>div:nth-child(5){animation-delay:280ms}
+.ix-feature-rows>div>span{transition:transform 180ms var(--ease-out)}
+.ix-benefit-page h1{animation:inrou-route 500ms var(--ease-out) both}.ix-benefit-page li{animation:inrou-route 500ms var(--ease-out) both}.ix-benefit-page li:nth-child(2){animation-delay:55ms}.ix-benefit-page li:nth-child(3){animation-delay:110ms}.ix-benefit-page li:nth-child(4){animation-delay:165ms}.ix-benefit-page li:nth-child(5){animation-delay:220ms}
+.ix-process .ix-pub-steps{position:relative}.ix-process .ix-pub-steps:before{content:'';position:absolute;left:19px;top:20px;bottom:20px;width:1px;background:var(--line)}.ix-process .ix-pub-steps li{animation:inrou-route 550ms var(--ease-out) both}.ix-process .ix-pub-steps b{transition:transform 220ms var(--ease-out),box-shadow 220ms var(--ease-out)}
+.ix-pub-price{animation:inrou-route 600ms var(--ease-out) both}.ix-pub-price:nth-child(2){animation-delay:85ms}.ix-pub-price:nth-child(3){animation-delay:170ms}
+.ix-auth-form :is(input,select){transition:border-color 140ms var(--ease-standard),box-shadow 140ms var(--ease-standard)}
+.ix-welcome{display:grid;grid-template-columns:1.2fr 1fr;align-items:center;overflow:hidden}.ix-welcome h2{font-family:Georgia,serif;font-size:30px}.ix-welcome img{width:100%;max-height:320px;object-fit:contain;animation:inrou-route 550ms var(--ease-out) both}.ix-welcome li{margin:12px 0;animation:inrou-route 550ms var(--ease-out) both}
+@media(hover:hover) and (pointer:fine){.ix-feature-rows>div:hover>span{transform:scale(1.04)}.ix-process .ix-pub-steps li:hover b{transform:scale(1.04);box-shadow:inset 0 1px 0 #ffffff2b}}
+@keyframes inrou-device{from{opacity:0;transform:translateY(18px) scale(.98)}to{opacity:1;transform:none}}
+@media(max-width:767px){.ix-float-kpi{backdrop-filter:none}.ix-welcome{grid-template-columns:1fr}.ix-welcome img{max-height:220px}}
+@media(prefers-reduced-motion:reduce){.ix-pub *,.ix-pub *::before,.ix-pub *::after{animation:none!important;transition:none!important}}
+.ix-phone-promo{display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:40px}.ix-phone-pair{display:flex;justify-content:center;gap:18px}.ix-phone{position:relative;flex:0 1 210px;min-width:0;min-height:390px;padding:26px 13px 42px;border:7px solid #18221d;border-radius:32px;background:var(--panel);box-shadow:var(--shadow-float);animation:inrou-route 650ms var(--ease-out) both}.ix-phone:nth-child(2){animation-delay:120ms;transform:translateY(18px)}.ix-phone-notch{position:absolute;top:0;left:28%;right:28%;height:12px;border-radius:0 0 12px 12px;background:#18221d}.ix-phone h3{font-size:15px;margin:12px 0}.ix-phone>small{font-family:Georgia,serif}.ix-phone-kpis{display:grid;grid-template-columns:1fr 1fr;gap:7px}.ix-phone-kpis>div{display:grid;padding:7px 4px;border:1px solid var(--line);border-radius:7px;min-width:0}.ix-phone-kpis small,.ix-phone-recs small{font-size:9px;color:var(--muted)}.ix-phone-kpis b{font-size:12px;white-space:nowrap}.ix-phone>svg{width:100%;height:120px;margin-top:14px}.ix-phone-recs>div{padding:14px 0;border-bottom:1px solid var(--line);font-size:11px}.ix-phone-recs small{display:block;margin-left:20px}.ix-phone-recs span{background:var(--wine);color:#fff;border-radius:4px;padding:2px 4px;margin-right:4px}.ix-phone-nav{position:absolute;bottom:14px;left:9px;right:9px;text-align:center;font-size:9px;padding-top:8px;border-top:1px solid var(--line)}
+@media(max-width:767px){.ix-phone-promo{grid-template-columns:1fr;gap:22px}.ix-phone-pair{gap:10px}.ix-phone{min-height:360px;padding-inline:9px;border-width:6px}.ix-phone-kpis b{font-size:10px}}

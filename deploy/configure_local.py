@@ -11,8 +11,8 @@ def main():
     password=secrets.token_urlsafe(32)
     values.update(POSTGRES_PASSWORD=password,
         BOOTSTRAP_DATABASE_URL=f'postgresql://postgres:{password}@db:5432/inrou',
-        REKVERO_APP_ORIGIN='http://localhost:10000',API_HSTS='0',PORT='10000',
-        YANDEX_LOGIN_ENABLED='0',YANDEX_API_ENABLED='0',WORKER_ENABLED='0',REKVERO_EMAIL_ENABLED='false',
+        INROU_APP_ORIGIN='http://localhost:10000',API_HSTS='0',PORT='10000',
+        YANDEX_LOGIN_ENABLED='0',YANDEX_API_ENABLED='0',WORKER_ENABLED='0',INROU_EMAIL_ENABLED='false',
         TOKEN_ENCRYPTION_KEY_VERSION='1',TOKEN_ENCRYPTION_KEY_1=base64.b64encode(secrets.token_bytes(32)).decode(),
         API_PROXY_HMAC_KEY=secrets.token_urlsafe(32),PILOT_WORKSPACE_IDS='',PILOT_ACCESS_UNTIL='')
     # Exclusive creation preserves existing credentials and the ability to decrypt stored tokens.

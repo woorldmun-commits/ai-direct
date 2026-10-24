@@ -2,7 +2,7 @@
 .mc-home{--home-accent:var(--brand);--home-line:var(--border)}
 html[data-theme] body .mc-home .mc-header{height:76px}
 html[data-theme] body .mc-home .mc-hero{grid-template-columns:1fr 1.08fr;padding-block:16px;gap:0;min-height:clamp(340px,41vw,560px);overflow:hidden}
-html[data-theme] body .mc-home .mc-hero::before{content:'';position:absolute;inset:0;background:url('/reference/adpilot-hero-scene-v2.png') center/cover;mask-image:linear-gradient(90deg,#000 0%,#000 22%,transparent 39%);z-index:-1;opacity:.7}
+html[data-theme] body .mc-home .mc-hero::before{content:'';position:absolute;inset:0;background:url('/reference/inrou-hero-scene-v2.png') center/cover;mask-image:linear-gradient(90deg,#000 0%,#000 22%,transparent 39%);z-index:-1;opacity:.7}
 html[data-theme] body .mc-home .mc-hero h1{font-size:clamp(48px,5.5vw,76px);line-height:.99;letter-spacing:-3px;margin:18px 0;font-weight:850}
 .mc-home .mc-hero-copy>p{max-width:490px;font-size:16px;line-height:1.5}
 .mc-home .mc-eyebrow{border-color:var(--home-line);background:var(--brand-soft);font-size:11px}

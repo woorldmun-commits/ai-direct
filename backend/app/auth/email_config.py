@@ -37,13 +37,13 @@ class EmailAuthConfig:
 
     @classmethod
     def from_env(cls, env):
-        if env.get('REKVERO_EMAIL_ENABLED', '').lower() not in ('1', 'true', 'yes'):
+        if env.get('INROU_EMAIL_ENABLED', '').lower() not in ('1', 'true', 'yes'):
             return None
-        return cls(env.get('REKVERO_EMAIL_ORIGIN', ''), env.get('REKVERO_AUTH_HMAC_KEY', ''),
-                   env.get('REKVERO_SMTP_HOST', ''), int(env.get('REKVERO_SMTP_PORT', '587')),
-                   env.get('REKVERO_SMTP_USER', ''), env.get('REKVERO_SMTP_PASSWORD', ''),
-                   env.get('REKVERO_SMTP_FROM', ''), env.get('REKVERO_MAIL_PROVIDER', 'smtp'),
-                   env.get('REKVERO_MAIL_API_KEY', ''))
+        return cls(env.get('INROU_EMAIL_ORIGIN', ''), env.get('INROU_AUTH_HMAC_KEY', ''),
+                   env.get('INROU_SMTP_HOST', ''), int(env.get('INROU_SMTP_PORT', '587')),
+                   env.get('INROU_SMTP_USER', ''), env.get('INROU_SMTP_PASSWORD', ''),
+                   env.get('INROU_SMTP_FROM', ''), env.get('INROU_MAIL_PROVIDER', 'smtp'),
+                   env.get('INROU_MAIL_API_KEY', ''))
 
 
 def send(config: EmailAuthConfig, recipient: str, purpose: str, url: str):

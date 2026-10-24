@@ -14,8 +14,8 @@ const auth=load('../lib/auth-proxy.ts',{'./api-origin':origin,'./proxy-client':c
 const {proxyDirect}=load('../lib/direct-proxy.ts',{'./api-origin':origin,'./auth-proxy':auth});
 const previous={...process.env};const savedFetch=globalThis.fetch;
 try{
- process.env.REKVERO_API_URL='http://127.0.0.1:8081';process.env.REKVERO_APP_ORIGIN='https://app.example';
- process.env.API_PROXY_HMAC_KEY='a'.repeat(32);process.env.REKVERO_CLIENT_IP_HEADER='x-real-ip';
+ process.env.INROU_API_URL='http://127.0.0.1:8081';process.env.INROU_APP_ORIGIN='https://app.example';
+ process.env.API_PROXY_HMAC_KEY='a'.repeat(32);process.env.INROU_CLIENT_IP_HEADER='x-real-ip';
  const req=new Request('https://app.example/api/auth/email/login',{method:'POST',headers:{'x-real-ip':'203.0.113.10'}});
  const signed=client.proxyClientHeaders(req,'/api/v1/auth/email/login');
  assert.match(signed['X-Inrou-Client'],/^\d+:203\.0\.113\.10$/);

@@ -12,7 +12,7 @@ export async function pilotGet<T>(path: string, validate: (v: unknown) => v is T
   if (path !== '/me' && !workspacePath(path, 'GET')) throw new PilotError('invalid');
   const base = apiOrigin();
   if (!base) throw new PilotError('setup');
-  const name = process.env.REKVERO_SESSION_COOKIE ?? process.env.ADPILOT_SESSION_COOKIE ?? 'session';
+  const name = process.env.INROU_SESSION_COOKIE ?? 'session';
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(name)) throw new PilotError('setup');
   const token = (await cookies()).get(name)?.value;
   if (!token || !/^[A-Za-z0-9_-]{32,128}$/.test(token)) throw new PilotError('session');

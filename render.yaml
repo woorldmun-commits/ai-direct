@@ -18,7 +18,7 @@ services:
         value: "0"
       - key: YANDEX_API_ENABLED
         value: "0"
-      - key: REKVERO_EMAIL_ENABLED
+      - key: INROU_EMAIL_ENABLED
         value: "false"
       - key: WORKER_ENABLED
         value: "0"

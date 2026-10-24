@@ -126,8 +126,8 @@ def test_audit_stores_policy_decision_and_explains_it(rw, ws):
                                f.policy_reasons, x.text
                         FROM findings f JOIN issues i ON i.id = f.issue_id JOIN explanations x ON x.finding_id = f.id
                         WHERE i.workspace_id = %s ORDER BY f.id DESC LIMIT 1""", (ws["ws"],)).fetchone()  # не из chain
-    assert row[:6] == ("high_cpa_target@1", "safety_policy@1", "decrease_bid", "change", "review",
-                       ["data_sufficiency_medium", "strategy_unknown"])            # 8 конверсий — medium
+    assert row[:6] == ("high_cpa_target@1", "safety_policy@2", "decrease_bid", "change", "review",
+                       ["data_sufficiency_medium"])            # 8 конверсий — medium
     assert "проверьте перед изменением" in row[6]
 
 
@@ -179,3 +179,18 @@ def test_checked_needs_author_and_version(rw, ws):
     with pytest.raises(psycopg.errors.CheckViolation):
         rw.execute("""INSERT INTO recommendation_events (recommendation_id, type, actor_user_id)
                       VALUES (%s, 'checked', %s)""", (rec, ws["user"]))      # без версии вывода
+
+
+@pytest.mark.parametrize('strategy,level',[('manual_bidding','change'),('auto_cpa','inspect_only'),('max_conversions','inspect_only'),('unknown','inspect_only'),('new_provider_strategy','inspect_only')])
+def test_strategy_v2_never_suggests_manual_bid_for_incompatible_strategy(strategy,level):
+    from app.audit.policy import decide_with_strategy
+    decision=decide_with_strategy(finding(12),strategy)
+    assert decision.version=='safety_policy@2' and decision.level==level
+    if level=='inspect_only':
+        assert any(reason.startswith('strategy_') for reason in decision.reasons)
+        assert 'Конверсий за период пока мало' not in explain(finding(12),decision)
+
+
+def test_strategy_v2_still_limits_known_manual_strategy_with_low_data():
+    from app.audit.policy import decide_with_strategy
+    assert decide_with_strategy(finding(1),'manual_bidding').level=='inspect_only'

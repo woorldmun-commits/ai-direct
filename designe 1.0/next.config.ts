@@ -15,7 +15,7 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   output: 'standalone',
   async headers() {
-    return [{ source: "/:path*", headers: SECURITY_HEADERS }];
+    return [{ source: "/:path*", headers: [...SECURITY_HEADERS,...(process.env.INROU_STAGING === '1' ? [{key:'X-Robots-Tag',value:'noindex, nofollow'}] : [])] }];
   },
 };
 

@@ -150,4 +150,4 @@ def test_scrypt_and_configuration():
     with pytest.raises(ValueError):
         EmailAuthConfig('https://evil.test/path','x'*32,'smtp',smtp_from='a@example.test')
     with pytest.raises(ValueError):
-        EmailAuthConfig.from_env({'REKVERO_EMAIL_ENABLED':'true'})
+        EmailAuthConfig.from_env({'INROU_EMAIL_ENABLED':'true'})

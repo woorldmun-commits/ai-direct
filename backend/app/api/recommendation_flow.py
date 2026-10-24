@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import Field
 from psycopg.types.json import Jsonb
 
@@ -110,7 +110,11 @@ def _measurement(conn, data):
                                 "saved": value(r[3]) if r[3] else None, "effect": r[4],
                                 "computed_at": moment(r[5]), "counted_in_saved_total": False}
     # shortcut: no persisted verification exists in this schema; never count unconfirmed savings.
-    return {"id": ext("measurement", mid), "policy": policy,
+    skipped_event = next((e for e in reversed(data["events"]) if e[1] == "measurement_skipped"), None)
+    reason = (r[4].get("reason") if r else skipped_event[4].get("reason") if skipped_event
+              else "window_open" if today_msk() <= at else "data_not_final")
+    return {"id": ext("measurement", mid), "policy": policy, "reason": reason,
+            "next_check_on": (at + timedelta(days=1)).isoformat() if not r and not skipped and today_msk() <= at else None,
             "before_period": {"from": bf.isoformat(), "to": bt.isoformat()},
             "after_period": {"from": af.isoformat(), "to": at.isoformat()},
             "status": "complete" if r else "skipped" if skipped else "pending", "result": result}
@@ -132,6 +136,7 @@ def _passport(conn, ws, data):
             "evidence_current": data["current"], "exposure": value(data["lost"]), "can_save": value(data["recoverable"]),
             "evidence": {k: value(v) for k, v in data["evidence"].items()},
             "rule_version": data["rule"], "safety_policy": data["policy"], "policy_reasons": data["policy_reasons"],
+            "campaign_strategy": (data['meta'] or {}).get('campaign_strategy', 'unknown'),
             "computed_at": moment(data["computed_at"]),
             "explanation": {"text": explanation[0], "source": explanation[1]} if explanation else None,
             "history": [{"id": ext("ev", e[0]), "type": e[1], "actor_id": ext("u", e[2]) if e[2] else None,
@@ -145,6 +150,25 @@ def _passport(conn, ws, data):
 @router.get(PREFIX)
 def passport(rec_id: str, conn: Conn, ws: CurrentWorkspace):
     return _passport(conn, ws, _load(conn, ws, rec_id))
+
+
+@router.get("/workspaces/{workspace_id}/recommendation-activity")
+def activity(conn: Conn, ws: CurrentWorkspace, cursor: int | None = Query(default=None, ge=1, le=2**63-1),
+             limit: int = Query(default=20, ge=1, le=50)):
+    rows = conn.execute("""SELECT r.id,max(e.id) AS last_event FROM recommendations r JOIN issues i ON i.id=r.issue_id
+        JOIN recommendation_events e ON e.recommendation_id=r.id WHERE i.workspace_id=%s
+        GROUP BY r.id HAVING bool_or(e.type IN ('done','checked','postponed','rejected'))
+        AND (%s::bigint IS NULL OR max(e.id)<%s)
+        ORDER BY last_event DESC LIMIT %s""", (ws.id, cursor, cursor, limit + 1)).fetchall()
+    items = []
+    for rid, _ in rows[:limit]:
+        data = _load(conn, ws, ext('rec', rid))
+        items.append({"id": ext('rec', rid), "status": data['status'],
+                      "title": title(data['topic'], data['object_type'], data['object_id'], data['meta'] or {}),
+                      "execution_mode": 'manual' if data['execution'] == 'done' else None,
+                      "measurement": _measurement(conn, data),
+                      "updated_at": moment(data['events'][-1][5])})
+    return {"items": items, "next_cursor": str(rows[limit-1][1]) if len(rows) > limit else None}
 
 
 def _prepare(conn, ws, rec_id, payload, operation):

@@ -5,7 +5,7 @@ import logging
 import os
 import signal
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import psycopg
 
@@ -18,6 +18,7 @@ from app.tenancy import workspace_scope
 from app.worker.audit import run_audit
 from app.worker.guard import Skip, Task, guard, load_state
 from app.worker.sync import Done, run_sync
+from app.worker.measure import DATA_TIMEZONE, due_measurements, run_measurement
 
 log = logging.getLogger("app.worker.runner")
 
@@ -74,6 +75,7 @@ def process(queue, token_conn, run_id, *, provider, keys, release_id, http, now)
 
 
 def tick(queue, token_conn, *, provider, keys, release_id, http, now):
+    schedule_syncs(queue, token_conn, now)
     rows = queue.execute("""SELECT r.id FROM sync_runs r WHERE r.runner_managed AND r.available_at<=%s
         AND (r.status IN ('queued','running','waiting_report') OR
             (r.status='succeeded' AND NOT EXISTS(SELECT 1 FROM audit_runs a
@@ -87,7 +89,40 @@ def tick(queue, token_conn, *, provider, keys, release_id, http, now):
         except Exception as exc:
             queue.execute("UPDATE sync_runs SET available_at=%s + interval '60 seconds' WHERE id=%s", (now, run_id))
             log.error("run=%s failed type=%s", run_id, type(exc).__name__)
+    for measurement_id in due_measurements(queue, now.astimezone(DATA_TIMEZONE).date()):
+        try:
+            run_measurement(token_conn, measurement_id, release_id=release_id, now=now)
+        except psycopg.OperationalError:
+            raise
+        except Exception as exc:
+            log.error("measurement=%s failed type=%s", measurement_id, type(exc).__name__)
     return len(rows)
+
+
+def schedule_syncs(queue, conn, now):
+    """Refresh only accounts explicitly connected to this runner, once per closed Moscow day."""
+    cutoff = now.astimezone(DATA_TIMEZONE).date() - timedelta(days=1)
+    accounts = queue.execute('''SELECT DISTINCT r.workspace_id,r.direct_account_id FROM sync_runs r
+        JOIN direct_accounts a ON a.id=r.direct_account_id
+        JOIN direct_connections c ON c.id=a.direct_connection_id
+        WHERE r.runner_managed AND a.is_selected AND a.status='active' AND c.status='connected'
+        AND NOT EXISTS(SELECT 1 FROM sync_runs n WHERE n.direct_account_id=a.id
+            AND (n.status IN ('queued','running','waiting_report') OR n.runner_managed AND n.period_to>=%s))''',
+        (cutoff,)).fetchall()
+    for ws, account in accounts:
+        with workspace_scope(conn, ws), conn.transaction():
+            conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", (f'pilot-sync:{ws}',))
+            if isinstance(guard(Task.SYNC, load_state(conn, ws, account, now)), Skip):
+                continue
+            busy = conn.execute('''SELECT 1 FROM sync_runs WHERE direct_account_id=%s
+                AND (status IN ('queued','running','waiting_report') OR runner_managed AND period_to>=%s)''',
+                (account, cutoff)).fetchone()
+            if busy:
+                continue
+            conn.execute('''INSERT INTO sync_runs(workspace_id,direct_account_id,metrika_counter_id,kind,period_to,runner_managed)
+                VALUES(%s,%s,(SELECT mc.id FROM metrika_counters mc JOIN metrika_connections c
+                    ON c.id=mc.metrika_connection_id WHERE c.workspace_id=%s AND c.status='connected'
+                    AND mc.is_selected ORDER BY mc.id LIMIT 1),'scheduled',%s,true)''', (ws,account,ws,cutoff))
 
 
 def main():

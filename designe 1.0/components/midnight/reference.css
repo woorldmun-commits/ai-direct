@@ -1,0 +1,384 @@
+/* R2: reproduce the supplied composition; the owner's image takes priority over approximate handoff px. */
+.ms-root {
+  --inrou-canvas:#fbf9f5;
+  --inrou-surface:#fffdfa;
+  --inrou-surface-muted:#f8f5ef;
+  --inrou-ink:#07152f;
+  --inrou-text-muted:#52617a;
+  --inrou-hairline:#e9e4db;
+  --inrou-champagne-text:#9d6d37;
+  --ms-hero-gold:#af7d46;
+  --inrou-shadow-card:0 1px 3px rgba(55,39,18,.025);
+  --ms-series-current:#f04f61;
+  --ms-series-previous:#248bd3;
+  font-family:Arial,sans-serif;
+  background:#e7e1d9;
+  padding:16px;
+}
+[data-theme=dark] .ms-root {
+  --inrou-canvas:#0b1825;
+  --inrou-surface:#102232;
+  --inrou-surface-muted:#14293b;
+  --inrou-ink:#f3f4f2;
+  --inrou-text-muted:#b0c3d1;
+  --inrou-hairline:#253b4d;
+  --inrou-champagne-text:#ddc4a0;
+  --ms-hero-gold:#ddc4a0;
+  --ms-series-current:#ff8696;
+  --ms-series-previous:#69bafa;
+  background:#07111d;
+}
+.ms-root h1,.ms-root .ms-section h2,.ms-root .ms-final-cta h2 {
+  font-family:'Times New Roman',Times,serif;
+  font-weight:400;
+}
+.ms-root .ms-brand {font-family:Arial,sans-serif;font-weight:400;letter-spacing:-1.2px;gap:8px}
+.ms-root .ms-brand-mark {width:18px;height:35px;color:#b38a55;flex:none}
+.ms-root .ms-preview-bar {border:0;padding:15px 8px 0;max-width:1440px;margin:auto;background:transparent}
+.ms-root .ms-card {border-radius:14px;background:var(--inrou-surface);box-shadow:var(--inrou-shadow-card)}
+.ms-root .ms-button {font-family:Arial,sans-serif;font-weight:400;border-radius:10px;box-shadow:0 3px 8px rgba(60,44,24,.07)}
+.ms-root .ms-primary {background:linear-gradient(180deg,#315a7c 0%,#1b405e 42%,#112e43 100%)!important;box-shadow:inset 0 1px 1px rgba(255,255,255,.2),0 6px 13px rgba(19,42,62,.2)}
+
+/* The source crop is 771×558. Keep its canvas, landmarks and physical artwork together. */
+.ms-root .ms-public-main {width:100%;max-width:1408px;margin:0 auto}
+.ms-root .ms-landing-master {position:relative;aspect-ratio:771/558;container-type:inline-size;border-radius:18px;overflow:hidden;background:#fffdf9 url('/reference/midnight-sapphire-scene-r2.png') 0 0/100% 100% no-repeat}
+.ms-root .ms-public-header {position:absolute;inset:0 3.3% auto 3.8%;height:9.5%;max-width:none;padding:0;background:transparent;gap:2.1cqw;animation:none}
+.ms-root .ms-public-header .ms-brand {font-size:2.7cqw}
+.ms-root .ms-public-header .ms-brand-mark {width:1.7cqw;height:3.6cqw}
+.ms-root .ms-public-header>nav {margin-left:auto;gap:2.4cqw}
+.ms-root .ms-public-header>nav a {font-size:1.13cqw;white-space:nowrap;min-height:4.7cqw}
+.ms-root .ms-header-actions {gap:1.2cqw}
+.ms-root .ms-header-actions .ms-button {min-height:0;height:4.3cqw;padding:0 2cqw;font-size:1.2cqw;border-radius:1.1cqw}
+.ms-root .ms-header-actions .ms-button:last-child {min-width:16.5cqw}
+.ms-root .ms-header-actions svg {width:1.7cqw;height:1.7cqw}
+.ms-root .ms-hero {display:contents;background:none}
+.ms-root .ms-hero-copy {position:absolute;inset:0;max-width:none;pointer-events:none}
+.ms-root .ms-hero-copy a {pointer-events:auto}
+.ms-root .ms-eyebrow {position:absolute;top:11.8%;left:3.8%;margin:0;padding:.55cqw 1.15cqw;gap:.6cqw;border:0;background:#f1e6d6;font-size:1.14cqw;line-height:1.15;color:#272626}
+.ms-root .ms-eyebrow svg {width:1.25cqw;height:1.25cqw;color:#815526}
+.ms-root .ms-hero h1 {position:absolute;top:17.7%;left:3.7%;margin:0;width:48%;font-size:6.9cqw;line-height:.84;letter-spacing:-.043em;color:#051127;animation:none}
+.ms-root .ms-hero h1 em {font-family:inherit;font-size:.84em;line-height:.91;letter-spacing:-.045em;margin-top:.6cqw;color:var(--ms-hero-gold);white-space:nowrap}
+.ms-root .ms-hero-copy>p {position:absolute;top:49.6%;left:3.8%;width:46%;max-width:none;margin:0;font-size:1.67cqw;line-height:1.27;color:#52617a;animation:none}
+.ms-root .ms-hero-copy>.ms-cta-row {position:absolute;top:58.5%;left:3.8%;height:7%;margin:0;gap:1.5cqw;animation:none}
+.ms-root .ms-hero .ms-button {min-height:0;height:100%;padding:0 2.2cqw;font-size:1.41cqw;border-radius:1.15cqw}
+.ms-root .ms-hero .ms-primary {min-width:27cqw}
+.ms-root .ms-hero .ms-button>svg {width:1.8cqw;height:1.8cqw}
+.ms-root .ms-truth {position:absolute;top:67%;left:3.8%;margin:0;font-size:1.04cqw;color:#647185}
+.ms-root .ms-scene {position:absolute;inset:0;margin:0;min-width:0;width:auto;max-width:none;height:auto;display:block;padding:0;pointer-events:none}
+.ms-root .ms-device-overlay {position:absolute;left:0;top:0;width:771px;height:559px;transform:scale(var(--ms-art-scale,1));transform-origin:0 0}
+.ms-root .ms-device-ui {position:absolute;left:562px;top:135px;width:380px;height:240px;display:flex;background:#fffdf9;color:#17283f;overflow:hidden;transform-origin:0 0;transform:matrix3d(.668303422,-.1133043158,0,-.0007111668,-.1290575916,.7667539267,0,-.0003708551,0,0,1,0,0,0,0,1)}
+.ms-root .ms-device-ui>aside {width:61px;flex:none;padding:9px 5px;background:linear-gradient(135deg,#19394f,#102337);display:flex;flex-direction:column;gap:9px;color:#d6e1e9;font:6px/1.2 Arial,sans-serif}
+.ms-root .ms-device-ui>aside b {font-size:10px;font-weight:400;margin-bottom:3px;color:#fff}
+.ms-root .ms-device-ui>aside span {padding:3px 4px;border-radius:3px}
+.ms-root .ms-device-ui>aside .is-active {background:#fffdf9;color:#132c43}
+.ms-root .ms-device-content {padding:7px 10px;min-width:0;flex:1;background:#fffdf9}
+.ms-root .ms-device-toolbar {font:8px/1 Arial,sans-serif;border-bottom:1px solid #e6e4dc;padding:2px 0 7px;color:#17283f}
+.ms-root .ms-device-toolbar span {float:right;font-size:5px}
+.ms-root .ms-device-content h3 {font:12px/1.2 'Times New Roman',Times,serif;margin:10px 0 0;color:#17283f}
+.ms-root .ms-device-content .ms-chart-small .ms-plot {height:88px;margin:0}
+.ms-root .ms-device-content .ms-y-axis {font-size:5px;width:20px;padding:8px 0}
+.ms-root .ms-device-content .ms-x-axis {font-size:5px;padding-left:24px;line-height:8px;margin:0;color:#7d8791}
+.ms-root .ms-device-stats {display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin:8px 0}
+.ms-root .ms-device-stats>span {padding:5px;border:1px solid #eee9e0;border-radius:4px;font:6px/1.1 Arial,sans-serif;color:#667185}
+.ms-root .ms-device-stats strong {display:block;font-size:10px;font-weight:400;margin-top:4px;color:#142b43}
+.ms-root .ms-device-content h4 {font:8px/1 Arial,sans-serif;color:#17283f;margin:8px 0 5px}
+.ms-root .ms-device-content p {font:6px/1.4 Arial,sans-serif;color:#50617a;margin:4px 0}
+.ms-root .ms-floating {position:absolute;display:flex;flex-direction:row;align-items:flex-start;text-align:left;inset:auto;gap:1.3cqw;padding:1.5cqw;border-radius:1.7cqw;background:rgba(255,253,249,.96);border:1px solid #fffefc;box-shadow:0 16px 36px rgba(83,53,21,.16),0 3px 9px rgba(59,39,16,.045);backdrop-filter:none;animation:none}
+.ms-root .ms-floating>span {width:4.5cqw;height:4.5cqw;background:radial-gradient(at 26% 18%,#fffaf0 5%,#f0dfc4 60%,#e4c49a 100%)}
+.ms-root .ms-floating>span svg {width:2.5cqw;height:2.5cqw;stroke-width:3}
+.ms-root .ms-floating strong {font-size:1.75cqw;line-height:1.08;font-weight:400;color:#05152d}
+.ms-root .ms-floating p {font-size:.91cqw;line-height:1.28;color:#718096;margin-top:1cqw}
+.ms-root .ms-signal {left:51.05%;top:17.55%;width:17.5%;min-height:14.7%}
+.ms-root .ms-reason {left:52.6%;top:39.25%;width:18.8%;min-height:15.8%}
+.ms-root .ms-decision {left:79%;top:50.35%;width:19.8%;min-height:17%}
+.ms-root .ms-benefits {position:absolute;left:2.7%;top:73.7%;width:71.5%;height:10.2%;max-width:none;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75cqw;margin:0;padding:0}
+.ms-root .ms-benefits>div {gap:1.2cqw;padding:1.3cqw;border:1px solid rgba(255,253,249,.9);border-radius:1.4cqw;background:rgba(255,253,249,.85);box-shadow:0 5px 20px rgba(71,49,24,.035)}
+.ms-root .ms-benefits>div>span {width:3.8cqw;height:3.8cqw;background:radial-gradient(at 30% 20%,#fff9ee,#f0dcc0);color:#603e30}
+.ms-root .ms-benefits>div>span svg {width:2cqw;height:2cqw;stroke-width:1.6}
+.ms-root .ms-benefits p {font-size:1.21cqw;line-height:1.3;color:#142b47}
+.ms-root .ms-integrations {position:absolute;inset:86% 3.2% auto 3.6%;padding:0;gap:2.5cqw;border:0;flex-wrap:nowrap;background:none}
+.ms-root .ms-integrations>div {width:auto}
+.ms-root .ms-integrations p {font-size:1.13cqw;line-height:1.3;margin:0 0 1cqw;color:#52617a}
+.ms-root .ms-integrations>div>div {gap:1.2cqw;flex-wrap:nowrap}
+.ms-root .ms-integrations span {font-size:1.25cqw;min-height:0;height:4.1cqw;padding:0 1.4cqw;border-radius:1.2cqw;gap:.8cqw}
+.ms-root .ms-integrations span svg {width:1.8cqw;height:1.8cqw}
+.ms-root .ms-integrations .ms-yandex {font-size:2.1cqw}
+.ms-root .ms-integrations a {font-size:1.12cqw;min-height:0;gap:.8cqw}
+.ms-root .ms-integrations a svg {width:1.5cqw;height:1.5cqw}
+.ms-root .ms-integrations>p {font-size:1.4cqw;color:#17283f;margin:2.2cqw 0 0}
+.ms-root .ms-integrations>svg {width:2.8cqw;height:2.8cqw;margin-top:2.2cqw;color:#805a31}
+.ms-root .ms-footer {max-width:1408px;background:var(--inrou-canvas);border-radius:0 0 18px 18px}
+.ms-root .ms-section,.ms-root .ms-final-cta {background:var(--inrou-canvas);padding-left:3.8%;padding-right:3.8%}
+.ms-root .ms-faq {max-width:none}
+.ms-root .ms-footer {padding-left:3.8%;padding-right:3.8%}
+[data-theme=dark] .ms-root .ms-landing-master {background-color:#0f1d2a;background-blend-mode:luminosity}
+[data-theme=dark] .ms-root .ms-landing-master::before {content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(6,19,32,.78),transparent 20%),linear-gradient(90deg,rgba(6,19,32,.96) 0%,rgba(6,19,32,.88) 43%,rgba(6,19,32,.05) 72%);pointer-events:none}
+[data-theme=dark] .ms-root .ms-hero h1,[data-theme=dark] .ms-root .ms-public-header {color:#f4f4ef}
+[data-theme=dark] .ms-root .ms-hero-copy>p,[data-theme=dark] .ms-root .ms-truth,[data-theme=dark] .ms-root .ms-integrations>p,[data-theme=dark] .ms-root .ms-integrations>div>p {color:#c2d0dc}
+[data-theme=dark] .ms-root .ms-benefits>div {background:rgba(16,34,50,.93);border-color:#314457}
+[data-theme=dark] .ms-root .ms-benefits p {color:#eef3f7}
+@media(min-width:768px) {[data-theme=dark] .ms-root .ms-integrations>p {color:#17283f}}
+
+/* Overview: graph, statuses and the next actions occupy the same first screen as the reference. */
+.ms-root .ms-app {width:100%;max-width:1408px;margin:0 auto;background:var(--inrou-canvas);min-height:calc(100vh - 32px);border-radius:18px;overflow:hidden;border:1px solid rgba(255,255,255,.7)}
+.ms-root .ms-sidebar {width:260px;padding:18px 14px 14px;background:radial-gradient(ellipse at 85% 2%,#2a526e,transparent 46%),linear-gradient(145deg,#18324b,#102437 62%,#081726);box-shadow:none}
+.ms-root .ms-sidebar>.ms-brand {font-size:30px;padding:0 9px;margin-bottom:30px}
+.ms-root .ms-sidebar nav {gap:4px}
+.ms-root .ms-sidebar nav>a {min-height:43px;padding:9px 13px;font-size:16px;gap:14px;border-radius:11px}
+.ms-root .ms-sidebar nav>a>svg {width:19px;height:19px}
+.ms-root .ms-sidebar nav>a[aria-current=page] {box-shadow:0 5px 18px rgba(255,248,232,.24);background:linear-gradient(180deg,#fffdfa,#f5efe4)}
+.ms-root .ms-sidebar-orbit {left:-90px;bottom:20px;width:370px;height:330px;border-color:rgba(192,160,123,.4);background:linear-gradient(150deg,rgba(77,127,157,.17),transparent 60%);transform:rotate(42deg)}
+.ms-root .ms-workspace {padding:13px;font-size:14px;gap:12px}
+.ms-root .ms-workspace small {font-size:11px}
+.ms-root .ms-topbar {height:64px;padding:0 24px;gap:15px;background:var(--inrou-surface);border-color:var(--inrou-hairline)}
+.ms-root .ms-breadcrumb {display:none}
+.ms-root .ms-search-hint {margin:0 auto 0 0;max-width:44%;width:40%;height:37px;padding:0 12px;border:1px solid var(--inrou-hairline);border-radius:7px;font-size:12px;white-space:nowrap;overflow:hidden;background:var(--inrou-surface)}
+.ms-root .ms-date {font-size:13px;padding:9px 12px;background:var(--inrou-surface)}
+.ms-root .ms-source-status {display:grid;font-size:12px;padding:6px 10px;border:1px solid var(--inrou-hairline);border-radius:9px;color:var(--inrou-ink)}
+.ms-root .ms-source-status small {font-size:10px}
+.ms-root .ms-avatar {display:none}
+.ms-root .ms-demo-label {display:none}
+.ms-root .ms-app-content {padding:13px 18px 16px;max-width:none;animation:none}
+.ms-root .ms-page-heading {margin-bottom:13px;align-items:flex-start;min-height:74px;gap:10px}
+.ms-root .ms-page-heading h1 {font-size:52px;line-height:.94;letter-spacing:-2px}
+.ms-root .ms-page-heading p {font-size:16px;margin-top:5px;line-height:1.2}
+.ms-root .ms-page-heading>.ms-date-pill {display:none}
+.ms-root .ms-chart-card {position:relative;padding:9px 14px 0;box-shadow:none;border-radius:12px;background:linear-gradient(180deg,var(--inrou-surface),var(--inrou-canvas))}
+.ms-root .ms-chart-card .ms-card-head {display:block;height:0;margin:0}
+.ms-root .ms-chart-card .ms-card-head>div:first-child {display:none}
+.ms-root .ms-chart-card .ms-card-head>.ms-segment {position:absolute;right:0;top:-55px}
+.ms-root .ms-segment {padding:2px;border-radius:9px;background:var(--inrou-surface-muted)}
+.ms-root .ms-segment button {min-height:38px;padding:8px 17px;font-size:13px}
+.ms-root .ms-app-content>.ms-chart-card .ms-plot {height:230px;margin-top:0}
+.ms-root .ms-y-axis {width:39px;font-size:10px;padding:18px 0 24px}
+.ms-root .ms-x-axis {font-size:10px;padding-left:52px;line-height:18px;margin-top:-4px}
+.ms-root .ms-legend {margin:1px 0 0 38px;gap:14px;flex-wrap:nowrap}
+.ms-root .ms-legend button {font-size:11px;min-height:28px;white-space:nowrap}
+.ms-root .ms-legend .ms-table-toggle {font-size:10px}
+.ms-root .ms-chart-tooltip {top:15px;width:245px;border-radius:12px;padding:15px;box-shadow:0 12px 28px rgba(48,35,17,.13),0 1px 6px rgba(48,35,17,.03)}
+.ms-root .ms-chart-tooltip>strong {font-size:13px}
+.ms-root .ms-chart-tooltip p {font-size:12px;margin:9px 0}
+.ms-root .ms-chart-tooltip small {font-size:9px}
+.ms-root .ms-status-grid {margin-top:13px;gap:12px}
+.ms-root .ms-status-card {padding:15px 12px;gap:12px;min-height:94px;border-radius:12px;align-items:center;background:linear-gradient(120deg,var(--inrou-surface),var(--inrou-surface-muted));box-shadow:none}
+.ms-root .ms-status-card h2 {font-size:14px;line-height:1.16;font-weight:400}
+.ms-root .ms-status-card strong {font-size:25px;line-height:1.05;margin-top:2px;font-weight:400}
+.ms-root .ms-status-card p {font-size:11px;line-height:1.15;margin-top:4px}
+.ms-root .ms-status-icon {width:43px;height:43px}
+.ms-root .ms-overview-lower {margin-top:14px;gap:14px;grid-template-columns:minmax(0,1.9fr) minmax(0,1fr)}
+.ms-root .ms-recent {padding:14px 15px}
+.ms-root .ms-recent h2,.ms-root .ms-assistant h2 {font-size:18px;font-weight:400}
+.ms-root .ms-rec-row {padding:10px 9px;gap:12px;min-height:64px;margin-top:10px;background:linear-gradient(110deg,var(--inrou-surface),var(--inrou-surface-muted));border-radius:10px}
+.ms-root .ms-rec-row strong {font-size:13px;font-weight:400}
+.ms-root .ms-rec-row p {font-size:11px;margin-top:5px}
+.ms-root .ms-rec-row .ms-tag {font-size:10px;padding:7px 8px}
+.ms-root .ms-row-icon {width:34px;height:34px;border-radius:7px}
+.ms-root .ms-assistant {padding:14px;background:linear-gradient(140deg,var(--inrou-surface),var(--inrou-surface-muted))}
+.ms-root .ms-assistant-intro {margin:14px 0 11px;gap:10px}
+.ms-root .ms-assistant-intro p {font-size:13px}
+.ms-root .ms-assistant>p {font-size:12px;line-height:1.45}
+.ms-root .ms-assistant>.ms-button {margin-top:14px;min-height:38px;font-size:13px}
+.ms-root .ms-data-note {box-shadow:none;border:0;background:transparent;padding:10px 2px;margin-top:10px}
+.ms-root .ms-data-note h2 {font-size:12px}
+.ms-root .ms-data-note p {font-size:10px}
+
+/* The recommendation is a compact analytical document, not a new dashboard with a competing rail. */
+.ms-root.ms-reference-recommendation .ms-app-content {max-width:none;margin:0;padding-top:18px}
+.ms-root .ms-detail-document-heading {display:flex;align-items:flex-start;gap:10px;margin-bottom:12px}
+.ms-root .ms-detail-document-heading h2 {font:26px/1 'Times New Roman',Times,serif;letter-spacing:-.6px}
+.ms-root .ms-detail-document-heading h2 small {font:13px/1 Arial,sans-serif}
+.ms-root .ms-detail-document-heading p {font-size:12px;margin-top:5px}
+.ms-root .ms-back {font-size:12px;min-height:28px;margin:0 0 9px;gap:6px}
+.ms-root .ms-detail-heading {min-height:0;margin-bottom:10px;align-items:flex-start;position:relative}
+.ms-root .ms-detail-heading h1 {font-size:34px;line-height:1.02;letter-spacing:-1px}
+.ms-root .ms-detail-heading p {font-size:11px;line-height:1.2;margin-top:7px}
+.ms-root .ms-detail-heading>.ms-tag {margin-top:0;font-size:11px}
+.ms-root .ms-detail-grid {display:block}
+.ms-root .ms-detail-rail {display:none}
+.ms-root .ms-detail-main {padding:0;border:0;border-radius:0;box-shadow:none;background:transparent}
+.ms-root .ix-detail-tabs {padding:3px;gap:2px;background:var(--inrou-surface-muted);border:1px solid var(--inrou-hairline);border-radius:8px;margin-bottom:14px;overflow-x:auto}
+.ms-root .ix-detail-tabs>button {padding:7px 14px;min-height:35px;font-size:12px;border:0;border-radius:6px}
+.ms-root .ix-detail-tabs>button[aria-selected=true] {background:linear-gradient(#2b5272,#0c2d45);color:#fff;box-shadow:0 2px 5px rgba(10,27,46,.12)}
+.ms-root .ix-detail-panel>h2 {font-size:17px;line-height:1.2;margin:12px 0 7px;font-weight:400}
+.ms-root .ix-detail-panel>p {font-size:13px;line-height:1.3;margin:6px 0 12px}
+.ms-root .ms-cpa-card {padding:12px 15px 6px;border:1px solid var(--inrou-hairline);border-radius:10px;background:var(--inrou-surface)}
+.ms-root .ms-cpa-card .ms-card-head {align-items:center;gap:10px}
+.ms-root .ms-cpa-card .ms-card-head h2 {font-size:17px;font-weight:400}
+.ms-root .ms-cpa-card .ms-date-pill {padding:6px 10px;font-size:11px;border-radius:6px}
+.ms-root .ms-cpa-card .ms-plot {height:185px;margin-top:0}
+.ms-root .ms-cpa-card .ms-legend {margin:0 0 0 35px;min-height:20px}
+.ms-root .ms-cpa-card .ms-legend button {font-size:10px;min-height:25px}
+.ms-root .ms-check-list {font-size:13px;gap:9px;color:var(--inrou-text-muted)}
+.ms-root .ms-check-list svg {width:16px;height:16px;background:#31566b;color:white;border-radius:50%;padding:2px;margin:0}
+.ms-root .ms-detail-disclaimer {font-size:11px!important;margin:10px 0!important}
+.ms-root .ms-actionbar {position:relative;bottom:auto;margin-top:14px;padding:0;border:0;box-shadow:none;background:transparent;gap:10px}
+.ms-root .ms-actionbar>span {font-size:10px;max-width:220px}
+.ms-root .ms-actionbar>div {gap:9px}
+.ms-root .ms-actionbar .ms-button {min-height:43px;font-size:13px;padding:9px 20px}
+
+@media(min-width:1600px) {
+  .ms-root .ms-app {max-width:1408px;margin:auto}
+}
+@media(min-width:768px) and (max-width:1199px) {
+  .ms-root .ms-public-header>nav {display:flex;gap:1.5cqw}
+  .ms-root .ms-burger {display:none}
+  .ms-root .ms-sidebar {width:208px;padding:18px 9px}
+  .ms-root .ms-sidebar>.ms-brand {font-size:24px}
+  .ms-root .ms-sidebar nav>a {font-size:12px;justify-content:flex-start;gap:9px;padding:9px}
+  .ms-root .ms-sidebar>.ms-brand>span {font-size:0}
+  .ms-root .ms-workspace>span {display:block}
+  .ms-root .ms-workspace {padding:10px 7px;font-size:11px;gap:7px}
+  .ms-root .ms-topbar {padding:0 14px;gap:8px}
+  .ms-root .ms-search-hint {font-size:10px;max-width:40%}
+  .ms-root .ms-date {font-size:10px;padding:7px}
+  .ms-root .ms-source-status {font-size:10px;padding:5px}
+  .ms-root .ms-source-status small {font-size:8px}
+  .ms-root .ms-page-heading h1 {font-size:42px}
+  .ms-root .ms-page-heading p {font-size:13px}
+  .ms-root .ms-status-grid {grid-template-columns:repeat(2,1fr)}
+  .ms-root .ms-status-card {min-height:88px}
+  .ms-root .ms-overview-lower {grid-template-columns:1fr}
+  .ms-root .ms-legend {gap:10px;flex-wrap:wrap;margin-left:32px}
+  .ms-root .ms-legend button {font-size:10px}
+  .ms-root .ms-segment button {font-size:11px;padding:8px 11px}
+}
+@media(max-width:767px) {
+  .ms-root {padding:0;background:var(--inrou-canvas)}
+  .ms-root .ms-landing-master {aspect-ratio:auto;min-height:0;padding-top:70px;overflow:hidden;background:none;border-radius:0;container-type:normal}
+  .ms-root .ms-landing-master::before {display:none}
+  .ms-root .ms-public-header {position:absolute;left:16px;right:16px;top:0;height:64px;padding:0;gap:10px;background:none}
+  .ms-root .ms-public-header .ms-brand {font-size:25px}
+  .ms-root .ms-public-header .ms-brand-mark {width:17px;height:30px}
+  .ms-root .ms-public-header>nav {display:none}
+  .ms-root .ms-header-actions {margin-left:auto;gap:8px}
+  .ms-root .ms-header-actions .ms-button {height:40px;font-size:12px;padding:8px 13px;min-width:0;border-radius:9px}
+  .ms-root .ms-header-actions .ms-button:last-child {min-width:90px}
+  .ms-root .ms-header-actions svg {width:16px;height:16px}
+  .ms-root .ms-burger {display:flex}
+  .ms-root .ms-hero {display:block;padding:22px 16px 0}
+  .ms-root .ms-hero-copy {position:relative;inset:auto;pointer-events:auto}
+  .ms-root .ms-eyebrow {position:static;padding:7px 11px;font-size:10px;margin:0 0 18px;gap:6px}
+  .ms-root .ms-eyebrow svg {width:12px;height:12px}
+  .ms-root .ms-hero h1 {position:static;font-size:53px;line-height:.9;width:auto;letter-spacing:-2.7px;max-width:360px}
+  .ms-root .ms-hero h1 em {font-size:.8em;line-height:.98;margin-top:6px;letter-spacing:-2.2px;white-space:normal}
+  .ms-root .ms-hero-copy>p {position:static;font-size:14px;line-height:1.4;width:auto;margin:20px 0 0;max-width:370px}
+  .ms-root .ms-hero-copy>.ms-cta-row {position:static;display:flex;gap:9px;margin:22px 0 0;height:46px}
+  .ms-root .ms-hero .ms-button {width:auto;height:46px;font-size:12px;padding:10px 14px;min-width:0;border-radius:9px}
+  .ms-root .ms-hero .ms-primary {min-width:135px}
+  .ms-root .ms-hero .ms-button>svg {width:15px;height:15px}
+  .ms-root .ms-truth {position:static;font-size:10px;margin:12px 0 0;line-height:1.4;max-width:none}
+  .ms-root .ms-scene {position:relative;inset:auto;width:calc(100% + 32px);height:400px;margin:10px -16px 0;background:url('/reference/midnight-sapphire-scene-r2.png') 88% 33%/185% auto no-repeat;isolation:isolate}
+  [data-theme=dark] .ms-root .ms-scene {background-color:#102232;background-blend-mode:luminosity}
+  [data-theme=dark] .ms-root .ms-scene::before {content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(11,24,37,.68),rgba(11,24,37,.12) 50%,rgba(11,24,37,.75));pointer-events:none}
+  .ms-root .ms-device-overlay {display:none}
+  .ms-root .ms-floating {padding:12px 10px;gap:8px;border-radius:12px;min-height:0;background:rgba(255,253,249,.97);width:140px;animation:none}
+  .ms-root .ms-floating>span {width:30px;height:30px}
+  .ms-root .ms-floating>span svg {width:18px;height:18px}
+  .ms-root .ms-floating strong {font-size:12px;line-height:1.15}
+  .ms-root .ms-floating p {font-size:8px;line-height:1.3;margin-top:7px}
+  .ms-root .ms-signal {top:30px;left:16px}
+  .ms-root .ms-reason {top:165px;left:12px}
+  .ms-root .ms-decision {top:245px;left:auto;right:12px;width:150px}
+  .ms-root .ms-benefits {position:relative;inset:auto;max-width:none;width:auto;height:auto;margin:6px 16px 0;padding:0;grid-template-columns:1fr 1fr;gap:8px}
+  .ms-root .ms-benefits>div {padding:12px;gap:10px;border-radius:12px;background:var(--inrou-surface)}
+  .ms-root .ms-benefits>div>span {width:32px;height:32px}
+  .ms-root .ms-benefits>div>span svg {width:18px;height:18px}
+  .ms-root .ms-benefits p {font-size:11px;line-height:1.3;color:var(--inrou-ink)}
+  .ms-root .ms-integrations {position:relative;inset:auto;padding:25px 16px;gap:10px;flex-wrap:wrap}
+  .ms-root .ms-integrations>div {width:100%}
+  .ms-root .ms-integrations p {font-size:11px;margin:0 0 10px}
+  .ms-root .ms-integrations>div>div {gap:8px;flex-wrap:wrap}
+  .ms-root .ms-integrations span {font-size:11px;min-height:40px;height:auto;padding:7px 12px;border-radius:10px;gap:8px}
+  .ms-root .ms-integrations span svg {width:18px;height:18px}
+  .ms-root .ms-integrations .ms-yandex {font-size:20px}
+  .ms-root .ms-integrations a {font-size:11px;min-height:40px;gap:6px}
+  .ms-root .ms-integrations a svg {width:14px;height:14px}
+  .ms-root .ms-integrations>p {font-size:12px;margin:12px auto 0 0;color:var(--inrou-ink)}
+  .ms-root .ms-integrations>svg {width:25px;height:25px;margin-top:12px}
+  .ms-root .ms-app {min-height:100dvh;border:0;border-radius:0;display:block;overflow:visible}
+  .ms-root .ms-sidebar {display:none}
+  .ms-root .ms-section {padding-left:16px;padding-right:16px}
+  .ms-root .ms-footer {padding-left:16px;padding-right:16px}
+  .ms-root .ms-topbar {height:58px;padding:0 16px;gap:8px}
+  .ms-root .ms-breadcrumb {display:flex;flex:1;min-width:0;white-space:normal;margin-right:auto;font-size:10px;line-height:1.3}
+  .ms-root .ms-search-hint,.ms-root .ms-date {display:none}
+  .ms-root .ms-source-status {font-size:10px;border:0;padding:0}
+  .ms-root .ms-source-status small {font-size:8px}
+  .ms-root .ms-app-content {padding:22px 16px 110px}
+  .ms-root .ms-page-heading {min-height:0;margin-bottom:20px;display:block}
+  .ms-root .ms-page-heading h1 {font-size:36px;letter-spacing:-1.5px;line-height:1}
+  .ms-root .ms-page-heading p {font-size:12px;margin-top:7px;line-height:1.3}
+  .ms-root .ms-chart-card {padding:15px 10px 4px}
+  .ms-root .ms-chart-card .ms-card-head {height:48px;display:flex;justify-content:flex-start}
+  .ms-root .ms-chart-card .ms-card-head>.ms-segment {position:static;top:auto;right:auto}
+  .ms-root .ms-segment button {min-height:44px;font-size:12px;padding:8px 16px}
+  .ms-root .ms-app-content>.ms-chart-card .ms-plot {height:220px}
+  .ms-root .ms-legend {gap:0 12px;flex-wrap:wrap;margin-left:0;margin-top:5px}
+  .ms-root .ms-legend button {font-size:10px;min-height:44px;white-space:normal}
+  .ms-root .ms-y-axis,.ms-root .ms-x-axis {font-size:9px}
+  .ms-root .ms-status-grid {grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+  .ms-root .ms-status-card {padding:12px 10px;gap:8px;min-height:115px;align-items:flex-start}
+  .ms-root .ms-status-icon {width:30px;height:30px}
+  .ms-root .ms-status-card h2 {font-size:11px}
+  .ms-root .ms-status-card strong {font-size:25px;margin-top:6px}
+  .ms-root .ms-status-card p {font-size:10px;line-height:1.3}
+  .ms-root.ms-reference-overview .ms-app-content {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .ms-root.ms-reference-overview .ms-page-heading {grid-column:1/-1;order:0;margin:0 0 2px}
+  .ms-root.ms-reference-overview .ms-status-grid {display:contents}
+  .ms-root.ms-reference-overview .ms-status-card {order:1}
+  .ms-root.ms-reference-overview .ms-status-card:nth-child(n+3) {order:3}
+  .ms-root.ms-reference-overview .ms-chart-card {grid-column:1/-1;order:2}
+  .ms-root.ms-reference-overview .ms-overview-lower {grid-column:1/-1;order:4;margin-top:0}
+  .ms-root .ms-overview-lower {grid-template-columns:1fr;gap:12px}
+  .ms-root .ms-recent h2,.ms-root .ms-assistant h2 {font-size:17px}
+  .ms-root .ms-rec-row {padding:10px 9px 34px;min-height:98px}
+  .ms-root .ms-rec-row strong {font-size:12px}
+  .ms-root .ms-rec-row p {font-size:10px}
+  .ms-root .ms-rec-row .ms-tag {font-size:10px;bottom:8px;padding:4px 6px}
+  .ms-root .ms-data-note {padding:13px 0}
+  .ms-root .ms-chart-tooltip {width:250px;max-width:calc(100vw - 78px)}
+  .ms-root .ms-chart-tooltip p {font-size:10px}
+  .ms-root .ms-chart-tooltip>strong {font-size:11px}
+  .ms-root .ms-chart-tooltip small {font-size:9px}
+  .ms-root.ms-reference-recommendation .ms-app-content {max-width:none;padding:18px 16px 110px}
+  .ms-root .ms-detail-document-heading h2 {font-size:23px}
+  .ms-root .ms-detail-document-heading p {font-size:11px}
+  .ms-root .ms-detail-heading h1 {font-size:29px;line-height:1.08;letter-spacing:-.9px}
+  .ms-root .ms-detail-heading p {font-size:10px;line-height:1.3}
+  .ms-root .ms-detail-heading>.ms-tag {display:inline-flex;margin-top:10px;font-size:10px}
+  .ms-root .ix-detail-tabs {margin-top:14px;gap:1px;padding:2px}
+  .ms-root .ix-detail-tabs>button {font-size:11px;min-height:44px;padding:7px 12px}
+  .ms-root .ix-detail-panel>h2 {font-size:16px}
+  .ms-root .ix-detail-panel>p {font-size:12px;line-height:1.45}
+  .ms-root .ms-cpa-card {padding:10px 8px 4px}
+  .ms-root .ms-cpa-card .ms-card-head h2 {font-size:14px}
+  .ms-root .ms-cpa-card .ms-date-pill {font-size:9px;padding:6px}
+  .ms-root .ms-cpa-card .ms-plot {height:180px}
+  .ms-root .ms-cpa-card .ms-legend {margin-left:0;gap:0 12px}
+  .ms-root .ms-cpa-card .ms-legend button {font-size:10px;min-height:38px}
+  .ms-root .ms-check-list {font-size:12px;line-height:1.3;gap:10px}
+  .ms-root .ms-detail-disclaimer {font-size:10px!important}
+  .ms-root .ms-actionbar {position:sticky;bottom:83px;padding:10px 8px;background:var(--inrou-surface);box-shadow:0 4px 25px rgba(33,29,20,.12);border:1px solid var(--inrou-hairline);border-radius:12px}
+  .ms-root .ms-actionbar>span {max-width:none;font-size:9px}
+  .ms-root .ms-actionbar .ms-button {font-size:11px;padding:8px 5px;min-height:44px}
+  .ms-root .ms-preview-bar {padding:15px 16px 95px;gap:12px;justify-content:center}
+}
+@media(max-width:359px) {
+  .ms-root .ms-hero h1 {font-size:46px;letter-spacing:-2.5px}
+  .ms-root .ms-hero h1 em {font-size:.79em;letter-spacing:-1.8px}
+  .ms-root .ms-hero .ms-button {font-size:10px;padding:8px 11px}
+  .ms-root .ms-hero .ms-primary {min-width:117px}
+  .ms-root .ms-scene {height:350px}
+  .ms-root .ms-reason {top:145px}
+  .ms-root .ms-decision {top:220px}
+  .ms-root .ms-status-grid {grid-template-columns:1fr 1fr}
+  .ms-root .ms-status-card {padding:10px 8px;gap:6px}
+  .ms-root .ms-status-icon {width:23px;height:23px}
+  .ms-root .ms-status-icon svg {width:15px}
+  .ms-root .ms-status-card h2 {font-size:10px}
+  .ms-root .ms-status-card p {font-size:9px}
+  .ms-root .ms-status-card strong {font-size:22px}
+}
+@media(prefers-reduced-motion:reduce) {
+  .ms-root *,.ms-root *::before,.ms-root *::after {animation:none!important;transition:none!important}
+}

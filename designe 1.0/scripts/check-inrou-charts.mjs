@@ -1,0 +1,54 @@
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {mkdir,writeFile} from 'node:fs/promises';
+const require=createRequire(process.env.PLAYWRIGHT_REQUIRE_FROM||'C:/Users/woorl/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/package.json');
+const {chromium}=require('playwright'),base=process.env.BASE_URL||'http://127.0.0.1:3117',out=process.env.OUTPUT_DIR||'artifacts/inrou/premium';
+const browser=await chromium.launch({channel:'msedge',headless:true});
+const page=await browser.newPage({viewport:{width:1280,height:900},reducedMotion:'reduce'}),passed=[],errors=[];
+page.on('pageerror',error=>errors.push(error.message));
+await page.context().addCookies([{name:'inrou-consent',value:'v1:necessary',url:base}]);
+try{
+ for(const [path,selector,count] of [['/demo','.ap-chart-point',31],['/demo/changes','.ap-effect-chart rect[role=button]',6]]){
+  await page.goto(base+path,{waitUntil:'networkidle'});
+  const points=page.locator(selector),chart=points.first().locator('xpath=ancestor::*[local-name()="svg"]');
+  assert.equal(await points.count(),count);
+  assert.equal(await chart.getAttribute('role'),'group');
+  assert.equal(await points.locator('xpath=self::*[@tabindex="0"]').count(),1);
+  await points.first().focus();
+  const start=await page.evaluate(()=>scrollY);
+  await page.keyboard.press('ArrowRight');
+  assert(await points.nth(1).evaluate(e=>e===document.activeElement));
+  assert.equal(await page.evaluate(()=>scrollY),start);
+  await page.keyboard.press('End');
+  assert(await points.last().evaluate(e=>e===document.activeElement));
+  await page.keyboard.press('Home');
+  assert(await points.first().evaluate(e=>e===document.activeElement));
+  await page.keyboard.press('Space');
+  assert.equal(await page.evaluate(()=>scrollY),start);
+  assert(await page.locator('.ap-tooltip').isVisible());
+  const label=await points.first().getAttribute('aria-label');
+  assert.match(label,path==='/demo'?/CPA.*Выручка/:/выручка.*экономия/);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('.ap-tooltip').count(),0);
+  await page.keyboard.press('End');await page.keyboard.press('Tab');
+  assert.equal(await page.locator('.ap-tooltip').count(),0);
+  passed.push(path+': one Tab stop, real Arrow/Home/End focus, no scroll, metric labels, Escape and blur');
+ }
+ await page.getByLabel('Период эффекта',{exact:true}).selectOption('3');
+ assert.equal(await page.locator('.ap-tooltip').count(),0);
+ const bars=page.locator('.ap-effect-chart rect[role=button]');assert.equal(await bars.count(),3);
+ await bars.first().focus();await page.keyboard.press('End');
+ assert(await bars.last().evaluate(e=>e===document.activeElement));
+ assert.match(await bars.last().getAttribute('aria-label'),/^Март:/);
+ passed.push('Effect period shrink resets stale tooltip and keeps three navigable months');
+ await page.goto(base+'/demo/campaigns',{waitUntil:'networkidle'});
+ const all=page.getByRole('checkbox',{name:'Выбрать все видимые кампании',exact:true});
+ await page.locator('tbody input[type=checkbox]').first().check();
+ assert(await all.evaluate(e=>e.indeterminate));
+ await all.check();assert.equal(await all.evaluate(e=>e.indeterminate),false);
+ assert.equal(await page.locator('tbody input[type=checkbox]:checked').count(),await page.locator('tbody tr').count());
+ passed.push('Campaign select-all exposes mixed state then selects all visible rows');
+ assert.deepEqual(errors,[]);await mkdir(out,{recursive:true});
+ await writeFile(out+'/chart-checks.json',JSON.stringify({passed,errors,browser:browser.version()},null,2));
+ console.log('PASS',passed);
+}finally{await browser.close();}

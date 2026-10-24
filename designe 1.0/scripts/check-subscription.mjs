@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {isSubscriptionRead} from '../lib/subscription-contract.ts';
+const empty={checked_at:'2026-10-24T12:00:00+00:00',workspace_status:'active',subscription:null,access:{paid:false,analysis_allowed:false,basis:'none',paid_until:null,pilot_until:null}};
+assert(isSubscriptionRead(empty));
+const paid={...empty,subscription:{plan:'start',status:'active',price_amount:'2990.10',currency:'RUB',period_start:'2026-10-01T12:00:00+00:00',period_end:'2026-11-01T12:00:00+00:00',auto_renew:false},access:{...empty.access,paid:true,analysis_allowed:true,basis:'subscription',paid_until:'2026-11-04T12:00:00+00:00'}};
+assert(isSubscriptionRead(paid));
+for(const price_amount of [2990.10,'NaN','1e4','-1.00','0.00','1.001'])assert(!isSubscriptionRead({...paid,subscription:{...paid.subscription,price_amount}}));
+for(const status of [[],['active'],'pending'])assert(!isSubscriptionRead({...paid,subscription:{...paid.subscription,status}}));
+assert(!isSubscriptionRead({...paid,subscription:{...paid.subscription,period_end:paid.subscription.period_start}}));
+assert(!isSubscriptionRead({...paid,workspace_status:'deactivated'}));
+assert(isSubscriptionRead({...paid,workspace_status:'deactivated',access:{...paid.access,analysis_allowed:false}}));
+assert(!isSubscriptionRead({...empty,access:paid.access}));
+assert(!isSubscriptionRead({...paid,access:{...paid.access,paid_until:null}}));
+console.log('PASS subscription contract: money, enum types, dates, access consistency and no false trial');

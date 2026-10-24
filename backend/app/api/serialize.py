@@ -40,7 +40,7 @@ def action(raw: dict, meta: dict, level: str, topic: str) -> dict | None:
     форма, которую код больше не понимает (старая версия правила, повреждённая запись), не роняет весь список:
     у карточки action = null, в лог — предупреждение с id вывода вызывающего."""
     try:
-        return present_action(raw, level, topic, meta)
+        return present_action(raw, level, topic, meta, strategy='manual' if meta.get('campaign_strategy') == 'manual_bidding' else 'unknown')
     except (ValueError, KeyError, TypeError, ArithmeticError) as e:
         log.warning("action outside contract: %s (%s)", type(e).__name__, e)
         return None

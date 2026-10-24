@@ -53,10 +53,10 @@ export async function proxyAuth(request: Request, path: string): Promise<Respons
   const userAgent = request.headers.get('user-agent');
   if (userAgent) headers.set('User-Agent', userAgent.slice(0, 1024));
   // Forward only the cookies required by this account flow.
-  const sessionName = process.env.REKVERO_SESSION_COOKIE ?? process.env.ADPILOT_SESSION_COOKIE ?? 'session';
+  const sessionName = process.env.INROU_SESSION_COOKIE ?? 'session';
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(sessionName)) return failure(503);
   const selected = (request.headers.get('cookie') || '').split(';').map(c => c.trim()).filter(c =>
-    [sessionName, 'adpilot_oauth_flow'].some(name => c.startsWith(name + '=')) && /^[A-Za-z0-9_-]+=[A-Za-z0-9_.=-]{1,4096}$/.test(c));
+    [sessionName, 'inrou_oauth_flow'].some(name => c.startsWith(name + '=')) && /^[A-Za-z0-9_-]+=[A-Za-z0-9_.=-]{1,4096}$/.test(c));
   if (selected.length) headers.set('Cookie', selected.join('; '));
   if (!read) headers.set('Origin', publicOrigin);
   let body: string | undefined;

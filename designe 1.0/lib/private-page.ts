@@ -1,1 +1,1 @@
-export const isPrivatePage=(path:string)=>/^\/(workspace|login|signup|verify-email|forgot-password|reset-password)(\/|$)/.test(path);
+export const isPrivatePage=(path:string)=>/^\/(app|workspace|onboarding|login|signup|register|verify-email|forgot-password|reset-password)(\/|$)/.test(path);

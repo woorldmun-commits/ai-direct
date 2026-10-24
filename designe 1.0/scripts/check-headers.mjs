@@ -24,7 +24,7 @@ const LEGAL_PAGES = ["/legal", ...["privacy", "terms", "offer", "consents", "pd-
 const AUTH_PAGES=["/login","/signup","/verify-email","/forgot-password","/reset-password"];
 const PAGES = ["/", ...AUTH_PAGES, ...LEGAL_PAGES];
 const REDIRECTS = new Map([
-  ["/onboarding", "/workspace"], ["/prisma-preview", "/"],
+  ["/prisma-preview", "/"],
 ]);
 const STATIC_HEADERS = {
   "strict-transport-security": "max-age=63072000; includeSubDomains",
@@ -143,7 +143,7 @@ async function httpChecks(base) {
       if (!/no-store/.test(res.headers.get("cache-control") ?? "")) fail(`${url}: account HTML must not be cached`);
       if (!pageHtml.includes('Войти через Яндекс ID')) fail(`${url}: real account entry missing`);
     }
-    if (p === "/" && ["features", "how-it-works", "pricing"].some(id => !pageHtml.includes(`id="${id}"`))) fail(`${url}: reference landing sections missing`);
+    if (p === "/" && ["ms-landing-master", "ms-four-steps", "ms-pricing", "product-preview"].some(marker => !pageHtml.includes(marker))) fail(`${url}: Midnight Sapphire landing sections missing`);
     if (nonce) nonces.add(nonce);
   }
   if (nonces.size !== PAGES.length) fail(`nonces must be unique per response, got ${nonces.size} for ${PAGES.length} pages`);
@@ -163,6 +163,11 @@ async function httpChecks(base) {
   const anonymous = await fetch(base + "/workspace", { redirect: "manual" });
   if (anonymous.status !== 307 || new URL(anonymous.headers.get('location') || '/invalid', base).pathname !== '/login') fail('/workspace: anonymous visitor must redirect to /login before streaming');
   if (!/no-store/.test(anonymous.headers.get("cache-control") ?? "")) fail("/workspace: anonymous response must not be cached");
+  for (const route of ['/onboarding', '/onboarding/organization']) {
+    const anonymousOnboarding = await fetch(base + route, { redirect: "manual" });
+    if (anonymousOnboarding.status !== 307 || new URL(anonymousOnboarding.headers.get('location') || '/invalid', base).pathname !== '/login') fail(`${route}: anonymous visitor must redirect to /login`);
+    if (!/no-store/.test(anonymousOnboarding.headers.get("cache-control") ?? "")) fail(`${route}: anonymous response must not be cached`);
+  }
   const forged = await fetch(base + "/api/auth/logout", { method: "POST", headers: { Origin: "https://untrusted.example" }, redirect: "manual" });
   if (forged.status !== 403 || forged.headers.get("cache-control") !== "no-store") fail("auth: foreign-origin POST must fail closed without caching");
 
@@ -172,7 +177,8 @@ async function httpChecks(base) {
   }
   const html = await (await fetch(base + "/")).text();
   if (/href=["']\/demo(?:[\/"'?#])/.test(html) || html.includes('mc-demo-window')) fail('/: demo links or interactive demo remain');
-  if (!html.includes('adpilot-laptop.png')) fail('/: retained product illustration is missing');
+  if (!html.includes('ms-device-overlay')) fail('/: product preview in the hero is missing');
+  if (/telegram/i.test(html)) fail('/: Telegram must not appear on the public site');
   const asset = /\/_next\/static\/[^"']+\.js/.exec(html)?.[0];
   if (!asset) fail("/: no /_next/static script found");
   else checkStatic(asset, (await fetch(base + asset)).headers);
@@ -180,6 +186,7 @@ async function httpChecks(base) {
 
 function loadPlaywright() {
   const require = createRequire(path.join(ROOT, "package.json"));
+  if (process.env.PLAYWRIGHT_MODULE) return require(process.env.PLAYWRIGHT_MODULE);
   for (const name of ["playwright", "playwright-core"]) {
     try {
       return require(name);
@@ -213,7 +220,7 @@ async function browserChecks(base) {
       // Saved dark theme: proves the nonced inline theme script in <head> ran.
       await ctx.addInitScript(() => {
         try {
-          localStorage.setItem("adpilot-theme", "dark");
+          localStorage.setItem("inrou-theme", "dark");
         } catch {}
         window.__csp = [];
         document.addEventListener("securitypolicyviolation", (e) => window.__csp.push(`${e.violatedDirective} ${e.blockedURI}`));

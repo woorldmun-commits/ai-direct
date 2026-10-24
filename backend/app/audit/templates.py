@@ -24,6 +24,8 @@ def _rub(x: Decimal) -> str:
 def _bid_advice(f: Finding, d: Decision) -> str:
     change = abs(f.action["change_pct"])
     if d.level == "inspect_only":
+        if d.version == 'safety_policy@2' and any(reason.startswith('strategy_') for reason in d.reasons):
+            return 'Изменение ставки не предлагается: стратегия неизвестна или несовместима с этим действием. Проверьте стратегию, цели и достаточность данных.'
         conv = f.evidence["conversions"].amount
         return (f"Конверсий за период пока мало ({_rub(conv)}) для безопасного изменения ставки — продолжаем "
                 "наблюдать. Проверьте, какие запросы и площадки дают расход без заявок.")

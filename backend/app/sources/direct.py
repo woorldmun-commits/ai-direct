@@ -4,6 +4,7 @@
 Реализации: DirectFixture (тесты, разработка) и DirectApi (Reports API v501, api или sandbox)."""
 
 import re
+import json
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -118,6 +119,11 @@ class DirectFixture:
     def __init__(self, root: Path):
         self.root = root
 
+    def fetch_campaign_strategies(self, login, campaign_ids):
+        path = self._account(login) / 'campaign_strategies.json'
+        data = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
+        return {str(cid): data[str(cid)] for cid in campaign_ids if str(cid) in data}
+
     def _account(self, login: str) -> Path:
         if (self.root / "connection_error").exists():
             raise ConnectionUnavailable((self.root / "connection_error").read_text(encoding="utf-8").strip())
@@ -225,6 +231,15 @@ class DirectApi:
         if r.status_code in (201, 202):  # поставлен в очередь / ещё строится — повторить с теми же параметрами
             raise RetryLater(int(r.headers.get("retryIn") or DEFAULT_RETRY_IN), "report_not_ready")
         raise_for_direct_error(r, login)
+
+    def fetch_campaign_strategies(self, login, campaign_ids):
+        from app.sources.campaigns import get_campaign_contexts
+        out = {}
+        for offset in range(0, len(campaign_ids), 100):
+            contexts = get_campaign_contexts(self.http, self.access_token, login,
+                                            campaign_ids[offset:offset+100], env=self.env)
+            out.update({str(cid): context.strategy.value for cid, context in contexts.items()})
+        return out
 
     def check_access(self, login: str) -> None:
         """Лёгкий авторизованный запрос: одна кампания, только Id."""

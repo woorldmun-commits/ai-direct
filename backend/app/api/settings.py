@@ -49,6 +49,8 @@ class Settings:
     oauth_direct: OAuthApp | None = field(default=None, repr=False)
     token_keys: KeyProvider | None = field(default=None, repr=False)
     proxy_hmac_key: str = field(default='', repr=False)
+    intelligence_enabled: bool = False
+    intelligence_real_data_approved: bool = False
 
     def __post_init__(self):
         if self.proxy_hmac_key and len(self.proxy_hmac_key) < 32:
@@ -68,7 +70,7 @@ class Settings:
         if self.max_body_bytes <= 0:
             raise SettingsError("API_MAX_BODY_BYTES: нужно положительное число")
         if self.email_auth and self.email_auth.origin not in self.allowed_origins:
-            raise SettingsError('REKVERO_EMAIL_ORIGIN must be an API_ALLOWED_ORIGINS member')
+            raise SettingsError('INROU_EMAIL_ORIGIN must be an API_ALLOWED_ORIGINS member')
         if self.oauth_login:
             uri = urlsplit(self.oauth_login.redirect_uri)
             origin = f"{uri.scheme}://{uri.netloc}".lower()
@@ -98,6 +100,8 @@ class Settings:
             keys = EnvKeys(env)
         return cls(
             proxy_hmac_key=env.get('API_PROXY_HMAC_KEY',''),
+            intelligence_enabled=_flag(env.get('INROU_INTELLIGENCE_ENABLED')),
+            intelligence_real_data_approved=_flag(env.get('INROU_INTELLIGENCE_REAL_DATA_APPROVED')),
             oauth_direct=direct, token_keys=keys,
             database_url=env.get("API_DATABASE_URL", ""),
             allowed_origins=origins,

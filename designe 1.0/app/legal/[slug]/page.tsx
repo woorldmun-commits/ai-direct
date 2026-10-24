@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Footer } from "@/components/landing/bottom";
-import { Logo } from "@/components/ui";
+import { PublicFrame } from "@/components/ix/public/chrome";
 import { LEGAL_DOCS } from "@/lib/site";
 import { legalDocument, LEGAL_KEYS } from "@/lib/legal-document";
 
@@ -27,21 +26,17 @@ export default async function LegalPage({ params }: PageProps<"/legal/[slug]">) 
   const published = key ? await legalDocument(key) : null;
 
   return (
-    <>
-      <header className="mx-auto max-w-[860px] px-4 py-6">
-        <Link href="/" aria-label="На главную">
-          <Logo />
-        </Link>
-      </header>
-      <main className="mx-auto max-w-[860px] px-4 pb-20">
-        <h1 className="text-[32px] leading-tight font-bold tracking-tight">{doc.title}</h1>
-        <div className="card mt-6 p-6">
+    <PublicFrame>
+      <article className="ix-legal">
+        <div className="ix-eyebrow">INROU / Документы</div>
+        <h1>{doc.title}</h1>
+        <div className="ix-card" style={{marginTop: 24}}>
           {published?.approved ? <>
             <p className="font-semibold">Утверждён · редакция {published.version} · {published.locale}</p>
-            <pre className="mt-5 whitespace-pre-wrap break-words font-sans text-sm leading-7">{published.text}</pre>
-            <p className="mt-6 break-all text-xs text-muted">SHA256: {published.sha256}</p>
+            <pre className="ix-legal-text">{published.text}</pre>
+            <p className="ix-muted ix-mini" style={{overflowWrap: 'anywhere'}}>SHA256: {published.sha256}</p>
           </> : <><p className="font-semibold">Документ не утверждён или временно недоступен.</p>
-          <p className="mt-2 text-sm text-muted">
+          <p className="ix-muted">
             {slug === "requisites"
               ? "Данные оператора и исполнителя ещё не подтверждены. Реквизиты будут размещены после проверки владельцем и юристом."
               : "Действующий юридический текст пока не опубликован. После утверждения здесь будут размещены точный текст, версия и контрольная сумма документа."}
@@ -49,8 +44,7 @@ export default async function LegalPage({ params }: PageProps<"/legal/[slug]">) 
           </>}
           <Link href="/legal" className="mt-4 inline-block text-sm underline underline-offset-2">Правовая информация</Link>
         </div>
-      </main>
-      <Footer />
-    </>
+      </article>
+    </PublicFrame>
   );
 }

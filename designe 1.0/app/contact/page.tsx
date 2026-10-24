@@ -1,3 +1,3 @@
-import {PublicSectionPage} from '@/components/reference/landing';
+import {PublicPage} from '@/components/ix/public/pages';
 export const metadata={title:'Контакты'};
-export default function Page(){return <PublicSectionPage section="contact"/>;}
+export default function Page(){return <PublicPage page="contact"/>;}

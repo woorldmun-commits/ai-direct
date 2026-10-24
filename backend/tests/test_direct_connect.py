@@ -87,9 +87,11 @@ def test_start_checks_session_role_origin_access_and_goal_pair(pilot, db, rw, mo
     rw.execute("SELECT set_organization_member(%s,%s,%s,'member')",(owner,org,viewer))
     rw.execute("SELECT set_workspace_member(%s,%s,%s,'viewer')",(owner,ws,viewer))
     original=client.cookies.get("session")
-    client.cookies.clear();client.cookies.set("session",session(rw,viewer))
+    client.cookies.clear()
+    client.cookies.set("session",session(rw,viewer))
     assert begin(client,ws).status_code==403
-    client.cookies.clear();client.cookies.set("session",original)
+    client.cookies.clear()
+    client.cookies.set("session",original)
     monkeypatch.delenv("PILOT_WORKSPACE_IDS")
     assert begin(client,ws).status_code==403
     client.cookies.clear()
@@ -108,7 +110,8 @@ def test_callback_state_and_actor_are_bound_before_network(pilot, monkeypatch, r
     r=begin(client,ws)
     state=parse_qs(urlsplit(r.json()["authorize_url"]).query)["state"][0]
     flow=client.cookies.get(direct_connect.FLOW_COOKIE)
-    client.cookies.clear();client.cookies.set(direct_connect.FLOW_COOKIE,flow)
+    client.cookies.clear()
+    client.cookies.set(direct_connect.FLOW_COOKIE,flow)
     client.cookies.set("session",session(rw,user(rw)))
     assert "direct=failed" in finish(client,state).headers["location"]
     assert calls==[]
@@ -175,3 +178,25 @@ def test_worker_rejects_api_role(db):
     with db("app_rw") as conn:
         with pytest.raises(RuntimeError):
             runner.verify_role(conn,"app_token")
+
+
+def test_daily_runner_refresh_is_idempotent_and_requires_access(pilot,db,rw,monkeypatch):
+    client,ws,_=pilot
+    fake_yandex(monkeypatch)
+    response=begin(client,ws)
+    state=parse_qs(urlsplit(response.json()['authorize_url']).query)['state'][0]
+    assert 'direct=connected' in finish(client,state).headers['location']
+    run_id,account=rw.execute('SELECT id,direct_account_id FROM sync_runs WHERE workspace_id=%s',(ws,)).fetchone()
+    now=datetime.now(timezone.utc)
+    cutoff=now.astimezone(runner.DATA_TIMEZONE).date()-timedelta(days=1)
+    rw.execute("UPDATE sync_runs SET status='failed',started_at=now(),finished_at=now(),error_code='synthetic_failure',period_to=%s WHERE id=%s",(cutoff-timedelta(days=1),run_id))
+    with db('app_system') as queue,db('app_token') as worker:
+        runner.schedule_syncs(queue,worker,now)
+        runner.schedule_syncs(queue,worker,now)
+    assert one(rw,'SELECT count(*) FROM sync_runs WHERE workspace_id=%s AND period_to=%s',ws,cutoff)==1
+    pending=one(rw,"SELECT id FROM sync_runs WHERE workspace_id=%s AND status='queued'",ws)
+    rw.execute("UPDATE sync_runs SET status='failed',started_at=now(),finished_at=now(),error_code='synthetic_failure' WHERE id=%s",(pending,))
+    monkeypatch.setenv('PILOT_ACCESS_UNTIL',now.isoformat())
+    with db('app_system') as queue,db('app_token') as worker:
+        runner.schedule_syncs(queue,worker,now+timedelta(days=1))
+    assert one(rw,'SELECT count(*) FROM sync_runs WHERE workspace_id=%s',ws)==2

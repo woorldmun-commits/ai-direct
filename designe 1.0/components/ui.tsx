@@ -7,7 +7,7 @@ export function Logo({ light = false, size = 28 }: { light?: boolean; size?: num
   return (
     <span className="inline-flex items-center gap-2 font-bold tracking-tight" style={{ fontSize: size * 0.68 }}>
       <BrandMark size={size}/>
-      <span className={light ? "text-white" : "text-text"}>Rekvero</span>
+      <span className={light ? "text-white" : "text-text"}>inrou</span>
     </span>
   );
 }

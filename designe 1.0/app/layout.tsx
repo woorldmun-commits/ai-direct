@@ -8,19 +8,21 @@ import "./palette.css";
 import "./fonts.css";
 import "./inter.css";
 import "./responsive.css";
-import "@/components/reference/midnight.css";
-import "@/components/reference/launch-reference.css";
+import "@/components/midnight/compat.css";
+import "@/components/midnight/midnight.css";
+import "@/components/midnight/reference.css";
+import "@/components/midnight/site.css";
 
 const TITLE = "inrou — контроль кабинетов Яндекс Директа для агентств и директологов";
 const DESCRIPTION =
-  "inrou — аналитика Яндекс Директа и Метрики для директологов и агентств. Поймите, куда уходит рекламный бюджет: расходы, CPA и рекомендации с основаниями. Подписка от 1 990 ₽ в месяц.";
+  "inrou — аналитика Яндекс Директа и Метрики для директологов и агентств. Поймите, куда уходит рекламный бюджет: расходы, CPA и рекомендации с основаниями. Планируемая подписка от 2 990 ₽ в месяц.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: { default: TITLE, template: "%s — inrou" },
   description: DESCRIPTION,
   applicationName: "inrou",
-  robots: { index: PUBLIC_SITE_CONFIGURED, follow: PUBLIC_SITE_CONFIGURED },
+  robots: { index: PUBLIC_SITE_CONFIGURED && process.env.INROU_STAGING !== '1', follow: PUBLIC_SITE_CONFIGURED && process.env.INROU_STAGING !== '1' },
   ...(process.env.NEXT_PUBLIC_YANDEX_VERIFICATION && {
     verification: { yandex: process.env.NEXT_PUBLIC_YANDEX_VERIFICATION },
   }),

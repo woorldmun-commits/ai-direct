@@ -13,7 +13,7 @@ export async function proxyDirect(request:Request, workspace?:string):Promise<Re
  const base=apiOrigin(), origin=appOrigin(request);
  if(!base||!origin)return fail(503);
  if(request.method==='POST'&&request.headers.get('origin')!==origin)return fail(403);
- const name=process.env.REKVERO_SESSION_COOKIE||process.env.ADPILOT_SESSION_COOKIE||'session';
+ const name=process.env.INROU_SESSION_COOKIE||'session';
  if(!/^[A-Za-z0-9_-]{1,64}$/.test(name))return fail(503);
  const cookies=(request.headers.get('cookie')||'').split(';').map(c=>c.trim()).filter(c=>
    (c.startsWith(name+'=')||callback&&c.startsWith('inrou_direct_flow='))&&/^[A-Za-z0-9_-]+=[A-Za-z0-9_.=-]{1,8192}$/.test(c));

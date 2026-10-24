@@ -133,6 +133,7 @@ def ws(rw, chain, root, metrika):
     login = one(rw, """SELECT c.yandex_login FROM direct_accounts a JOIN direct_connections c
                        ON c.id = a.direct_connection_id WHERE a.id = %s""", chain["account"])
     root(login)
+    (root.path / login / 'campaign_strategies.json').write_text('{"12345":"manual_bidding"}', encoding='utf-8')
     metrika()
     return {**chain, "counter": counter, "login": login, "root": root, "metrika": metrika}
 

@@ -98,7 +98,7 @@ def parse(text: str, today: date) -> list[Lead]:
 
 
 def store(conn, ws: int, rows: list[Lead], text: str, frm: date | None, to: date | None,
-          complete: bool) -> dict:
+          complete: bool, *, preview: bool = False) -> dict:
     # Serializes imports and plan writes with deletion; monotonic status updates cannot race.
     conn.execute('SELECT pg_advisory_xact_lock(%s)', (ws,))
     accounts = {r[0] for r in conn.execute('''SELECT a.id FROM direct_accounts a
@@ -118,6 +118,12 @@ def store(conn, ws: int, rows: list[Lead], text: str, frm: date | None, to: date
         current = (r.updated_on, r.status, r.amount, r.refund_amount)
         if old and (old[:4] != expected or old[4] > r.updated_on or (old[4] == r.updated_on and old[4:] != current)):
             raise InvalidImport('conflicting_or_stale_update')
+    if preview:
+        return {'status': 'preview', 'accepted_rows': len(rows),
+                'counts': {status: sum(r.status == status for r in rows) for status in sorted(STATUSES)},
+                'cohort_complete_declared': complete,
+                'missing_acquisition_dates': sum(r.acquired_on is None for r in rows)}
+    for r in rows:
         conn.execute('''INSERT INTO workspace_leads (workspace_id,external_id,created_on,acquired_on,updated_on,
                        direct_account_id,campaign_id,status,amount,refund_amount)
                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (workspace_id,external_id)
