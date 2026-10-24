@@ -8,6 +8,7 @@ import {readTheme, type ThemePreference} from '@/lib/theme';
 import {NAV, CONTEXT_NAV} from './nav';
 import {cycleTheme} from './theme';
 import {useDialog} from './use-dialog';
+import {Info, Gap} from './ui';
 
 export type IxMode = 'live' | 'demo';
 type Workspace = {id: string; name: string};
@@ -78,7 +79,7 @@ export function IxShell({base, mode, workspace, workspaces = [], periodLabel, ch
             </details> : <span className="ix-pill">Александра ▾</span>}
           </div>
         </div>
-        <SearchContext.Provider value={query.trim().toLowerCase()}><div className="ix-page" key={pathname}>{children}<nav className="ix-context-links" aria-label="Инструменты рабочего пространства">{(mode === 'live' ? [['overview','Обзор'],['decisions','Центр решений'],['agency','Клиенты'],['data-catalog','Показатели'],['business-profile','Бизнес-профиль'],['help','Помощь']] : [['overview','Обзор'],['business-profile','Бизнес-профиль']]).map(([slug,label]) => <Link key={slug} className="ix-pill" href={href(slug)}>{label}</Link>)}</nav></div></SearchContext.Provider>
+        <SearchContext.Provider value={query.trim().toLowerCase()}><div className="ix-page" key={pathname}>{mode==='demo'&&<><Info>Демо-кабинет · синтетические данные. Это пример интерфейса, не данные вашего Директа.</Info><Gap h={12}/></>}{children}<nav className="ix-context-links" aria-label="Инструменты рабочего пространства">{(mode === 'live' ? [['overview','Обзор'],['decisions','Центр решений'],['agency','Клиенты'],['data-catalog','Показатели'],['business-profile','Бизнес-профиль'],['help','Помощь']] : [['overview','Обзор'],['business-profile','Бизнес-профиль']]).map(([slug,label]) => <Link key={slug} className="ix-pill" href={href(slug)}>{label}</Link>)}</nav></div></SearchContext.Provider>
       </main>
     </div>
     <nav className="ix-mobilebottom" aria-label="Быстрая навигация" inert={open}>
