@@ -4,7 +4,9 @@ COPY ["designe 1.0/package.json", "designe 1.0/package-lock.json", "./"]
 RUN npm ci
 COPY ["designe 1.0/", "./"]
 ARG NEXT_PUBLIC_SITE_URL
+ARG INROU_STAGING=0
 ENV NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
+ENV INROU_STAGING=${INROU_STAGING} NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 FROM node:22-bookworm-slim
