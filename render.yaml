@@ -12,6 +12,12 @@ services:
         value: "10000"
       - key: NODE_ENV
         value: production
+      - key: INROU_STAGING
+        value: "1"
+      - key: INROU_DEMO
+        value: "1"
+      - key: INROU_INTELLIGENCE_ENABLED
+        value: "1"
       - key: NEXT_PUBLIC_SITE_URL
         value: https://inrou-pilot.onrender.com
       - key: YANDEX_LOGIN_ENABLED
