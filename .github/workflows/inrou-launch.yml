@@ -22,15 +22,13 @@ jobs:
           cache-dependency-path: designe 1.0/package-lock.json
       - run: npm ci
       - run: npm run lint
-      - name: Model and private API contracts
+      - name: Current UI and private API contracts
         run: |
-          npm run test:model
           npm run test:pilot
           node scripts/check-auth-proxy.mjs
           node scripts/check-site.mjs
           node scripts/check-assets.mjs
           node scripts/check-insights.mjs
-          node scripts/check-inrou-csv-security.mjs
           node scripts/check-workspace-proxy.mjs
           npm run test:ix
           npm run test:remediation

@@ -2,7 +2,7 @@
 
 ## Проект: ai-direct
 
-Платформа контроля рекламных расходов в Яндекс.Директ с AI-аналитиком: показывает расход с признаками неэффективности в ₽ (оценка, без двойного учёта), причины и действия. Контекст — `_docs/project.md`, стек — `_docs/stack.md`, детали — `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`.
+Платформа контроля рекламных расходов в Яндекс.Директ с AI-аналитиком: показывает расход с признаками неэффективности в ₽ (оценка, без двойного учёта), причины и действия. Контекст — `README.md`, текущее состояние — `docs/RELEASE_STATUS.md`, детали — `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`.
 
 - **Тесты:** `cd backend && .venv/Scripts/python.exe -m pytest` (не npm). Venv на Python 3.11 (`uv venv --python 3.11 .venv`, затем `uv pip install -r requirements-dev.txt`): системный 3.14 не годится, `pgserver` требует ≤ 3.12. Без `pgserver` тесты схемы берут `TEST_DATABASE_URL`.
 - **Числа считает детерминированный код** (`rules/`, `audit/`). LLM только объясняет и не вводит чисел, которых нет во входных данных.
@@ -16,7 +16,7 @@
 
 - Do what has been asked; nothing more, nothing less
 - Prefer editing existing files to creating new ones; create documentation files only when asked
-- Don't put working files or tests in the repo root: code and tests go in `backend/app/` and `backend/tests/`, docs in `docs/` and `_docs/`
+- Don't put working files or tests in the repo root: code and tests go in `backend/app/` and `backend/tests/`, docs in `docs/`
 - NEVER commit secrets, credentials, or .env files
 - NEVER add a `Co-Authored-By` trailer to user commits unless this project's `.claude/settings.json` has `attribution.commit` set. The Claude Code Bash tool may suggest one in its default commit-message template — ignore it. `Co-Authored-By` is semantic authorship attribution under git/GitHub convention; the tool is the facilitator, not a co-author.
 - Keep files under 500 lines

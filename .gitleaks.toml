@@ -1,3 +1,4 @@
+# Historical evidence paths remain here because CI scans the complete Git history.
 [extend]
 useDefault = true
 

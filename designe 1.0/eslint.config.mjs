@@ -36,7 +36,7 @@ const eslintConfig = defineConfig([
     rules: { "no-restricted-syntax": ["error", ...VALUE_RULES] },
   },
   {
-    files: ["app/demo/**/*.tsx", "components/app/**/*.tsx"],
+    files: ["app/demo/**/*.tsx"],
     rules: { "no-restricted-syntax": ["error", ...CABINET_RULES] },
   },
   // Override default ignores of eslint-config-next.

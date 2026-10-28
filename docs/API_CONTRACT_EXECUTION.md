@@ -1,7 +1,7 @@
 # API-контракт исполнения — v1.1 (Deferred to v1.1 — не реализуется и не обещается в v1.0)
 
 > **Статус: Deferred to v1.1.** Всё в этом файле — спроектированная, но отложенная модель записи в рекламные кабинеты.
-> В v1.0 Rekvero не изменяет рекламные кабинеты; контракт v1.0 — [API_CONTRACT.md](API_CONTRACT.md). Решения
+> В v1.0 INROU не изменяет рекламные кабинеты; контракт v1.0 — [API_CONTRACT.md](API_CONTRACT.md). Решения
 > D5–D8 (риск, кворум, capability, предусловие, откат) не отменены: они перенесены сюда и в
 > [EXECUTION_SAFETY.md](EXECUTION_SAFETY.md) как дизайн v1.1 (решение владельца 2026-10-02, [STRATEGY.md](STRATEGY.md),
 > [VERSION_SCOPE.md](VERSION_SCOPE.md)). Первые действия v1.1 — 1–2 обратимых действия низкого/среднего риска.
@@ -54,7 +54,7 @@ new ──▶ requires_decision ──(кворум approve)──▶ approved �
 
 | Сценарий `status = applied` | `execution_mode` | `execution_status` | `verification_status` |
 |---|---|---|---|
-| Применено через API | `api` | `succeeded` | `confirmed` (Rekvero перечитал объект после изменения) |
+| Применено через API | `api` | `succeeded` | `confirmed` (INROU перечитал объект после изменения) |
 | Выполнено вручную (v1.0) | `manual` | `claimed_manual` | `pending` / `confirmed` / `not_confirmed` |
 | «Проверил» (v1.0) | `none` | `not_started` | `not_required` |
 
@@ -90,7 +90,7 @@ capability, `write_access`, уже данных одобрений и лимит
 |---|---|
 | `data_partial` | «Данные за последние дни ещё уточняются — применить через API пока нельзя. Можно проверить или выполнить вручную» |
 | `write_access_missing` | «Нет прав на изменение рекламного кабинета — выполните вручную или выдайте доступ» |
-| `capability_unsupported` | «Rekvero не умеет безопасно применить это изменение для такой кампании — выполните вручную» |
+| `capability_unsupported` | «INROU не умеет безопасно применить это изменение для такой кампании — выполните вручную» |
 | `level_not_change` | «Рекомендация требует проверки — автоматическое применение недоступно» |
 | `second_approval_required` | «Нужно второе одобрение: критичное изменение» (по умолчанию два одобрения — только `critical`) |
 | `same_approver` | «Второе одобрение должен дать другой участник» |

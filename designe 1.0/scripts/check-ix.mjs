@@ -24,7 +24,7 @@ for (const file of sources) assert(!/telegram/i.test(read(file)), `Telegram must
 // Рабочий кабинет не импортирует синтетические фикстуры демо.
 for (const file of [...walk('components/ix/live'), 'lib/ix-live.ts', 'components/ix/onboarding.tsx']) assert(!/demo-data|demo-store/.test(read(file)), `live code imports demo fixtures: ${file}`);
 // The new master includes marketing KPI examples; they must remain visibly synthetic.
-assert(read('components/midnight/preview.tsx').includes('Иллюстрация интерфейса · синтетические данные'), 'public KPI disclaimer');
+assert(read('components/midnight/home.tsx').includes('Демо · пример данных'), 'public KPI disclaimer');
 assert(read('components/midnight/preview.tsx').includes('Показатели синтетические'), 'decorative device disclaimer');
 
 // Все 12 корневых и 2 контекстных раздела есть и в живом маршрутизаторе, и в демо.

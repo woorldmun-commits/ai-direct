@@ -1,11 +1,9 @@
-# Rekvero public site
+# Текущий интерфейс INROU
 
-Scope: the public `/` landing page. Product workspace routes retain their existing design. Mode: persuade. Positioning: a calm workspace for decisions in advertising.
+Активная реализация находится в `designe 1.0`: публичные страницы, демо и рабочий кабинет используют `components/ix`; публичная главная использует также `components/midnight/home.tsx` и общие элементы из `preview.tsx`.
 
-An ivory ground, graphite typography and restrained emerald accents create a bright, focused environment. Manrope is the existing display and body face; IBM Plex Mono is reserved for formulas and measured data. Large centered headlines lead to a legible preview of the actual demo contracts. Editorial feature rows, a sequential workflow and a transparent calculation provide distinct density and rhythm below the hero.
+Токены и стили: `components/ix/ix.css`, `components/ix/public/public.css`, `components/midnight/site.css` и общие CSS-импорты `app/layout.tsx`. Формы регистрации и входа: `components/reference/auth.tsx` и `email-form.tsx`. Сохраняемые стили midnight/reference используются текущими маршрутами.
 
-Liquid Glass belongs to floating navigation and the product preview frame: translucent surfaces, optical highlights and backdrop blur reveal the surfaces underneath. It does not replace legible content surfaces. Core content works when backdrop filtering is unavailable.
+Шрифты поставляются локально из `public/fonts` с лицензиями. Демо синтетическое; настоящий кабинет использует серверные контракты и честные состояния отсутствующих/неполных данных. Проверки адаптивности, фокуса, reduced motion и CSP остаются частью QA.
 
-Motion introduces the hero and preview once, with transform/opacity and the existing ease-out token. Hover motion is restricted to precise pointers. Reduced-motion preferences remove animation and smooth scrolling. Focus, mobile wrapping, native FAQ disclosure and the budget range control remain accessible.
-
-Implementation: `frontend/components/landing/premium.css` scopes the replacement world to `.premium-site`. The page composes existing landing modules and preserves product data components. Prices and legal identity placeholders are excluded from the marketing surface; early-access terms remain explicit.
+Прежние самостоятельные версии сайта удалены. Адреса старого Midnight preview перенаправляют на актуальные страницы. Этот документ описывает исходники и не заявляет нового художественного или Figma-утверждения.
