@@ -4,17 +4,20 @@ GET /health · GET /me · GET /workspaces/{ws}/recommendations · GET /workspace
 Всё, что относится к workspace, читается только через CurrentWorkspace (вход в RLS-контекст)."""
 
 from typing import Annotated
+from datetime import datetime, timezone
 
 import psycopg
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.billing.catalog import account_limit, selected_accounts
 from app.api.deps import Conn, CurrentActor, CurrentWorkspace, require_manager
 from app.api.errors import not_found
 from app.api.active import active_cards, today_msk, with_exposure
 from app.api.serialize import ext, recommendation_item
 from app.tenancy import set_local_workspace
+from app.worker.guard import RENEWAL_GRACE, load_state
 
 router = APIRouter()
 
@@ -110,4 +113,33 @@ def members(conn: Conn, ws: CurrentWorkspace):
     return {"items": [{"user": {"id": ext("u", user_id), "email": email}, "org_role": org_role,
                        "ws_role": None if org_role in ("owner", "admin") else ws_role}
                       for user_id, email, org_role, ws_role in rows]}
+
+
+@router.get("/workspaces/{workspace_id}/subscription")
+def subscription(conn: Conn, ws: CurrentWorkspace):
+    """Financial details for managers; the worker state remains the access authority."""
+    require_manager(ws)
+    now = datetime.now(timezone.utc)
+    state = load_state(conn, ws.id, None, now)
+    if state.workspace_status is None:
+        raise not_found()
+    pilot = state.pilot_until is not None and now < state.pilot_until
+    paid_until = None
+    if state.paid:
+        paid_until = state.subscription_period_end
+        if state.subscription_status in ('active', 'past_due'):
+            paid_until += RENEWAL_GRACE
+    return {'checked_at': now, 'workspace_status': state.workspace_status,
+            'trial': None if state.trial_started_at is None else {
+                'started_at': state.trial_started_at, 'ends_at': state.trial_ends_at, 'active': state.trial_active},
+            'limits': {'unit': 'workspace', 'accounts': account_limit(state),
+                       'accounts_used': selected_accounts(conn, ws.id)},
+            'subscription': None if state.subscription_status is None else {
+                'plan': state.subscription_plan, 'status': state.subscription_status,
+                'price_amount': format(state.subscription_price, '.2f'), 'currency': 'RUB',
+                'period_start': state.subscription_period_start, 'period_end': state.subscription_period_end,
+                'auto_renew': state.subscription_auto_renew},
+            'access': {'paid': state.paid, 'analysis_allowed': state.workspace_status == 'active' and state.has_analysis_access,
+                       'basis': 'subscription' if state.paid else 'pilot' if pilot else 'trial' if state.trial_active else 'none',
+                       'paid_until': paid_until, 'pilot_until': state.pilot_until if pilot else None}}
 

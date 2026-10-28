@@ -34,7 +34,7 @@ export function RecommendationsScreen({
     <>
       <PageHeader
         title="Рекомендации"
-        sub="Rekvero не меняет кабинет. Вы принимаете решение и вносите изменение в Яндекс Директе вручную, а Rekvero сверяет его по данным Директа и измеряет эффект."
+        sub="inrou не меняет кабинет. Вы принимаете решение и вносите изменение в Яндекс Директе вручную, а inrou сверяет его по данным Директа и измеряет эффект."
       />
       <DemoStateSwitch current={state} path="/demo/recommendations" />
       {selection && (

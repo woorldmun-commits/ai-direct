@@ -57,6 +57,8 @@ def _totals(days: list[CampaignDay], window: Window) -> tuple[Decimal, int, Deci
 
 
 def _baseline_cpa(days: list[CampaignDay], baseline: Window, prefix: str, p) -> tuple[Decimal, dict] | None:
+    if any(d.conversions is None for d in days if d.date in baseline):
+        return None
     cost, _, conv = _totals(days, baseline)
     if conv < p["baseline_min_conversions"]:
         return None

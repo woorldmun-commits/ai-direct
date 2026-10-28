@@ -9,6 +9,7 @@ from app.api.settings import SettingsError
 from app.auth.email_config import EmailAuthConfig
 from app.auth.email_password import normalize_email,password_hash,password_matches
 from app.legal.documents import text_sha256
+from app.worker.auth_mail_runner import process_one
 from test_api_support import settings,client_for,ORIGIN,user  # noqa: F401
 
 PASSWORD='Synthetic password 174!'
@@ -25,6 +26,12 @@ def browser(db):
     with client_for(app) as client:
         client.mail=mail
         client.email=f'person{next(COUNTER)}@example.test'
+        def drain():
+            with db('app_system') as conn:
+                for _ in range(25):
+                    if not process_one(conn, config, sender=app.state.email_sender):
+                        break
+        client.drain_reset_mail=drain
         yield client
 
 def post(client,path,body):
@@ -32,7 +39,10 @@ def post(client,path,body):
 
 def register(client,email=None,password=PASSWORD):
     email=email or client.email
-    return post(client,'register',{'email':email,'password':password,'accepted':ACCEPTED})
+    response=post(client,'register',{'email':email,'password':password,'accepted':ACCEPTED})
+    if response.status_code==202:
+        client.drain_reset_mail()
+    return response
 
 def token(client):
     return parse_qs(urlsplit(client.mail[-1][2]).fragment)['token'][0]
@@ -84,6 +94,7 @@ def test_existing_address_generic_and_no_yandex_autolink(browser,db):
 def test_reset_revokes_sessions_is_one_use_and_does_not_login(browser):
     verified(browser)
     assert post(browser,'reset-request',{'email':browser.email}).status_code==202
+    browser.drain_reset_mail()
     reset_token=token(browser)
     assert '/reset-password#token=' in browser.mail[-1][2]
     assert post(browser,'reset',{'token':reset_token,'password':NEW_PASSWORD}).status_code==200
@@ -98,6 +109,7 @@ def test_unknown_address_and_yandex_only_reset_are_generic(browser,db):
     for address in ('unknown@example.test','legacy@example.test'):
         assert post(browser,'reset-request',{'email':address}).status_code==202
         assert post(browser,'login',{'email':address,'password':PASSWORD}).status_code==401
+    browser.drain_reset_mail()
     assert browser.mail==[]
 
 def test_csrf_unconfigured_and_no_get_consumption(browser,db):
@@ -118,11 +130,19 @@ def test_legal_revocation_and_expired_token(browser,db):
         conn.execute("UPDATE email_pending_signups SET expires_at=now()-interval '1 second' WHERE email=%s",(browser.email,))
     assert post(browser,'verify',{'token':proof,'password':PASSWORD}).status_code==400
 
-def test_smtp_failure_does_not_claim_delivery(browser):
+def test_smtp_failure_keeps_accepted_signup_mail_durable(browser,db):
     def fail(*args): raise RuntimeError('synthetic private error')
     browser.app.state.email_sender=fail
     response=register(browser)
-    assert response.status_code==503 and 'private' not in response.text
+    assert response.status_code==202 and 'private' not in response.text
+    assert browser.mail==[]
+    with db('app_migrator') as conn:
+        assert conn.execute("SELECT attempts FROM email_reset_mail WHERE recipient=%s AND purpose='verify'",
+                            (browser.email,)).fetchone()[0]>=1
+    browser.app.state.email_sender=lambda *args:browser.mail.append(args)
+    with db('app_migrator') as conn:
+        conn.execute('UPDATE email_reset_mail SET available_at=now() WHERE recipient=%s',(browser.email,))
+    browser.drain_reset_mail()
 
 def test_direct_auth_tables_are_private_and_purge_clears_credentials(browser,db):
     verified(browser)
@@ -150,4 +170,4 @@ def test_scrypt_and_configuration():
     with pytest.raises(ValueError):
         EmailAuthConfig('https://evil.test/path','x'*32,'smtp',smtp_from='a@example.test')
     with pytest.raises(ValueError):
-        EmailAuthConfig.from_env({'REKVERO_EMAIL_ENABLED':'true'})
+        EmailAuthConfig.from_env({'INROU_EMAIL_ENABLED':'true'})

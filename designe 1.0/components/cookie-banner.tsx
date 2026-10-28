@@ -7,8 +7,8 @@ import { usePathname } from "next/navigation";
 
 // Bump when the banner/consent text changes: old choices are asked again.
 const VERSION = "v1";
-const COOKIE = "adpilot-consent";
-export const OPEN_EVENT = "adpilot:cookie-settings";
+const COOKIE = "inrou-consent";
+export const OPEN_EVENT = "inrou:cookie-settings";
 
 type Choice = "all" | "necessary";
 
@@ -24,13 +24,22 @@ function saveChoice(c: Choice) {
 }
 
 type Ym = ((...args: unknown[]) => void) & { a?: unknown[]; l?: number };
+let lastTrackedPath: string | null = null;
 
 // Метрика грузится только после согласия на аналитику (152-ФЗ, docs/LEGAL.md п. 8).
 function loadMetrika() {
-  if (isPrivatePage(location.pathname)) return;
+  if (isPrivatePage(location.pathname) || readChoice() !== 'all') return;
   const id = Number(process.env.NEXT_PUBLIC_YM_ID);
-  if (!id || document.getElementById("ym-tag")) return;
+  if (!id) return;
   const w = window as unknown as { ym?: Ym };
+  const path = location.pathname;
+  if (document.getElementById('ym-tag')) {
+    if (lastTrackedPath !== path && w.ym) {
+      w.ym(id, 'hit', location.origin + path, {title: document.title});
+      lastTrackedPath = path;
+    }
+    return;
+  }
   const ym: Ym = function (...args: unknown[]) {
     (ym.a = ym.a || []).push(args);
   };
@@ -42,6 +51,7 @@ function loadMetrika() {
   s.src = "https://mc.yandex.ru/metrika/tag.js";
   document.head.appendChild(s);
   ym(id, "init", { clickmap: false, trackLinks: false, accurateTrackBounce: true, webvisor: false });
+  lastTrackedPath = path;
 }
 
 export function CookieSettingsButton({ className = "" }: { className?: string }) {
@@ -100,7 +110,7 @@ export function CookieBanner() {
     <div role="dialog" aria-label="Настройки cookie" className="fixed inset-x-3 bottom-3 z-[60] mx-auto max-w-[720px] max-h-[80dvh] overflow-y-auto">
       <div className="glass anim-fade rounded-2xl p-3 text-xs leading-relaxed text-text sm:p-4 sm:text-sm">
         <p>
-          Необходимые cookie обеспечивают работу сайта. Яндекс Метрика включается только с вашего согласия.{" "}
+          Необходимые cookie — для работы сайта. Яндекс Метрика — только с вашего согласия.{" "}
           <Link className="text-brand underline underline-offset-2" href="/legal/privacy">
             Политика ПД
           </Link>{" "}

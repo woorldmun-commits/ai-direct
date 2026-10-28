@@ -1,0 +1,99 @@
+FFF                                                                      [100%]
+================================== FAILURES ===================================
+___________ test_value_helpers_do_not_depend_on_caller_search_path ____________
+
+rw = <psycopg.Connection [IDLE] (host=127.0.0.1 port=60476 user=app_system database=ai_direct_test_26948) at 0x2dd6f9a26d0>
+
+    def test_value_helpers_do_not_depend_on_caller_search_path(rw):
+        with rw.transaction(force_rollback=True):
+            rw.execute("SET LOCAL search_path = ''")
+>           assert rw.execute('SELECT public.value_is_valid(%s)', (Jsonb(value()),)).fetchone()[0]
+E           assert False
+
+tests\test_restore.py:19: AssertionError
+___________ test_populated_dump_restore_preserves_evidence_and_rls ____________
+
+db = <function db.<locals>.connect at 0x000002DD71862520>
+tmp_path = WindowsPath('C:/Users/woorl/AppData/Local/Temp/pytest-of-woorl/pytest-392/test_populated_dump_restore_pr0')
+
+    def test_populated_dump_restore_preserves_evidence_and_rls(db, tmp_path):
+        admin = _admin_uri()
+        source, target = f'ai_direct_backup_{os.getpid()}', f'ai_direct_restore_{os.getpid()}'
+        for name in (source, target):
+            _create_db(admin, name)
+        with psycopg.connect(_with_user(admin, 'app_migrator', source)) as conn:
+            migrate(conn)
+        with psycopg.connect(_with_user(admin, 'app_system', source), autocommit=True) as conn:
+            ids = chain.__wrapped__(conn)
+        bundled = Path(__file__).parents[1] / '.venv/Lib/site-packages/pgserver/pginstall/bin'
+        def binary(name):
+            local = bundled / (name + '.exe')
+            return str(local) if local.exists() else shutil.which(name) or name
+        backup = tmp_path / 'evidence.backup'
+        for command in ([binary('pg_dump'), '-d', _with_user(admin, 'postgres', source), '-Fc', '-f', str(backup)],
+                        [binary('pg_restore'), '--exit-on-error', '-d', _with_user(admin, 'postgres', target), str(backup)]):
+            result = subprocess.run(command, capture_output=True, text=True, timeout=90)
+>           assert result.returncode == 0, result.stderr
+E           AssertionError: pg_restore: error: COPY failed for table "findings": ERROR:  function value_is_valid(jsonb) does not exist
+E             LINE 3: ...XISTS (SELECT 1 FROM jsonb_each(e) AS x WHERE NOT value_is_v...
+E                                                                          ^
+E             HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+E             QUERY:  
+E               SELECT jsonb_typeof(e) = 'object'
+E                  AND NOT EXISTS (SELECT 1 FROM jsonb_each(e) AS x WHERE NOT value_is_valid(x.value))
+E             
+E             CONTEXT:  SQL function "evidence_is_valid" during inlining
+E             COPY findings, line 1: "1	1	1	high_cpa_target@1	{"unit": "rub", "amount": "12400.00", "source": "yandex_direct", "formula": ..."
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['C:\\Users\\woorl\\Documents\\inrou\\backend\\.venv\\Lib\\site-packages\\pgserver\\pginstall\\b...ne 1: "1\t1\t1\thigh_cpa_target@1\t{"unit": "rub", "amount": "12400.00", "source": "yandex_direct", "formula": ..."\n').returncode
+
+tests\test_restore.py:42: AssertionError
+_____________ test_daily_sync_keeps_explicit_counter_per_account ______________
+
+pilot = (<starlette.testclient.TestClient object at 0x000002DD71881550>, 1, 1)
+db = <function db.<locals>.connect at 0x000002DD71862520>
+rw = <psycopg.Connection [IDLE] (host=127.0.0.1 port=60476 user=app_system database=ai_direct_test_26948) at 0x2dd6f9b8090>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000002DD6F9B8F10>
+
+    def test_daily_sync_keeps_explicit_counter_per_account(pilot, db, rw, monkeypatch):
+        from types import SimpleNamespace
+        from app.auth.yandex_oauth import Tokens
+        client, ws, owner = pilot
+        monkeypatch.setattr(direct_connect, 'account_limit', lambda state: 15)
+        request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(settings=SimpleNamespace(token_keys=KEYS))))
+        now = datetime.now(timezone.utc)
+        expected = {}
+        for index, counter in enumerate((555, 666, None)):
+            flow = direct_connect.Flow(login=f'binding-{index}', counter_id=counter,
+                                       goal_ids=[111] if counter else [], state='s'*43, user_id=owner, workspace_id=ws)
+            with rw.transaction():
+                run = direct_connect._save(rw, request, flow, Tokens(f'direct-{index}', None, now+timedelta(days=365)))
+            account, selected = rw.execute('SELECT direct_account_id,metrika_counter_id FROM sync_runs WHERE id=%s', (run,)).fetchone()
+            expected[account] = selected
+            rw.execute("UPDATE sync_runs SET status='failed',finished_at=now(),error_code='synthetic',period_to=%s WHERE id=%s",
+                       (now.date()-timedelta(days=3), run))
+        with db('app_system') as queue, db('app_token') as worker:
+            runner.schedule_syncs(queue, worker, now)
+        actual = dict(rw.execute("SELECT direct_account_id,metrika_counter_id FROM sync_runs WHERE workspace_id=%s AND status='queued'", (ws,)).fetchall())
+>       assert actual == expected
+E       assert {1: 1, 2: 1, 3: 1} == {1: 1, 2: 2, 3: None}
+E         
+E         Omitting 1 identical items, use -vv to show
+E         Differing items:
+E         {2: 1} != {2: 2}
+E         {3: 1} != {3: None}
+E         Use -v to get more diff
+
+tests\test_direct_connect.py:225: AssertionError
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\woorl\Documents\inrou\backend\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_restore.py::test_value_helpers_do_not_depend_on_caller_search_path
+FAILED tests/test_restore.py::test_populated_dump_restore_preserves_evidence_and_rls
+FAILED tests/test_direct_connect.py::test_daily_sync_keeps_explicit_counter_per_account
+3 failed, 1 warning in 11.10s

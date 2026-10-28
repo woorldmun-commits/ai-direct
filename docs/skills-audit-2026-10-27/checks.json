@@ -1,0 +1,328 @@
+[
+  {
+    "name": "ruff",
+    "args": [
+      "C:\\Users\\woorl\\Documents\\inrou\\backend\\.venv\\Scripts\\python.exe",
+      "-m",
+      "ruff",
+      "check",
+      "backend",
+      "deploy"
+    ],
+    "cwd": "C:\\Users\\woorl\\Documents\\inrou",
+    "started_utc": "2026-10-27T18:48:59.610590+00:00",
+    "finished_utc": "2026-10-27T18:49:01.090173+00:00",
+    "exit_code": 1,
+    "log_sha256": "ec6bfe7f701f5c158b81d2520e9d2cb6b2307c0203a2c34c4d2c4f0a1d3905a3"
+  },
+  {
+    "name": "pg-init",
+    "args": [
+      "C:\\Users\\woorl\\Documents\\inrou\\backend\\.venv\\Lib\\site-packages\\pgserver\\pginstall\\bin\\initdb.exe",
+      "-D",
+      "C:\\Users\\woorl\\AppData\\Local\\Temp\\inrou-audit-pg-vivqu1rz",
+      "-A",
+      "trust",
+      "-U",
+      "postgres",
+      "--encoding=UTF8",
+      "--no-locale"
+    ],
+    "cwd": "C:\\Users\\woorl\\Documents\\inrou",
+    "started_utc": "2026-10-27T18:49:01.107794+00:00",
+    "finished_utc": "2026-10-27T18:49:10.653714+00:00",
+    "exit_code": 0,
+    "log_sha256": "ce41aa8b2701bf2e2f14dc3f1069dddc4f7ab2b2235f0a0a1ad2ef9cbc9f7ab6"
+  },
+  {
+    "name": "pg-start",
+    "args": [
+      "C:\\Users\\woorl\\Documents\\inrou\\backend\\.venv\\Lib\\site-packages\\pgserver\\pginstall\\bin\\pg_ctl.exe",
+      "-D",
+      "C:\\Users\\woorl\\AppData\\Local\\Temp\\inrou-audit-pg-vivqu1rz",
+      "-l",
+      "C:\\Users\\woorl\\AppData\\Local\\Temp\\inrou-audit-pg-vivqu1rz\\audit.log",
+      "-w",
+      "-t",
+      "60",
+      "-o",
+      "-h 127.0.0.1 -p 55117",
+      "start"
+    ],
+    "cwd": "C:\\Users\\woorl\\Documents\\inrou",
+    "started_utc": "2026-10-27T18:49:10.669510+00:00",
+    "finished_utc": "2026-10-27T18:49:11.076993+00:00",
+    "exit_code": 0,
+    "log_sha256": "46038efb813fbca18a92272496901190638dea3f97b51f7af0daa1ca2eb13818"
+  },
+  {
+    "name": "pytest",
+    "args": [
+      "C:\\Users\\woorl\\Documents\\inrou\\backend\\.venv\\Scripts\\python.exe",
+      "-m",
+      "pytest",
+      "-q",
+      "-p",
+      "no:cacheprovider"
+    ],
+    "cwd": "C:\\Users\\woorl\\Documents\\inrou\\backend",
+    "started_utc": "2026-10-27T18:49:11.094434+00:00",
+    "finished_utc": "2026-10-27T18:51:43.520764+00:00",
+    "exit_code": 0,
+    "log_sha256": "dc21e524fd5b5f8dabe55a057aa1d2065ced644c874f947bc2b3f8e6443f57f5"
+  },
+  {
+    "name": "pg-stop",
+    "args": [
+      "C:\\Users\\woorl\\Documents\\inrou\\backend\\.venv\\Lib\\site-packages\\pgserver\\pginstall\\bin\\pg_ctl.exe",
+      "-D",
+      "C:\\Users\\woorl\\AppData\\Local\\Temp\\inrou-audit-pg-vivqu1rz",
+      "-w",
+      "stop"
+    ],
+    "cwd": "C:\\Users\\woorl\\Documents\\inrou",
+    "started_utc": "2026-10-27T18:51:43.543592+00:00",
+    "finished_utc": "2026-10-27T18:51:47.981566+00:00",
+    "exit_code": 0,
+    "log_sha256": "7d3968610fbb6a2effc338aad3cda11506c13038234f580688bcdd485f932512"
+  },
+  {
+    "name": "lint",
+    "args": [
+      "npm.cmd",
+      "run",
+      "lint"
+    ],
+    "cwd": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0",
+    "started_utc": "2026-10-27T18:51:48.000165+00:00",
+    "finished_utc": "2026-10-27T18:53:24.525338+00:00",
+    "exit_code": 0,
+    "log_sha256": "48f728b68fa3ea90be8e2f9452bb5117827aa5e76e116fcb7ed0d1e63aa89a8f"
+  },
+  {
+    "name": "check-auth-proxy",
+    "args": [
+      "node",
+      "--experimental-strip-types",
+      "scripts/check-auth-proxy.mjs"
+    ],
+    "cwd": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0",
+    "started_utc": "2026-10-27T18:53:24.530357+00:00",
+    "finished_utc": "2026-10-27T18:53:24.940229+00:00",
+    "exit_code": 0,
+    "log_sha256": "32e89bd08239dba639aca2c71a7b94bbfdd03c9535e83642cbf0b8ac97ab5244"
+  },
+  {
+    "name": "check-workspace-proxy",
+    "args": [
+      "node",
+      "--experimental-strip-types",
+      "scripts/check-workspace-proxy.mjs"
+    ],
+    "cwd": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0",
+    "started_utc": "2026-10-27T18:53:24.950260+00:00",
+    "finished_utc": "2026-10-27T18:53:25.401106+00:00",
+    "exit_code": 0,
+    "log_sha256": "0c220653fa287ffb6c1c457f8360a414cd68915200d6d2267c443a86a7a88bc5"
+  },
+  {
+    "name": "check-direct-proxy",
+    "args": [
+      "node",
+      "--experimental-strip-types",
+      "scripts/check-direct-proxy.mjs"
+    ],
+    "cwd": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0",
+    "started_utc": "2026-10-27T18:53:25.414653+00:00",
+    "finished_utc": "2026-10-27T18:53:26.055371+00:00",
+    "exit_code": 0,
+    "log_sha256": "0b156d75401aaf70224637e70a7efebbb0d6c05f581500782af0a610b0575fc4"
+  },
+  {
+    "name": "check-insights",
+    "args": [
+      "node",
+      "--experimental-strip-types",
+      "scripts/check-insights.mjs"
+    ],
+    "cwd": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0",
+    "started_utc": "2026-10-27T18:53:26.066886+00:00",
+    "finished_utc": "2026-10-27T18:53:26.454186+00:00",
+    "exit_code": 0,
+    "log_sha256": "ef4d2758d16d08c6db8f41cf430da5b7a9e8701579582b127ab07182be5c9132"
+  },
+  {
+    "name": "check-billing",
+    "args": [
+      "node",
+      "--experimental-strip-types",
+      "scripts/check-billing.mjs"
+    ],
+    "cwd": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0",
+    "started_utc": "2026-10-27T18:53:26.469711+00:00",
+    "finished_utc": "2026-10-27T18:53:26.821590+00:00",
+    "exit_code": 0,
+    "log_sha256": "d50ee1910ed309c09c817c3803e1b34c0565959ec7aa93de7794d13a285d9264"
+  },
+  {
+    "name": "check-site",
+    "args": [
+      "node",
+      "--experimental-strip-types",
+      "scripts/check-site.mjs"
+    ],
+    "cwd": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0",
+    "started_utc": "2026-10-27T18:53:26.840810+00:00",
+    "finished_utc": "2026-10-27T18:53:27.280893+00:00",
+    "exit_code": 0,
+    "log_sha256": "16e3b3b4fcf711aad133e4c2092198e72f36572e412fac9ec06bd1ce0d7bbe1c"
+  },
+  {
+    "name": "check-ix",
+    "args": [
+      "node",
+      "--experimental-strip-types",
+      "scripts/check-ix.mjs"
+    ],
+    "cwd": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0",
+    "started_utc": "2026-10-27T18:53:27.291543+00:00",
+    "finished_utc": "2026-10-27T18:53:27.363109+00:00",
+    "exit_code": 0,
+    "log_sha256": "9c7ef6dd2569db22876f052d81c231431023aed16055c07b82f2a63d9c1a3cbb"
+  },
+  {
+    "name": "check-remediation",
+    "args": [
+      "node",
+      "--experimental-strip-types",
+      "scripts/check-remediation.mjs"
+    ],
+    "cwd": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0",
+    "started_utc": "2026-10-27T18:53:27.371622+00:00",
+    "finished_utc": "2026-10-27T18:53:27.707952+00:00",
+    "exit_code": 0,
+    "log_sha256": "8b9c486df00dae3eb059bcb8f9b8f277ebf3671fcb634c2036db4d894062069d"
+  },
+  {
+    "name": "check-deep-audit",
+    "args": [
+      "node",
+      "--experimental-strip-types",
+      "scripts/check-deep-audit.mjs"
+    ],
+    "cwd": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0",
+    "started_utc": "2026-10-27T18:53:27.731170+00:00",
+    "finished_utc": "2026-10-27T18:53:28.413050+00:00",
+    "exit_code": 0,
+    "log_sha256": "bd7c218180dd6a6c07953289a267db8ff987073b7ef09f008f8f981c15ef1464"
+  },
+  {
+    "name": "check-model",
+    "args": [
+      "node",
+      "--experimental-strip-types",
+      "scripts/check-model.mjs"
+    ],
+    "cwd": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0",
+    "started_utc": "2026-10-27T18:53:28.439578+00:00",
+    "finished_utc": "2026-10-27T18:53:28.551531+00:00",
+    "exit_code": 0,
+    "log_sha256": "b28a09712720aab71f03a96fd97637fb4895b7e707b9ee20e6c73c40b3362aa0"
+  },
+  {
+    "name": "check-pilot",
+    "args": [
+      "node",
+      "--experimental-strip-types",
+      "scripts/check-pilot.mjs"
+    ],
+    "cwd": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0",
+    "started_utc": "2026-10-27T18:53:28.570590+00:00",
+    "finished_utc": "2026-10-27T18:53:28.692868+00:00",
+    "exit_code": 0,
+    "log_sha256": "255ff2d4ca1c923736fe94cf82f3e93600b58092f266f274c6c6929793d75302"
+  },
+  {
+    "name": "check-subscription",
+    "args": [
+      "node",
+      "--experimental-strip-types",
+      "scripts/check-subscription.mjs"
+    ],
+    "cwd": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0",
+    "started_utc": "2026-10-27T18:53:28.721659+00:00",
+    "finished_utc": "2026-10-27T18:53:28.821375+00:00",
+    "exit_code": 0,
+    "log_sha256": "695792b74068d0bfad22ccde8b6b8ff0738e92f597f963e101300a5424e42351"
+  },
+  {
+    "name": "npm-audit-production",
+    "args": [
+      "npm.cmd",
+      "audit",
+      "--audit-level=high",
+      "--package-lock-only",
+      "--omit=dev"
+    ],
+    "cwd": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0",
+    "started_utc": "2026-10-27T18:53:28.842916+00:00",
+    "finished_utc": "2026-10-27T18:53:31.700483+00:00",
+    "exit_code": 0,
+    "log_sha256": "6d8c5c8f3d7684adb070417bd608d01ae90aa3dc26a65af03ffda4955f38d9a3"
+  },
+  {
+    "name": "npm-audit-all",
+    "args": [
+      "npm.cmd",
+      "audit",
+      "--audit-level=high",
+      "--package-lock-only"
+    ],
+    "cwd": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0",
+    "started_utc": "2026-10-27T18:53:31.715578+00:00",
+    "finished_utc": "2026-10-27T18:53:33.078838+00:00",
+    "exit_code": 0,
+    "log_sha256": "6d8c5c8f3d7684adb070417bd608d01ae90aa3dc26a65af03ffda4955f38d9a3"
+  },
+  {
+    "name": "pip-audit",
+    "args": [
+      "C:\\Users\\woorl\\Documents\\inrou\\backend\\.venv\\Scripts\\python.exe",
+      "-m",
+      "pip_audit",
+      "-r",
+      "backend/requirements.lock.txt"
+    ],
+    "cwd": "C:\\Users\\woorl\\Documents\\inrou",
+    "started_utc": "2026-10-27T18:53:33.084988+00:00",
+    "finished_utc": "2026-10-27T18:53:33.200425+00:00",
+    "exit_code": 1,
+    "log_sha256": "a2982117e5378a2c00605e09401cd6eee2f530bd4cea8aaf6fa0d3a96ccf2d66"
+  },
+  {
+    "name": "build",
+    "args": [
+      "npm.cmd",
+      "run",
+      "build"
+    ],
+    "cwd": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0",
+    "started_utc": "2026-10-27T18:53:33.214931+00:00",
+    "finished_utc": "2026-10-27T18:54:32.358554+00:00",
+    "exit_code": 0,
+    "log_sha256": "7d30c4a137c93fe0b7cf5c5dde7d3c1f8de0f8da03956ceab3d29c0d6f6e24ff"
+  },
+  {
+    "name": "headers",
+    "args": [
+      "npm.cmd",
+      "run",
+      "test:headers"
+    ],
+    "cwd": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0",
+    "started_utc": "2026-10-27T18:54:32.386537+00:00",
+    "finished_utc": "2026-10-27T18:54:34.296175+00:00",
+    "exit_code": 1,
+    "log_sha256": "7346705e1ee7013b9e6ace1912d0b0342b5e931ecc5a9b5da097d6f28e0f185d"
+  }
+]

@@ -1,16 +1,16 @@
 "use client";
 import Link from "next/link";
 import Image from "next/image";
+import {BrandMark} from "@/components/brand-mark";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { ThemeControl } from "@/components/theme-control";
 import { useState, type FormEvent } from "react";
-import { ReferenceLogo } from "./shared";
-import "./reference.css";
-import "./auth.css";
-import "./auth-illustration.css";
+import "../ix/ix.css";
+import "../ix/public/public.css";
 import {EmailForm,type EmailMode} from './email-form';
+import './signup-art.css';
 
-export function ReferenceAuth({ callbackError = false, registrationReady = false, mode = 'login', emailEnabled = false, localPreview = false }: { callbackError?: boolean; registrationReady?: boolean; mode?:EmailMode; emailEnabled?:boolean; localPreview?:boolean }) {
+export function ReferenceAuth({ callbackError = false, registrationReady = false, mode = 'login', emailEnabled = false, localPreview = false, legacyLogin = false }: { callbackError?: boolean; registrationReady?: boolean; mode?:EmailMode; emailEnabled?:boolean; localPreview?:boolean; legacyLogin?:boolean }) {
   const [accepted, setAccepted] = useState(false);
   const [pdConsent, setPdConsent] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -35,12 +35,13 @@ export function ReferenceAuth({ callbackError = false, registrationReady = false
       setBusy(false);
     }
   }
-  return <main id="main-content" className="ref-ui ref-auth-page"><div className="ref-auth-glow" aria-hidden="true" /><div className="ref-auth-shell">
-    <section className="ref-auth-form-panel">
-      <Link href="/" aria-label="inrou — главная"><ReferenceLogo /></Link>
-      <div className="ref-auth-heading"><h1>{mode==='signup'?'Создайте аккаунт inrou':mode==='verify'?'Подтвердите почту':mode==='forgot'?'Восстановите доступ':mode==='reset'?'Новый пароль':'Вход в inrou'}</h1><p>{mode==='signup'?'Создайте аккаунт по почте и подтвердите адрес.':mode==='verify'?'Повторите выбранный пароль, чтобы завершить регистрацию.':mode==='forgot'?'Получите ссылку для смены пароля.':mode==='reset'?'Выберите новый уникальный пароль.':'Войдите по почте или через Яндекс ID, чтобы открыть свой кабинет.'}</p></div>
+  return <div className="ix ix-auth" lang="ru"><a className="ix-skip" href="#main-content">Перейти к содержимому</a><main id="main-content" className="ix-auth-shell" tabIndex={-1}>
+    <section className="ix-card ix-auth-form ref-auth-form-panel">
+      <Link className="ix-logo" href="/" title="INROU — на главную" style={{padding: 0}}><BrandMark/>INROU<small>INTELLIGENCE ATELIER</small></Link>
+      <div className="ref-auth-heading"><h1>{mode==='signup'?'Создайте аккаунт INROU':mode==='verify'?'Подтвердите почту':mode==='forgot'?'Восстановите доступ':mode==='reset'?'Новый пароль':'Вход в INROU'}</h1><p>{mode==='signup'?'Создайте аккаунт по почте и подтвердите адрес.':mode==='verify'?'Повторите выбранный пароль, чтобы завершить регистрацию.':mode==='forgot'?'Получите ссылку для смены пароля.':mode==='reset'?'Выберите новый уникальный пароль.':'Введите email и пароль, чтобы открыть свой кабинет.'}</p></div>
       <EmailForm mode={mode} enabled={emailEnabled} registrationReady={registrationReady} localPreview={localPreview}/>
-      {(mode==='login'||mode==='signup')&&<details  className="ref-auth-alternative"><summary>{mode==='signup'?'Регистрация через Яндекс ID':emailEnabled?'Или войти через Яндекс ID':'Вход через Яндекс ID'}</summary><form onSubmit={signIn} className="ref-auth-signin">
+      {callbackError&&!legacyLogin&&<p role="alert" className="ref-auth-error">{error}</p>}
+      {legacyLogin&&(mode==='login'||mode==='signup')&&<details className="ref-auth-alternative"><summary>Вход в ранее созданный аккаунт через Яндекс ID</summary><form onSubmit={signIn} className="ref-auth-signin">
         <p className="ref-auth-note">{registrationReady ? mode==='signup'?'Для создания аккаунта примите оба документа.':'Уже есть аккаунт? Войдите без повторного согласия. Для создания нового аккаунта примите оба документа.' : 'Регистрация откроется после утверждения и публикации документов. Вход доступен для существующих аккаунтов.'}</p>
         {registrationReady && <>
         <label><input type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)} /><span>Принимаю условия <Link href="/legal/offer" target="_blank" rel="noopener">договора-оферты</Link> (редакция 01.10.2026).</span></label>
@@ -55,6 +56,6 @@ export function ReferenceAuth({ callbackError = false, registrationReady = false
       <div className="ref-auth-registration"><Link href="/legal">Правовая информация</Link></div>
       <Link href="/" className="ref-auth-back"><ArrowLeft size={14} />На главную</Link>
     </section>
-    <section className="ref-auth-art-panel" aria-label="Ваша реклама под контролем"><div className="ref-auth-glass ref-auth-glass-left" /><div className="ref-auth-glass ref-auth-glass-right" /><Image src="/reference/auth-analytics-v1.png" className="ref-auth-orbit" alt="Стеклянная панель аналитики с фиолетовыми и голубыми графиками" width={1122} height={1402} priority /><div className="ref-auth-tagline"><h2>Ваша реклама<br />под контролем</h2><p>Показатели. Источники.<br />Обоснованные решения.</p></div></section>
-  </div></main>;
+    <section className={'ix-auth-art' + (mode === 'signup' ? ' ix-auth-art--signup' : '')} aria-hidden="true">{mode === 'signup' && <Image src="/reference/inrou-signup-workspace-v1.webp" fill sizes="(max-width: 767px) 1px, 50vw" alt=""/>}</section>
+  </main></div>;
 }

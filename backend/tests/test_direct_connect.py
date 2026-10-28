@@ -87,9 +87,11 @@ def test_start_checks_session_role_origin_access_and_goal_pair(pilot, db, rw, mo
     rw.execute("SELECT set_organization_member(%s,%s,%s,'member')",(owner,org,viewer))
     rw.execute("SELECT set_workspace_member(%s,%s,%s,'viewer')",(owner,ws,viewer))
     original=client.cookies.get("session")
-    client.cookies.clear();client.cookies.set("session",session(rw,viewer))
+    client.cookies.clear()
+    client.cookies.set("session",session(rw,viewer))
     assert begin(client,ws).status_code==403
-    client.cookies.clear();client.cookies.set("session",original)
+    client.cookies.clear()
+    client.cookies.set("session",original)
     monkeypatch.delenv("PILOT_WORKSPACE_IDS")
     assert begin(client,ws).status_code==403
     client.cookies.clear()
@@ -108,7 +110,8 @@ def test_callback_state_and_actor_are_bound_before_network(pilot, monkeypatch, r
     r=begin(client,ws)
     state=parse_qs(urlsplit(r.json()["authorize_url"]).query)["state"][0]
     flow=client.cookies.get(direct_connect.FLOW_COOKIE)
-    client.cookies.clear();client.cookies.set(direct_connect.FLOW_COOKIE,flow)
+    client.cookies.clear()
+    client.cookies.set(direct_connect.FLOW_COOKIE,flow)
     client.cookies.set("session",session(rw,user(rw)))
     assert "direct=failed" in finish(client,state).headers["location"]
     assert calls==[]
@@ -197,3 +200,63 @@ def test_daily_runner_refresh_is_idempotent_and_requires_access(pilot,db,rw,monk
     with db('app_system') as queue,db('app_token') as worker:
         runner.schedule_syncs(queue,worker,now+timedelta(days=1))
     assert one(rw,'SELECT count(*) FROM sync_runs WHERE workspace_id=%s',ws)==2
+
+
+def test_daily_sync_keeps_explicit_counter_per_account(pilot, db, rw, monkeypatch):
+    from types import SimpleNamespace
+    from app.auth.yandex_oauth import Tokens
+    client, ws, owner = pilot
+    monkeypatch.setattr(direct_connect, 'account_limit', lambda state: 15)
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(settings=SimpleNamespace(token_keys=KEYS))))
+    now = datetime.now(timezone.utc)
+    expected = {}
+    for index, counter in enumerate((555, 666, None)):
+        flow = direct_connect.Flow(login=f'binding-{index}', counter_id=counter,
+                                   goal_ids=[111] if counter else [], state='s'*43, user_id=owner, workspace_id=ws)
+        with rw.transaction():
+            run = direct_connect._save(rw, request, flow, Tokens(f'direct-{index}', None, now+timedelta(days=365)))
+        account, selected = rw.execute('SELECT direct_account_id,metrika_counter_id FROM sync_runs WHERE id=%s', (run,)).fetchone()
+        expected[account] = selected
+        rw.execute("UPDATE sync_runs SET status='failed',finished_at=now(),error_code='synthetic',period_to=%s WHERE id=%s",
+                   (now.date()-timedelta(days=3), run))
+    with db('app_system') as queue, db('app_token') as worker:
+        runner.schedule_syncs(queue, worker, now)
+    actual = dict(rw.execute("SELECT direct_account_id,metrika_counter_id FROM sync_runs WHERE workspace_id=%s AND status='queued'", (ws,)).fetchall())
+    assert actual == expected
+    # Manual resync preserves the same per-account selection too.
+    first = min(expected)
+    response = client.post(f'/api/v1/workspaces/ws_{ws}/direct/sync', json={}, headers={'Origin': ORIGIN})
+    assert response.status_code == 200
+    assert rw.execute('SELECT direct_account_id,metrika_counter_id FROM sync_runs WHERE id=%s',
+                      (response.json()['run_id'],)).fetchone() == (first, expected[first])
+
+
+def test_worker_uses_bound_metrika_token_and_skips_stale_binding(pilot, db, rw, monkeypatch, root):
+    from app.auth.tokens import store
+    from app.auth.yandex_oauth import Tokens
+    client, ws, _ = pilot
+    fake_yandex(monkeypatch)
+    response = begin(client, ws, counter_id=555, goal_ids=list(GOALS.goal_ids))
+    state = parse_qs(urlsplit(response.json()['authorize_url']).query)['state'][0]
+    assert 'direct=connected' in finish(client, state).headers['location']
+    run, account, counter = rw.execute('SELECT id,direct_account_id,metrika_counter_id FROM sync_runs WHERE workspace_id=%s', (ws,)).fetchone()
+    mc = one(rw, 'SELECT metrika_connection_id FROM metrika_counters WHERE id=%s', counter)
+    now = datetime.now(timezone.utc)
+    store(rw, KEYS, ConnectionRef('metrika', ws, mc), Tokens('metrika-only-token', None, now+timedelta(days=365)))
+    root('pilot-account')
+    monkeypatch.setattr(runner, 'DirectApi', lambda *args: DirectFixture(root.path))
+    observed = []
+    monkeypatch.setattr(runner, 'MetrikaApi', lambda http, access: observed.append(access))
+    rw.execute('UPDATE sync_runs SET period_to=%s WHERE id=%s', (TO, run))
+    release = one(rw, "INSERT INTO releases(commit_sha,build_id) VALUES(%s,%s) RETURNING id", 'c'*40, f'binding-{ws}')
+    with db('app_token') as worker, db('app_system') as queue:
+        runner.process(queue, worker, run, provider=PROVIDER, keys=KEYS, release_id=release, http=None, now=now)
+    assert observed == ['metrika-only-token']
+    assert one(rw, 'SELECT status FROM sync_runs WHERE id=%s', run) == 'succeeded'
+    stale = one(rw, "INSERT INTO sync_runs(workspace_id,direct_account_id,metrika_counter_id,kind,period_to,runner_managed) VALUES(%s,%s,%s,'resync',%s,true) RETURNING id", ws, account, counter, TO)
+    rw.execute('UPDATE direct_accounts SET metrika_counter_id=NULL,metrika_configured=false WHERE id=%s', (account,))
+    with db('app_token') as worker, db('app_system') as queue:
+        runner.process(queue, worker, stale, provider=PROVIDER, keys=KEYS, release_id=release, http=None, now=datetime.now(timezone.utc))
+    assert observed == ['metrika-only-token']
+    assert rw.execute('SELECT status,error_code FROM sync_runs WHERE id=%s', (stale,)).fetchone() == ('skipped', 'metrika_configuration_required')
+    assert client.post(f'/api/v1/workspaces/ws_{ws}/direct/sync', json={}, headers={'Origin': ORIGIN}).status_code == 409

@@ -1,8 +1,10 @@
 """Bounded scrypt hashes and canonical email identity, independent of Yandex ID."""
+import base64
 import hashlib
 import hmac
 import re
 import secrets
+from uuid import UUID
 
 
 def normalize_email(raw: str) -> str:
@@ -59,3 +61,12 @@ def token_hash(value: str) -> bytes:
 
 
 DUMMY_HASH = 'scrypt$32768$8$3$' + '00' * 16 + '$' + '00' * 32
+
+
+def mail_token(hmac_key: str, job_id: UUID, purpose: str) -> str:
+    if purpose not in ('reset', 'verify'):
+        raise ValueError('invalid_mail_purpose')
+    # shortcut: drain pending mail before auth HMAC key rotation, or wait for those links to expire.
+    domain = b'inrou:' + purpose.encode() + b'-mail:v1\x00'
+    digest = hmac.new(hmac_key.encode(), domain + job_id.bytes, hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(digest).decode().rstrip('=')

@@ -13,11 +13,12 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from app.billing.catalog import account_limit, selected_accounts
 from app.api.deps import Conn, CurrentActor, CurrentWorkspace, Workspace, require_manager
 from app.api.errors import ApiError
 from app.api.active import today_msk
 from app.auth.tokens import ConnectionRef, store
-from app.auth.yandex_oauth import OAuthError, authorize_url, exchange_code, new_state
+from app.auth.yandex_oauth import MANUAL_CODE_REDIRECT_URI, OAuthError, authorize_url, exchange_code, new_state
 from app.sources.direct import AccountUnavailable, ConnectionUnavailable, DirectApi, DirectApiError, RetryLater
 from app.sources.metrika import MetrikaApi, MetrikaUnavailable
 from app.sources.metrika_discovery import parse_goal_list
@@ -48,6 +49,13 @@ class Flow(ConnectInput):
     state: str = Field(min_length=32, max_length=128)
     user_id: int
     workspace_id: int
+    code_verifier: str = Field(default="", max_length=128, repr=False)
+
+
+class CompleteInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    state: str = Field(min_length=32, max_length=128)
+    code: str = Field(min_length=1, max_length=2048, pattern=r"^[A-Za-z0-9_-]+$", repr=False)
 
 
 def _provider(request):
@@ -65,7 +73,7 @@ def _cipher(provider):
 def _access(conn, workspace_id):
     state = load_state(conn, workspace_id, None, datetime.now(timezone.utc))
     if state.workspace_status != 'active' or not state.has_analysis_access:
-        raise ApiError(403, "pilot_access_required", message="Администратор должен выдать доступ к пилоту.")
+        raise ApiError(403, "pilot_access_required", message="Для подключения и анализа нужен действующий пробный, пилотный или оплаченный доступ.")
 
 
 @router.post("/workspaces/{workspace_id}/direct/start")
@@ -74,8 +82,14 @@ def start(request: Request, payload: ConnectInput, conn: Conn, ws: CurrentWorksp
     provider = _provider(request)
     _access(conn, ws.id)
     state = new_state()
-    flow = Flow(**payload.model_dump(), state=state, user_id=ws.actor.user_id, workspace_id=ws.id)
-    response = JSONResponse({"authorize_url": authorize_url(provider, state)})
+    manual = provider.redirect_uri == MANUAL_CODE_REDIRECT_URI
+    verifier = new_state() if manual else ""
+    flow = Flow(**payload.model_dump(), state=state, user_id=ws.actor.user_id, workspace_id=ws.id,
+                code_verifier=verifier)
+    body = {"authorize_url": authorize_url(provider, state, code_verifier=verifier or None)}
+    if manual:
+        body.update(completion_mode="manual_code", state=state)
+    response = JSONResponse(body)
     response.set_cookie(FLOW_COOKIE, _cipher(provider).encrypt(flow.model_dump_json().encode()).decode(),
                         max_age=600, httponly=True, secure=provider.redirect_uri.startswith("https://"),
                         samesite="lax", path="/")
@@ -97,10 +111,10 @@ def _queue(conn, workspace_id, account_id, counter_id):
 def _save(conn, request, flow, tokens):
     workspace_exclusive(conn, flow.workspace_id)
     conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (f"pilot-sync:{flow.workspace_id}",))
-    other = conn.execute("""SELECT 1 FROM direct_connections WHERE workspace_id=%s AND yandex_login<>%s
-        AND status<>'disconnected'""", (flow.workspace_id, flow.login)).fetchone()
-    if other:
-        raise ApiError(409, "pilot_account_limit", message="В пилоте доступен один рекламный кабинет на пространство.")
+    state = load_state(conn, flow.workspace_id, None, datetime.now(timezone.utc))
+    limit = account_limit(state)
+    if selected_accounts(conn, flow.workspace_id, flow.login) >= limit:
+        raise ApiError(409, "pilot_account_limit", message=f"Лимит тарифа: {limit} рекламных аккаунтов на пространство.")
     busy = conn.execute("""SELECT 1 FROM sync_runs WHERE workspace_id=%s
         AND status IN ('queued','running','waiting_report')""", (flow.workspace_id,)).fetchone()
     if busy:
@@ -126,17 +140,15 @@ def _save(conn, request, flow, tokens):
             VALUES(%s,%s,%s,true) ON CONFLICT(metrika_connection_id,counter_id)
             DO UPDATE SET goal_ids=EXCLUDED.goal_ids,is_selected=true RETURNING id""",
             (mc, flow.counter_id, flow.goal_ids)).fetchone()[0]
+    conn.execute('UPDATE direct_accounts SET metrika_counter_id=%s,metrika_configured=true WHERE id=%s',
+                 (counter, account))
     conn.execute("""INSERT INTO workspace_settings(workspace_id,target_cpa) VALUES(%s,%s)
         ON CONFLICT(workspace_id) DO UPDATE SET target_cpa=EXCLUDED.target_cpa""",
         (flow.workspace_id, flow.target_cpa))
     return _queue(conn, flow.workspace_id, account, counter)
 
 
-@router.get("/direct/callback")
-def callback(request: Request, conn: Conn, actor: CurrentActor,
-             state: Annotated[str, Query(min_length=32, max_length=128)] = "",
-             code: Annotated[str, Query(max_length=2048)] = "",
-             error: Annotated[str, Query(max_length=128)] = ""):
+def _finish(request, conn, actor, state, code, error="", *, workspace_id=None):
     provider = _provider(request)
     response = RedirectResponse("/workspace?view=integrations&direct=failed", status_code=303)
     response.delete_cookie(FLOW_COOKIE, path="/", httponly=True,
@@ -144,7 +156,10 @@ def callback(request: Request, conn: Conn, actor: CurrentActor,
     try:
         flow = Flow.model_validate_json(_cipher(provider).decrypt(
             request.cookies.get(FLOW_COOKIE, "").encode(), ttl=600))
-        if error or not code or actor.user_id != flow.user_id or not hmac.compare_digest(state, flow.state):
+        manual = provider.redirect_uri == MANUAL_CODE_REDIRECT_URI
+        if (error or not code or actor.user_id != flow.user_id or not hmac.compare_digest(state, flow.state)
+                or manual != (workspace_id is not None)
+                or workspace_id is not None and (workspace_id != flow.workspace_id or not flow.code_verifier)):
             return response
         role = enter_workspace(conn, actor.user_id, flow.workspace_id)
         require_manager(Workspace(flow.workspace_id, role, actor))
@@ -154,7 +169,8 @@ def callback(request: Request, conn: Conn, actor: CurrentActor,
             raise ApiError(503, "auth_busy")
         try:
             with httpx.Client(follow_redirects=False, trust_env=False) as http:
-                tokens = exchange_code(http, provider, code, datetime.now(timezone.utc))
+                options = {"code_verifier": flow.code_verifier} if flow.code_verifier else {}
+                tokens = exchange_code(http, provider, code, datetime.now(timezone.utc), **options)
                 DirectApi(http, tokens.access_token, "connect").check_access(flow.login)
                 if flow.counter_id:
                     goals = parse_goal_list(MetrikaApi(http, tokens.access_token).fetch_goals(flow.counter_id))
@@ -170,15 +186,39 @@ def callback(request: Request, conn: Conn, actor: CurrentActor,
     return response
 
 
+@router.get("/direct/callback")
+def callback(request: Request, conn: Conn, actor: CurrentActor,
+             state: Annotated[str, Query(min_length=32, max_length=128)] = "",
+             code: Annotated[str, Query(max_length=2048)] = "",
+             error: Annotated[str, Query(max_length=128)] = ""):
+    return _finish(request, conn, actor, state, code, error)
+
+
+@router.post("/workspaces/{workspace_id}/direct/complete")
+def complete(request: Request, payload: CompleteInput, conn: Conn, ws: CurrentWorkspace):
+    require_manager(ws)
+    result = _finish(request, conn, ws.actor, payload.state, payload.code, workspace_id=ws.id)
+    connected = result.headers["location"].endswith("direct=connected")
+    response = JSONResponse({"connected": True} if connected else {
+        "error": {"message": "Код не принят. Начните подключение заново и используйте новый код Яндекса."}},
+        status_code=200 if connected else 400)
+    response.headers["set-cookie"] = result.headers["set-cookie"]
+    return response
+
+
 @router.get("/workspaces/{workspace_id}/direct")
 def status(request: Request, conn: Conn, ws: CurrentWorkspace):
     row = conn.execute("""SELECT r.id,r.status,r.error_code FROM sync_runs r
         WHERE workspace_id=%s AND runner_managed ORDER BY id DESC LIMIT 1""", (ws.id,)).fetchone()
     connected = conn.execute("SELECT 1 FROM direct_connections WHERE workspace_id=%s AND status='connected'",
                              (ws.id,)).fetchone() is not None
+    reconfigure = conn.execute('''SELECT 1 FROM direct_accounts a JOIN direct_connections c ON c.id=a.direct_connection_id
+        WHERE c.workspace_id=%s AND c.status='connected' AND a.is_selected AND NOT a.metrika_configured LIMIT 1''',
+        (ws.id,)).fetchone() is not None
     return {"enabled": request.app.state.settings.oauth_direct is not None,
             "manager": ws.role in ("owner", "admin"), "connected": connected,
             "analysis_access": load_state(conn, ws.id, None, datetime.now(timezone.utc)).has_analysis_access,
+            "reconfiguration_required": reconfigure,
             "run": {"id": row[0], "status": row[1], "error_code": row[2]} if row else None}
 
 
@@ -186,11 +226,11 @@ def status(request: Request, conn: Conn, ws: CurrentWorkspace):
 def sync(conn: Conn, ws: CurrentWorkspace):
     require_manager(ws)
     _access(conn, ws.id)
-    row = conn.execute("""SELECT a.id,(SELECT mc.id FROM metrika_counters mc JOIN metrika_connections m
-        ON m.id=mc.metrika_connection_id WHERE m.workspace_id=%s AND m.status='connected'
-        AND mc.is_selected ORDER BY mc.id LIMIT 1) FROM direct_accounts a JOIN direct_connections c
+    row = conn.execute("""SELECT a.id,a.metrika_counter_id,a.metrika_configured FROM direct_accounts a JOIN direct_connections c
         ON c.id=a.direct_connection_id WHERE c.workspace_id=%s AND c.status='connected'
-        AND a.is_selected ORDER BY a.id LIMIT 1""", (ws.id, ws.id)).fetchone()
+        AND a.is_selected ORDER BY a.id LIMIT 1""", (ws.id,)).fetchone()
     if not row:
         raise ApiError(409, "direct_not_connected")
-    return {"run_id": _queue(conn, ws.id, *row), "status": "queued"}
+    if not row[2]:
+        raise ApiError(409, 'metrika_configuration_required', message='Переподключите аккаунт и подтвердите его счётчик и цели либо работу без Метрики.')
+    return {"run_id": _queue(conn, ws.id, *row[:2]), "status": "queued"}

@@ -118,7 +118,7 @@ def test_csrf_and_no_fake_verification(flow):
     b=body(flow)
     assert post(flow,'/manual-execution',b,cookie(session(flow['rw'],flow['ids']['owner']))).status_code==403
     r=post(flow,'/verification',b)
-    assert r.status_code==503 and r.json()['error']['code']=='verification_unavailable'
+    assert r.status_code==409 and r.json()['error']['reason']=='manual_execution_required'
     assert read(flow)['history']==[]
 
 def test_inactive_evidence(flow):

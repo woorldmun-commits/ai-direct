@@ -1,0 +1,1150 @@
+{
+  "summary": {
+    "fails": 27,
+    "reflex": 98,
+    "warns": 1,
+    "waived": 0,
+    "rejected": 0,
+    "answered": 0,
+    "dismissed": 0,
+    "notes": 0,
+    "files": 2,
+    "render": "off"
+  },
+  "findings": [
+    {
+      "gate": "19",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.tsx",
+      "line": 42,
+      "evidence": "dash \"–\" in copy",
+      "fix": "A comma, a colon, a full stop or parentheses; never a dash"
+    },
+    {
+      "gate": "20",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 1,
+      "evidence": "no Hallmark stamp on the first non-empty line of any CSS",
+      "fix": "The stamp comment is line 1 of the CSS; only @charset may precede it"
+    },
+    {
+      "gate": "38i",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.tsx",
+      "line": 59,
+      "evidence": "<em>/<i> inside <h1>",
+      "fix": "Roman headers; emphasis via weight or accent"
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 2,
+      "evidence": "font-family literal \"Inter,Arial,sans-serif\" on .ms-root .home-redesign",
+      "fix": "Lift the value into the token block"
+    },
+    {
+      "gate": "48",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 184,
+      "evidence": "colour literal #FFFDF9 outside tokens (color on [data-theme=dark] .home-redes…)",
+      "fix": "Lift the value into the token block"
+    },
+    {
+      "gate": "54",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.tsx",
+      "line": 43,
+      "evidence": "eyebrow \"Пример рекомендации\" before <h3>",
+      "fix": "Cut it; the heading already says this (craft.md § 7 has twelve other openings)"
+    },
+    {
+      "gate": "54",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.tsx",
+      "line": 44,
+      "evidence": "eyebrow \"Контекст каждой цифры\" before <h3>",
+      "fix": "Cut it; the heading already says this (craft.md § 7 has twelve other openings)"
+    },
+    {
+      "gate": "54",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.tsx",
+      "line": 59,
+      "evidence": "eyebrow \"ДЛЯ ТЕХ, КТО ОТВЕЧАЕТ ЗА РЕКЛАМУ\" before <h1>",
+      "fix": "Cut it; the heading already says this (craft.md § 7 has twelve other openings)"
+    },
+    {
+      "gate": "54",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.tsx",
+      "line": 62,
+      "evidence": "eyebrow \"ПОСМОТРИТЕ, КАК УСТРОЕН INROU\" before <h2>",
+      "fix": "Cut it; the heading already says this (craft.md § 7 has twelve other openings)"
+    },
+    {
+      "gate": "54",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.tsx",
+      "line": 64,
+      "evidence": "eyebrow \"МЕНЬШЕ ПОИСКА. БОЛЬШЕ ЯСНОСТИ.\" before <h2>",
+      "fix": "Cut it; the heading already says this (craft.md § 7 has twelve other openings)"
+    },
+    {
+      "gate": "54",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.tsx",
+      "line": 66,
+      "evidence": "eyebrow \"ОТ ПОКАЗАТЕЛЯ К РЕШЕНИЮ\" before <h2>",
+      "fix": "Cut it; the heading already says this (craft.md § 7 has twelve other openings)"
+    },
+    {
+      "gate": "54",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.tsx",
+      "line": 66,
+      "evidence": "eyebrow \"ПАСПОРТ РЕШЕНИЯ ПРИМЕР\" before <h3>",
+      "fix": "Cut it; the heading already says this (craft.md § 7 has twelve other openings)"
+    },
+    {
+      "gate": "54",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.tsx",
+      "line": 68,
+      "evidence": "eyebrow \"АНАЛИТИКА БЕЗ ПОТЕРИ КОНТРОЛЯ\" before <h2>",
+      "fix": "Cut it; the heading already says this (craft.md § 7 has twelve other openings)"
+    },
+    {
+      "gate": "54",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.tsx",
+      "line": 70,
+      "evidence": "eyebrow \"ПОНЯТНЫЙ ПУТЬ К РАБОТЕ\" before <h2>",
+      "fix": "Cut it; the heading already says this (craft.md § 7 has twelve other openings)"
+    },
+    {
+      "gate": "54",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.tsx",
+      "line": 72,
+      "evidence": "eyebrow \"ПОДПИСКА НА ЯСНОСТЬ\" before <h2>",
+      "fix": "Cut it; the heading already says this (craft.md § 7 has twelve other openings)"
+    },
+    {
+      "gate": "54",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.tsx",
+      "line": 74,
+      "evidence": "eyebrow \"ПЕРЕД ПЕРВЫМ ШАГОМ\" before <h2>",
+      "fix": "Cut it; the heading already says this (craft.md § 7 has twelve other openings)"
+    },
+    {
+      "gate": "54",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.tsx",
+      "line": 75,
+      "evidence": "eyebrow \"НАЧНИТЕ С ПОНЯТНОЙ КАРТИНЫ\" before <h2>",
+      "fix": "Cut it; the heading already says this (craft.md § 7 has twelve other openings)"
+    },
+    {
+      "gate": "63",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.tsx",
+      "line": 42,
+      "evidence": "middle-dot meta string \"Поиск · бренд РСЯ · каталог Поиск · категории Рет…\"",
+      "fix": "Line breaks, columns or hairlines; one dot in a byline at most"
+    },
+    {
+      "gate": "67",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 22,
+      "evidence": ".home-eyebrow: letter-spaced tracked 0.14em at 10px in a label role",
+      "fix": "Labels, captions, table heads, nav links and meta are the body face (or the theme's label face), a step smaller, sentence case, untracked"
+    },
+    {
+      "gate": "67",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 36,
+      "evidence": ".home-product-caption: letter-spaced tracked 0.12em at 8px in a label role",
+      "fix": "Labels, captions, table heads, nav links and meta are the body face (or the theme's label face), a step smaller, sentence case, untracked"
+    },
+    {
+      "gate": "67",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 49,
+      "evidence": ".home-preview-heading>div>span: letter-spaced tracked 0.1em at 8px in a label role",
+      "fix": "Labels, captions, table heads, nav links and meta are the body face (or the theme's label face), a step smaller, sentence case, untracked"
+    },
+    {
+      "gate": "67",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 109,
+      "evidence": ".home-evidence-top: letter-spaced tracked 0.12em at 8px in a label role",
+      "fix": "Labels, captions, table heads, nav links and meta are the body face (or the theme's label face), a step smaller, sentence case, untracked"
+    },
+    {
+      "gate": "67",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.tsx",
+      "line": 48,
+      "evidence": "\"Последнее слово — за вами. INRO…\" typed in capitals at 11px (<p>)",
+      "fix": "Sentence case in the body face; capitals survive only as a wordmark or as the display voice"
+    },
+    {
+      "gate": "67",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.tsx",
+      "line": 62,
+      "evidence": "\"ПОСМОТРИТЕ, КАК УСТРОЕН INROU\" typed in capitals at 10px (<span class=\"home-eyebrow\">)",
+      "fix": "Sentence case in the body face; capitals survive only as a wordmark or as the display voice"
+    },
+    {
+      "gate": "67",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.tsx",
+      "line": 72,
+      "evidence": "\"INROU / 1 рекламный аккаунт\" typed in capitals at 10px (<div class=\"home-plan-top\">)",
+      "fix": "Sentence case in the body face; capitals survive only as a wordmark or as the display voice"
+    },
+    {
+      "gate": "67",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.tsx",
+      "line": 72,
+      "evidence": "\"INROU /\" typed in capitals at 10px (<span>)",
+      "fix": "Sentence case in the body face; capitals survive only as a wordmark or as the display voice"
+    },
+    {
+      "gate": "67",
+      "grade": "FAIL",
+      "tier": "floor",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.tsx",
+      "line": 77,
+      "evidence": "\"INROU — независимый сервис, не …\" typed in capitals at 10px (<small>)",
+      "fix": "Sentence case in the body face; capitals survive only as a wordmark or as the display voice"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 8,
+      "evidence": "gap: 10px (off the 4px scale) on .home-redesign .home-brand",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 14,
+      "evidence": "gap: 14px (off the 4px scale) on .home-redesign .home-button",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 14,
+      "evidence": "padding: 14px 20px (off the 4px scale) on .home-redesign .home-button",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 17,
+      "evidence": "padding: 10px 15px (off the 4px scale) on .home-header .home-button",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 21,
+      "evidence": "padding: 66px 52px 56px (off the 4px scale) on .home-hero",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 22,
+      "evidence": "gap: 9px (off the 4px scale) on .home-eyebrow",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 28,
+      "evidence": "gap: 10px (off the 4px scale) on .home-hero-actions",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 29,
+      "evidence": "margin-top: 17px (off the 4px scale) on .home-redesign .home-hero-footnote",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 30,
+      "evidence": "padding-top: 10px (off the 4px scale) on .home-product-stage",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 33,
+      "evidence": "padding: 14px 18px (off the 4px scale) on .home-hero-visual figcaption",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 34,
+      "evidence": "gap: 70px (off the 4px scale) on .home-product-showcase",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 36,
+      "evidence": "margin: 0 2px 14px (off the 4px scale) on .home-product-caption",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 40,
+      "evidence": "gap: 9px (off the 4px scale) on .home-product-top>span:first-child",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 42,
+      "evidence": "padding: 5px 8px (off the 4px scale) on .home-demo-label",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 48,
+      "evidence": "margin-bottom: 18px (off the 4px scale) on .home-preview-heading",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 52,
+      "evidence": "margin-top: 3px (off the 4px scale) on .home-preview-heading>span",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 55,
+      "evidence": "padding-top: 14px (off the 4px scale) on .home-redesign .home-product-window .ms-y-axis",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 56,
+      "evidence": "padding-left: 46px (off the 4px scale) on .home-redesign .home-product-window .ms-x-axis",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 56,
+      "evidence": "margin-top: 5px (off the 4px scale) on .home-redesign .home-product-window .ms-x-axis",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 57,
+      "evidence": "gap: 8px 14px (off the 4px scale) on .home-preview-legend",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 57,
+      "evidence": "margin: 18px 0 0 44px (off the 4px scale) on .home-preview-legend",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 58,
+      "evidence": "gap: 5px (off the 4px scale) on .home-preview-legend>span",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 63,
+      "evidence": "padding: 13px 20px (off the 4px scale) on .home-product-bottom",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 66,
+      "evidence": "gap: 14px (off the 4px scale) on .home-product-note",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 66,
+      "evidence": "padding: 15px 20px (off the 4px scale) on .home-product-note",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 70,
+      "evidence": "gap: 6px (off the 4px scale) on .home-preview-badge",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 71,
+      "evidence": "margin: 14px 0 10px (off the 4px scale) on .home-redesign .home-preview-content h3",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 73,
+      "evidence": "margin: 18px 0 (off the 4px scale) on .home-preview-content dl",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 78,
+      "evidence": "margin: 14px 0 (off the 4px scale) on .home-preview-sources>div",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 83,
+      "evidence": "padding: 26px 0 (off the 4px scale) on .home-context-strip",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 87,
+      "evidence": "margin-top: 5px (off the 4px scale) on .home-context-strip>div small",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 90,
+      "evidence": "gap: 10px (off the 4px scale) on .home-context-strip>a",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 92,
+      "evidence": "margin-bottom: 38px (off the 4px scale) on .home-section-heading",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 93,
+      "evidence": "margin: 17px 0 0 (off the 4px scale) on .home-redesign h2",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 94,
+      "evidence": "padding-bottom: 3px (off the 4px scale) on .home-section-heading>p",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 103,
+      "evidence": "margin-top: 22px (off the 4px scale) on .home-redesign .home-decision-copy>p",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 104,
+      "evidence": "gap: 14px (off the 4px scale) on .home-decision-copy ul",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 105,
+      "evidence": "gap: 10px (off the 4px scale) on .home-decision-copy li",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 111,
+      "evidence": "padding: 5px 8px (off the 4px scale) on .home-evidence-top>span:last-child",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 113,
+      "evidence": "gap: 14px (off the 4px scale) on .home-evidence-row",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 113,
+      "evidence": "padding: 18px 0 (off the 4px scale) on .home-evidence-row",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 115,
+      "evidence": "margin-top: 3px (off the 4px scale) on .home-evidence-row>svg",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 117,
+      "evidence": "margin-top: 5px (off the 4px scale) on .home-redesign .home-evidence-row p",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 118,
+      "evidence": "gap: 9px (off the 4px scale) on .home-evidence-footer",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 118,
+      "evidence": "padding-top: 18px (off the 4px scale) on .home-evidence-footer",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 126,
+      "evidence": "margin-bottom: 5px (off the 4px scale) on .home-control-band li strong",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 130,
+      "evidence": "margin-bottom: 10px (off the 4px scale) on .home-redesign .home-workflow h3",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 134,
+      "evidence": "margin: 24px 0 18px (off the 4px scale) on .home-redesign .home-plans-copy>p",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 135,
+      "evidence": "padding: 30px (off the 4px scale) on .home-plan-card",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 136,
+      "evidence": "gap: 10px (off the 4px scale) on .home-plan-top",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 136,
+      "evidence": "margin-bottom: 30px (off the 4px scale) on .home-plan-top",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 142,
+      "evidence": "gap: 14px (off the 4px scale) on .home-plan-card ul",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 143,
+      "evidence": "gap: 10px (off the 4px scale) on .home-plan-card li",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 149,
+      "evidence": "gap: 90px (off the 4px scale) on .home-faq",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 151,
+      "evidence": "margin-right: 6px (off the 4px scale) on .home-faq>div:first-child>p>svg",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 152,
+      "evidence": "margin: 10px 0 0 26px (off the 4px scale) on .home-faq>div:first-child>p>a",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 160,
+      "evidence": "padding: 0 26px 24px 0 (off the 4px scale) on .home-redesign .home-faq details p",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 161,
+      "evidence": "padding: 70px 24px 80px (off the 4px scale) on .home-final",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 165,
+      "evidence": "margin-top: 14px (off the 4px scale) on .home-final>span:last-child",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 166,
+      "evidence": "padding: 42px 52px 76px (off the 4px scale) on .home-footer",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 167,
+      "evidence": "margin: 14px 0 10px (off the 4px scale) on .home-redesign .home-footer p",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 169,
+      "evidence": "gap: 6px (off the 4px scale) on .home-footer nav",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 188,
+      "evidence": "gap: 18px (off the 4px scale) on .home-header-actions",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 206,
+      "evidence": "gap: 42px (off the 4px scale) on .home-hero",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 213,
+      "evidence": "gap: 22px (off the 4px scale) on .home-context-strip",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 218,
+      "evidence": "margin-top: 22px (off the 4px scale) on .home-section-heading>p",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 224,
+      "evidence": "gap: 8px 18px (off the 4px scale) on .home-footer>nav:last-child",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 229,
+      "evidence": "margin-top: 18px (off the 4px scale) on .home-redesign .home-product-showcase>div:first-child>p",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 230,
+      "evidence": "padding: 12px 14px (off the 4px scale) on .home-hero-visual figcaption",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 232,
+      "evidence": "gap: 10px (off the 4px scale) on .home-header",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 233,
+      "evidence": "gap: 7px (off the 4px scale) on .home-redesign .home-brand",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 236,
+      "evidence": "padding: 10px 12px (off the 4px scale) on .home-redesign .home-header .home-button",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 236,
+      "evidence": "gap: 7px (off the 4px scale) on .home-redesign .home-header .home-button",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 238,
+      "evidence": "padding: 38px 20px 32px (off the 4px scale) on .home-hero",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 238,
+      "evidence": "gap: 34px (off the 4px scale) on .home-hero",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 244,
+      "evidence": "margin-top: 14px (off the 4px scale) on .home-redesign .home-hero-footnote",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 245,
+      "evidence": "margin-bottom: 10px (off the 4px scale) on .home-product-caption",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 247,
+      "evidence": "gap: 6px (off the 4px scale) on .home-product-top",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 248,
+      "evidence": "gap: 5px (off the 4px scale) on .home-product-top>span:first-child",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 249,
+      "evidence": "padding: 5px (off the 4px scale) on .home-demo-label",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 253,
+      "evidence": "gap: 5px (off the 4px scale) on .home-preview-heading",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 259,
+      "evidence": "padding-right: 5px (off the 4px scale) on .home-redesign .home-product-window .ms-x-axis",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 261,
+      "evidence": "padding: 10px 12px (off the 4px scale) on .home-product-bottom",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 262,
+      "evidence": "gap: 10px (off the 4px scale) on .home-product-note",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 265,
+      "evidence": "gap: 22px 10px (off the 4px scale) on .home-context-strip",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 274,
+      "evidence": "margin-top: 18px (off the 4px scale) on .home-section-heading>p",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 278,
+      "evidence": "margin-bottom: 18px (off the 4px scale) on .home-benefit-grid article>div",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 282,
+      "evidence": "margin-top: 18px (off the 4px scale) on .home-redesign .home-decision-copy>p",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 285,
+      "evidence": "padding: 22px 20px (off the 4px scale) on .home-evidence-card",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 288,
+      "evidence": "gap: 10px (off the 4px scale) on .home-evidence-row",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 292,
+      "evidence": "gap: 30px (off the 4px scale) on .home-control-band",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 298,
+      "evidence": "margin-bottom: 14px (off the 4px scale) on .home-workflow li>span",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 306,
+      "evidence": "gap: 13px (off the 4px scale) on .home-plan-card ul",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 308,
+      "evidence": "margin-top: 18px (off the 4px scale) on .home-redesign .home-faq>div:first-child>p",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "24b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 314,
+      "evidence": "gap: 30px 20px (off the 4px scale) on .home-footer",
+      "fix": "Use the 4px spacing scale"
+    },
+    {
+      "gate": "26b",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 1,
+      "evidence": "no :disabled styling anywhere",
+      "fix": "All eight states; guard: not a form control, no aria-disabled anywhere"
+    },
+    {
+      "gate": "38iii",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 25,
+      "evidence": "accented word inside a heading (.home-redesign :is(h1,h2) em)",
+      "fix": "Set the whole head one way: a line break, a second line at a second size, or the whole head in the accent. Guard: the theme names the coloured word as its signature and it appears once on the page, in the hero"
+    },
+    {
+      "gate": "38iii",
+      "grade": "REFLEX",
+      "tier": "reflex",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 120,
+      "evidence": "accented word inside a heading (.home-control-band .home-eyebrow,.home-redesign .home-control-band h2 em)",
+      "fix": "Set the whole head one way: a line break, a second line at a second size, or the whole head in the accent. Guard: the theme names the coloured word as its signature and it appears once on the page, in the hero"
+    },
+    {
+      "gate": "F15",
+      "grade": "WARN",
+      "tier": "finish",
+      "file": "C:\\Users\\woorl\\Documents\\inrou\\designe 1.0\\components\\midnight\\home.css",
+      "line": 1,
+      "evidence": "6 different column gaps across multi-column sections (76px, 80px, 40px, 88px, 90px, 44px)",
+      "fix": "One column gap for every multi-column section"
+    }
+  ]
+}

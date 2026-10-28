@@ -1,0 +1,20 @@
+{
+  "args": [
+    "tests/test_trial.py",
+    "tests/test_subscription_read.py",
+    "tests/test_email_auth.py",
+    "tests/test_api_auth.py",
+    "tests/test_worker_sync.py",
+    "tests/test_missing_conversions.py",
+    "tests/test_direct_sync.py",
+    "tests/test_rule_high_cpa.py",
+    "tests/test_rule_zero_conv_campaign.py",
+    "tests/test_rule_zero_conv_placements.py",
+    "tests/test_migrations.py",
+    "tests/test_tokens.py"
+  ],
+  "started_utc": "2026-10-28T06:00:25.340521+00:00",
+  "finished_utc": "2026-10-28T06:01:24.660737+00:00",
+  "exit_code": 0,
+  "pg_stop_exit_code": 0
+}

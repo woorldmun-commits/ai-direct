@@ -14,6 +14,7 @@ from psycopg.types.json import Jsonb
 from app.api.active import status_of, today_msk
 from app.api.deps import Conn, CurrentWorkspace
 from app.api.errors import ApiError, not_found
+from app.api.verification import enqueue as enqueue_verification, status as membership_status
 from app.api.routes import Strict
 from app.api.serialize import action, ext, moment, value
 from app.audit.present import title
@@ -132,7 +133,7 @@ def _passport(conn, ws, data):
             "action_level": data["level"], "action": action(data["action"], data["meta"] or {}, data["level"], data["topic"]),
             "execution_mode": "manual" if manual else "none" if data["execution"] == "checked" else None,
             "verification_status": "pending" if manual else "not_required" if data["execution"] == "checked" else None,
-            "verification": {"status": "unavailable", "reason": "verification_worker_not_implemented"},
+            "verification": membership_status(conn, data, ws),
             "evidence_current": data["current"], "exposure": value(data["lost"]), "can_save": value(data["recoverable"]),
             "evidence": {k: value(v) for k, v in data["evidence"].items()},
             "rule_version": data["rule"], "safety_policy": data["policy"], "policy_reasons": data["policy_reasons"],
@@ -244,10 +245,6 @@ def manual_execution(rec_id: str, payload: Mutation, conn: Conn, ws: CurrentWork
 
 @router.post(PREFIX + "/verification")
 def verification(rec_id: str, payload: Mutation, conn: Conn, ws: CurrentWorkspace):
-    if ws.role not in DECIDERS:
-        raise ApiError(403, "forbidden_role")
-    data = _load(conn, ws, rec_id)
-    if payload.expected_version_id != ext("rv", data["finding"]) or payload.expected_state_version != data["state"]:
-        raise ApiError(409, "version_outdated", message="Рекомендация обновлена. Откройте её заново.")
-    raise ApiError(503, "verification_unavailable", reason="verification_worker_not_implemented",
-                   message="Сверка по данным Директа пока недоступна. Ручное действие не подтверждено.")
+    workspace_shared(conn, ws.id)
+    audit_exclusive(conn, ws.id)
+    return enqueue_verification(conn, ws, _load(conn, ws, rec_id), payload)

@@ -102,7 +102,7 @@ def test_placement_report_offline_wait():
 
 def test_parse_placement_rows():
     (row,) = parse(placement_tsv((("Avito.ru", "40", "1200.50", ("1", "--")),)))
-    assert row == PlacementRow("placement", CID, TO, 1000, 40, Decimal("1200.50"), Decimal(1), placement="avito.ru")
+    assert row == PlacementRow("placement", CID, TO, 1000, 40, Decimal("1200.50"), None, placement="avito.ru")
     assert isinstance(row, StatRow) and row.query is None
 
 

@@ -1,0 +1,179 @@
+{
+  "base": "http://127.0.0.1:3130",
+  "scope": "Local production Next build and real FastAPI/RLS; disposable synthetic fixture only",
+  "pages": [
+    {
+      "section": "overview",
+      "width": 1440,
+      "theme": "light",
+      "status": 200,
+      "h1": 1,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "section": "ai",
+      "width": 1440,
+      "theme": "light",
+      "status": 200,
+      "h1": 1,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "section": "plans",
+      "width": 1440,
+      "theme": "light",
+      "status": 200,
+      "h1": 1,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "section": "overview",
+      "width": 1440,
+      "theme": "dark",
+      "status": 200,
+      "h1": 1,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "section": "ai",
+      "width": 1440,
+      "theme": "dark",
+      "status": 200,
+      "h1": 1,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "section": "plans",
+      "width": 1440,
+      "theme": "dark",
+      "status": 200,
+      "h1": 1,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "section": "overview",
+      "width": 804,
+      "theme": "light",
+      "status": 200,
+      "h1": 1,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "section": "ai",
+      "width": 804,
+      "theme": "light",
+      "status": 200,
+      "h1": 1,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "section": "plans",
+      "width": 804,
+      "theme": "light",
+      "status": 200,
+      "h1": 1,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "section": "overview",
+      "width": 804,
+      "theme": "dark",
+      "status": 200,
+      "h1": 1,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "section": "ai",
+      "width": 804,
+      "theme": "dark",
+      "status": 200,
+      "h1": 1,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "section": "plans",
+      "width": 804,
+      "theme": "dark",
+      "status": 200,
+      "h1": 1,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "section": "overview",
+      "width": 390,
+      "theme": "light",
+      "status": 200,
+      "h1": 1,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "section": "ai",
+      "width": 390,
+      "theme": "light",
+      "status": 200,
+      "h1": 1,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "section": "plans",
+      "width": 390,
+      "theme": "light",
+      "status": 200,
+      "h1": 1,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "section": "overview",
+      "width": 390,
+      "theme": "dark",
+      "status": 200,
+      "h1": 1,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "section": "ai",
+      "width": 390,
+      "theme": "dark",
+      "status": 200,
+      "h1": 1,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "section": "plans",
+      "width": 390,
+      "theme": "dark",
+      "status": 200,
+      "h1": 1,
+      "overflow": false,
+      "errors": []
+    }
+  ],
+  "checks": [
+    {
+      "name": "Foreign workspace snapshot analysis denied",
+      "pass": true
+    },
+    {
+      "name": "Foreign workspace snapshot analysis denied",
+      "pass": true
+    }
+  ],
+  "failures": []
+}

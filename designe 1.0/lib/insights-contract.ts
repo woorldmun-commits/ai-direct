@@ -57,11 +57,23 @@ export function isMeasurement(v:unknown):v is Measurement|null{
 export function isActivity(v:unknown):v is RecommendationActivity{
  return record(v)&&(v.next_cursor===null||text(v.next_cursor)&&/^[1-9]\d{0,18}$/.test(v.next_cursor))&&Array.isArray(v.items)&&v.items.length<=50&&v.items.every(i=>record(i)&&text(i.id)&&/^rec_[1-9]\d{0,18}$/.test(i.id)&&text(i.title)&&text(i.status)&&(i.execution_mode===null||i.execution_mode==='manual')&&text(i.updated_at)&&Number.isFinite(Date.parse(i.updated_at))&&isMeasurement(i.measurement));
 }
+export type RecommendationVerification={status:'pending'|'confirmed'|'not_confirmed'|'unknown'|'unavailable'|'not_required';reason:string;method?:'excluded_sites_membership@1';proof_scope?:'final_membership';counted_in_saved_total?:false;can_request?:boolean;request_id?:string;checked_at?:string|null;target_count?:number|null;matched_count?:number|null};
+export function isVerification(v:unknown):v is RecommendationVerification {
+ if(!record(v)||typeof v.status!=='string'||!['pending','confirmed','not_confirmed','unknown','unavailable','not_required'].includes(v.status)||!text(v.reason))return false;
+ // Legacy unavailable fixtures carry no source proof.
+ if(v.method===undefined)return v.status==='unavailable'&&v.can_request===undefined;
+ if(v.method!=='excluded_sites_membership@1'||v.proof_scope!=='final_membership'||v.counted_in_saved_total!==false||typeof v.can_request!=='boolean')return false;
+ if(v.request_id!==undefined&&!(typeof v.request_id==='string'&&/^verification_[1-9]\d{0,18}$/.test(v.request_id)))return false;
+ if(v.checked_at!==undefined&&v.checked_at!==null&&!(typeof v.checked_at==='string'&&Number.isFinite(Date.parse(v.checked_at))))return false;
+ for(const key of ['target_count','matched_count'])if(v[key]!==undefined&&v[key]!==null&&!(Number.isSafeInteger(v[key])&&Number(v[key])>=0))return false;
+ if(v.status==='confirmed'&&!(typeof v.target_count==='number'&&v.target_count>0&&v.matched_count===v.target_count&&typeof v.checked_at==='string'))return false;
+ return !(typeof v.target_count==='number'&&typeof v.matched_count==='number'&&v.matched_count>v.target_count);
+}
 export type RecommendationPassport={
  id:string;version_id:string;state_version:string;status:string;title?:string;action_level:string;
  action:ManualAction|null;object:{type:string;id:string;name:string|null};evidence_current:boolean;evidence:Record<string,Value>;explanation:{text:string;source:string}|null;exposure:Value;can_save:Value;computed_at:string;allowed_actions:string[];
  history:{id:string;type:string;actor_id:string|null;created_at:string;version_id:string|null}[];
- latest_measurement:Measurement|null;verification:{status:string;reason:string};
+ latest_measurement:Measurement|null;verification:RecommendationVerification;
 };
 export function isPassport(v:unknown):v is RecommendationPassport{
  return record(v)&&text(v.id)&&/^rec_[1-9]\d{0,18}$/.test(v.id)&&text(v.version_id)&&/^rv_[1-9]\d{0,18}$/.test(v.version_id)
@@ -73,5 +85,5 @@ export function isPassport(v:unknown):v is RecommendationPassport{
  &&text(v.computed_at)&&Number.isFinite(Date.parse(v.computed_at))
  &&(v.explanation===null||record(v.explanation)&&text(v.explanation.text)&&text(v.explanation.source))
  &&(v.title===undefined||text(v.title))
- &&record(v.verification)&&text(v.verification.status)&&text(v.verification.reason)&&isMeasurement(v.latest_measurement);
+ &&isVerification(v.verification)&&isMeasurement(v.latest_measurement);
 }

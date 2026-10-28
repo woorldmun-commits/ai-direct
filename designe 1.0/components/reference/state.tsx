@@ -3,7 +3,7 @@ import {createContext,useCallback,useContext,useEffect,useRef,useState,type Reac
 import {applyRecommendation,initialState,recs,scoped,restoreState,type DemoState} from './model';
 type Context = {state:DemoState;setState:React.Dispatch<React.SetStateAction<DemoState>>;days:number;setDays:(v:number)=>void;account:string;setAccount:(v:string)=>void;rows:ReturnType<typeof scoped>;toast:string;notify:(s:string)=>void;log:(title:string,detail:string,type:string)=>void;apply:(id:number)=>void};
 const DemoContext=createContext<Context|null>(null);
-const storage='adpilot-reference-v2';
+const storage='inrou-reference-v2';
 export function ReferenceProvider({children}:{children:ReactNode}) {
  const [state,setReactState]=useState(initialState),[days,setDays]=useState(31),[account,setAccount]=useState('Все аккаунты'),[toast,setToast]=useState('');
  const stateRef=useRef(state),storageFailed=useRef(false);

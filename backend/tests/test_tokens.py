@@ -89,5 +89,8 @@ def test_security_definer_functions_have_fixed_search_path(rw):
                                           "email_auth_attempt", "email_auth_credential", "email_auth_signup",
                                           "email_auth_pending", "email_auth_finish", "email_auth_login",
                                           "email_auth_reset_request", "email_auth_reset_finish",
-                                          "purge_personal_data_before_email"}
+                                          "purge_personal_data_before_email", "purge_billing_request_snapshots",
+                                          "enqueue_email_reset_mail", "enqueue_email_verify_mail", "claim_email_reset_mail",
+                                          "prepare_email_reset_mail", "finish_email_reset_mail", "purge_email_reset_mail",
+                                          "start_registration_trial", "workspace_trial"}
     assert all(cfg and any(c.startswith("search_path=") for c in cfg) for _, cfg in rows)

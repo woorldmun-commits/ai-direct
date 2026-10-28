@@ -1,6 +1,6 @@
-# AdPilot — активный сайт
+# inrou — активный сайт
 
-Папка `designe 1.0` содержит основной сайт AdPilot: светлый фиолетово-голубой дизайн по согласованному `ad.png`, публичные страницы, демонстрационный кабинет и интерфейс рабочего кабинета. Основная тема — светлая; пользователь может выбрать тёмную или системную. Папка `frontend` — отдельная прежняя версия, её нельзя выбирать автоматически вместо этой папки при deployment.
+Папка `designe 1.0` содержит основной сайт INROU на Next.js 16.4.2: дизайн из `INROU_FINAL_HANDOFF/reference/index.html`, публичные страницы и рабочий кабинет. Кремовые поверхности, хвойная навигация, Georgia/Inter; светлая, тёмная и системная темы. Архитектура и серверные контракты сохранены. Доказательства и ограничения: [отчёт реализации](../docs/design-implementation/IMPLEMENTATION_REPORT.md).
 
 ## Локальный запуск
 
@@ -16,25 +16,26 @@ npm run start -- --hostname 127.0.0.1 --port 3120
 
 Основные пути:
 
-- `/` — главная; `/features`, `/how-it-works`, `/integrations`, `/pricing`, `/security`, `/faq`, `/contact` — публичные страницы.
-- `/demo` — демонстрационный кабинет. Рекомендации, кампании, эффект, отчёты, сигналы, AI-аналитик, история, команда, тарифы, подключения и настройки используют явно обозначенные модельные данные. Изменения сохраняются только в браузере; они не изменяют реальную рекламу.
+- `/` — главная; `/features`, `/how-it-works`, `/agencies`, `/business`, `/about`, `/integrations`, `/pricing`, `/security`, `/faq`, `/contact` — публичные страницы.
+- `/demo/<section>` — демонстрационный кабинет, **404 по умолчанию**; только локальный QA включает `INROU_DEMO=1`. Все показатели синтетические; решения живут в памяти до перезагрузки. `/demo/states` — галерея loading/empty/error/insufficient/stale/partial/forbidden/expired/success. Реклама не изменяется.
 - `/login`, `/signup`, `/verify-email`, `/forgot-password`, `/reset-password` — вход, подтверждение и восстановление аккаунта. Доступность зависит от конфигурации backend и документов.
-- `/workspace` — реальные данные выбранного рабочего пространства; `/workspace/recommendations/[id]` — паспорт и решение по рекомендации. Ошибки API не заменяются демонстрационными значениями.
+- `/register` — совместимый адрес регистрации, перенаправляет на `/signup`.
+- `/onboarding/{organization,business-profile,connect,first-audit}` — первый запуск с серверными состояниями и проверкой сессии.
+- `/workspace` — совместимый редирект со старых `?view=`; 14 разделов `/workspace/{overview,analysis,recommendations,campaigns,connections,impact,reports,alerts,ai,history,team,plans,settings,business-profile}`, дополнительно `data-health` и `onboarding-review`. Контекст — `?workspace=ws_…`. Паспорт — `/workspace/recommendations?workspace=…&rec=…`; старый `/workspace/recommendations/[id]` сохранён как редирект. Поддержаны детали подключений, сигналов, участников, недельного отчёта и история через паспорт. Для недоступных кампаний — полноценный макет без вымышленных показателей.
 - `/legal` и страницы документов — правовая информация. Наличие текста на странице само по себе не является утверждением документов владельцем.
 
 ## Настройки Next.js
 
 Скопируйте `.env.example` в локальный файл настроек только в своём окружении. Секреты и реальные session-токены не должны попадать в репозиторий или браузерные env.
 
-- `REKVERO_API_URL` — origin backend без пути; HTTPS, кроме loopback HTTP. Приложение добавляет `/api/v1`.
-- `REKVERO_APP_ORIGIN` — точный публичный origin браузера; необходим за reverse proxy с внутренним адресом. Тот же origin должен быть разрешён backend.
-- `REKVERO_SESSION_COOKIE` — имя серверной cookie, по умолчанию `session`. Значение токена передаёт только cookie.
-- Старые `ADPILOT_API_URL`, `ADPILOT_APP_ORIGIN`, `ADPILOT_SESSION_COOKIE` поддерживаются как fallback, если соответствующая переменная REKVERO не задана.
+- `INROU_API_URL` — origin backend без пути; HTTPS, кроме loopback HTTP. Приложение добавляет `/api/v1`.
+- `INROU_APP_ORIGIN` — точный публичный origin браузера; необходим за reverse proxy с внутренним адресом. Тот же origin должен быть разрешён backend.
+- `INROU_SESSION_COOKIE` — имя серверной cookie, по умолчанию `session`. Значение токена передаёт только cookie.
 - `NEXT_PUBLIC_SITE_URL` — подтверждённый HTTPS origin при сборке. Пока он не задан либо является локальным, индексация закрыта, sitemap пуст.
 - `NEXT_PUBLIC_YM_ID` — необязательный согласованный счётчик. Загружается после согласия; закрытые страницы аккаунта исключены, Webvisor/clickmap выключены.
 - `NEXT_PUBLIC_YANDEX_VERIFICATION` — необязательный код подтверждения публичного сайта.
 
-Не используйте `REKVERO_LOCAL_PREVIEW=true` в production: этот режим предназначен для изолированного локального стенда с тестовой почтой и документами.
+Не используйте `INROU_LOCAL_PREVIEW=true` в production: этот режим предназначен для изолированного локального стенда с тестовой почтой и документами.
 
 ## Backend и регистрация
 
@@ -52,12 +53,13 @@ npm run start -- --hostname 127.0.0.1 --port 3120
 npm run lint
 npm run test:model
 npm run test:pilot
+npm run test:ix
 node scripts/check-auth-proxy.mjs
 node scripts/check-workspace-proxy.mjs
 node scripts/check-site.mjs
 node scripts/check-insights.mjs
 node --experimental-strip-types scripts/check-chart-geometry.mjs
-node scripts/check-adpilot-csv-security.mjs
+node scripts/check-inrou-csv-security.mjs
 node scripts/check-assets.mjs
 npm run build
 npm run test:headers
@@ -66,10 +68,14 @@ npm audit --audit-level=high --package-lock-only --omit=dev
 
 `test:headers` поднимает отдельный сервер из готовой `.next` сборки. `REQUIRE_BROWSER=1` требует установленный Playwright/Chromium и не допускает тихий пропуск браузерной проверки. `HTTP_ONLY=1` используется только когда браузер проверяется другим runner; эти флаги несовместимы.
 
-Активный CI: `.github/workflows/adpilot-launch.yml`. Успешная локальная сборка не заменяет успешный CI чистого checkout.
+Финальная браузерная проверка: сначала запустить `scripts/pilot-fixture.py` через backend venv (одноразовая локальная БД, порт 3121; `INROU_INTELLIGENCE_ENABLED=1` для анализа), затем после сборки `node scripts/check-ix-acceptance.mjs`. Runner сам поднимает временный Next server только на `127.0.0.1:3130`, использует Edge/Playwright из bundled runtime и останавливает свой сервер. `PLAYWRIGHT_MODULE` задаёт установленный пакет Playwright; `AXE_PATH` — установленный `axe.min.js` для WCAG проверки. Без axe отчёт явно помечает аудит UNAVAILABLE. Нужна свежая фикстура: E2E сохраняют бюджет/импорт/ручное решение. Сессионные cookie фикстуры не выводятся в отчёт. Публичный доступ/реальные данные не используются.
+
+Матрица: 54 маршрута, light/dark, 320/375/390/768/1024/1280/1440/1920; скриншоты 390/1440, 19 сравнений с неизменёнными PNG архива и оригинальным HTML в том же Edge. Новые макеты — `docs/design-implementation/new_screen_baselines/`, статус PENDING до утверждения владельцем.
+
+Активный CI: `.github/workflows/inrou-launch.yml`. Успешная локальная сборка не заменяет успешный CI чистого checkout.
 
 ## Границы готовности
 
 Перед внешним запуском нужны подтверждённые домен и hosting/TLS, опубликованный совместимый backend и миграции, production БД с резервным копированием и проверкой восстановления, настроенная почта/OAuth, доступы к реальным источникам, утверждённые документы и проверенные права пользователей. Оплата, недостающие API и производственные интеграции не появляются от одной настройки дизайна.
 
-По состоянию проверки 20 октября 2026 года production npm audit не выявил известных уязвимостей. В dev tooling остаётся GHSA-vfj7-8cjw-p6xm / CVE-2026-93687 (`braces <=3.0.3`), для которой реестр пока не публикует исправленную версию. Не применяйте `npm audit fix --force`: предлагаемое понижение eslint-config-next до 14.x нарушает согласованную версию Next.js 16.x.
+22 октября 2026 года audit обнаружил critical advisory в Next.js 16.3.8. Next.js и eslint-config-next обновлены до 16.4.2, без `audit fix --force`. Результат повторного audit и оставшиеся dev-зависимости фиксируются в отчёте. Успешный audit не заменяет проверку конфигурации, прав и production.

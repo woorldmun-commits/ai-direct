@@ -10,7 +10,7 @@ export async function proxyWorkspace(request:Request,path:string):Promise<Respon
  const publicOrigin=appOrigin(request);
  if(!publicOrigin)return error(503);
  if(request.method==='POST'&&request.headers.get('origin')!==publicOrigin)return error(403);
- const base=apiOrigin(),name=process.env.REKVERO_SESSION_COOKIE??process.env.ADPILOT_SESSION_COOKIE??'session';
+ const base=apiOrigin(),name=process.env.INROU_SESSION_COOKIE??'session';
  if(!base||! /^[A-Za-z0-9_-]{1,64}$/.test(name))return error(503);
  const selected=(request.headers.get('cookie')||'').split(';').map(value=>value.trim()).filter(value=>value.startsWith(name+'='));
  if(selected.length!==1||!new RegExp('^'+name+'=[A-Za-z0-9_-]{32,128}$').test(selected[0]))return error(401);

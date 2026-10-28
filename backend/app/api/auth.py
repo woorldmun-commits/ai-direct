@@ -21,7 +21,7 @@ from app.auth.yandex_oauth import OAuthError, authorize_url, new_state
 from app.legal.documents import is_published, text_sha256
 
 router = APIRouter(prefix="/auth")
-FLOW_COOKIE = "adpilot_oauth_flow"
+FLOW_COOKIE = "inrou_oauth_flow"
 FLOW_TTL = 600
 
 
@@ -44,7 +44,7 @@ def _provider(request: Request):
 
 def _cipher(provider) -> Fernet:
     # Domain separation keeps this cookie key independent of the provider credential's other uses.
-    key = hashlib.sha256(b"adpilot:oauth-flow:v1\x00" + provider.client_secret.encode()).digest()
+    key = hashlib.sha256(b"inrou:oauth-flow:v1\x00" + provider.client_secret.encode()).digest()
     return Fernet(base64.urlsafe_b64encode(key))
 
 
@@ -107,7 +107,8 @@ def callback(request: Request,
                 if signed.created:
                     org = conn.execute("SELECT create_organization(%s, 'Моя организация', 'business')",
                                        (signed.user_id,)).fetchone()[0]
-                    conn.execute("SELECT create_workspace(%s, %s, 'Мой кабинет')", (signed.user_id, org))
+                    ws = conn.execute("SELECT create_workspace(%s, %s, 'Мой кабинет')", (signed.user_id, org)).fetchone()[0]
+                    conn.execute('SELECT start_registration_trial(%s,%s)', (signed.user_id, ws))
                 old_token = request.cookies.get(request.app.state.settings.session_cookie)
                 if old_token:
                     conn.execute("DELETE FROM sessions WHERE token_hash = %s", (session_hash(old_token),))

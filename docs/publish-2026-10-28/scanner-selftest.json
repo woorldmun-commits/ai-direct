@@ -1,0 +1,13 @@
+{
+  "passed": true,
+  "allowed": [
+    "docs/audit-fixes-2026-10-28/source-final.json"
+  ],
+  "blocked": [
+    "docs/config.json",
+    "docs/not-a-hash.json",
+    "docs/pat.json",
+    "outside.txt"
+  ],
+  "scope": "synthetic scanner regressions; exact reviewed evidence paths only"
+}

@@ -7,6 +7,9 @@
 import json
 import logging
 import uuid
+from collections import deque
+from threading import Lock
+from time import monotonic
 
 from app.api.errors import MESSAGES, error_body
 from app.api.settings import Settings
@@ -15,6 +18,7 @@ from app.api.proxy_client import verified_client
 log = logging.getLogger("app.api")
 
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+CALLBACKS_PER_MINUTE = 120
 BASE_HEADERS = (
     (b"x-content-type-options", b"nosniff"),
     (b"referrer-policy", b"no-referrer"),
@@ -52,6 +56,8 @@ class BoundaryMiddleware:
         self.app = app
         self.settings = settings
         self.security_headers = BASE_HEADERS + ((HSTS,) if settings.hsts else ())
+        self.callback_times = deque(maxlen=CALLBACKS_PER_MINUTE)
+        self.callback_lock = Lock()
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -82,7 +88,21 @@ class BoundaryMiddleware:
                                             (b"content-length", str(len(body)).encode())]})
             await send_wrapper({"type": "http.response.body", "body": body})
 
-        if scope["method"] not in SAFE_METHODS and not self._origin_allowed(headers):
+        provider_callback = (scope["method"] == "POST"
+                             and scope["path"] == "/api/v1/billing/yookassa/webhook")
+        if provider_callback:
+            now = monotonic()
+            with self.callback_lock:
+                while self.callback_times and self.callback_times[0] <= now - 60:
+                    self.callback_times.popleft()
+                allowed = len(self.callback_times) < CALLBACKS_PER_MINUTE
+                if allowed:
+                    self.callback_times.append(now)
+            if not allowed:
+                # A retryable response preserves provider redelivery; no callback is acknowledged.
+                await reject(503, 'billing_busy', message='Проверка оплаты занята. Повторите запрос позже.')
+                return
+        if scope["method"] not in SAFE_METHODS and not provider_callback and not self._origin_allowed(headers):
             await reject(403, "csrf_rejected")
             return
 

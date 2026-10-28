@@ -95,7 +95,7 @@ try {
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Экспорт", exact: true }).click();
   const download = await downloadPromise;
-  assert.equal(download.suggestedFilename(), "rekvero-demo-campaigns.csv");
+  assert.equal(download.suggestedFilename(), "inrou-demo-campaigns.csv");
   const csv = await readFile(await download.path(), "utf8");
   assert(csv.includes("VK — Бренд") && !csv.includes("Поиск — Товары"), "export respects campaign filter");
   assert(csv.includes("Кампания") && csv.includes("CPA"), "export includes column names");

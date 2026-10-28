@@ -1,0 +1,11 @@
+{
+  "args": [
+    "tests/test_direct_connect.py",
+    "tests/test_restore.py",
+    "tests/test_lifecycle.py"
+  ],
+  "started_utc": "2026-10-28T06:08:56.301680+00:00",
+  "finished_utc": "2026-10-28T06:09:08.565492+00:00",
+  "exit_code": 1,
+  "pg_stop_exit_code": 0
+}

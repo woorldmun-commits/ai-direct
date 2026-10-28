@@ -47,7 +47,7 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements*.txt
       - name: Install dependencies
-        run: python -m pip install -r requirements-dev.txt
+        run: python -m pip install -r requirements.lock.txt -r requirements-dev.txt
       - name: Ruff
         run: ruff check --output-format=github .
       - name: Migrations reproduce schema.sql
@@ -86,6 +86,12 @@ jobs:
         run: |
           node scripts/check-site.mjs
           node scripts/check-workspace-proxy.mjs
+          npm run test:ix
+          npm run test:remediation
+          npm run test:deep-audit
+          node scripts/check-billing.mjs
+          node --experimental-strip-types scripts/check-subscription.mjs
+          node scripts/check-direct-proxy.mjs
           node scripts/check-insights.mjs
       - run: npm run build
       # Браузерная часть проверки (нарушения CSP в консоли) обязательна: без Playwright шаг падает, а не пропускается.
@@ -131,6 +137,7 @@ jobs:
       - name: pip-audit
         run: |
           python -m pip install pip-audit==2.10.1
+          pip-audit -r backend/requirements.lock.txt
           pip-audit -r backend/requirements-dev.txt
       # Блокирует high/critical в зависимостях, которые попадают в продакшен-сборку. Инструменты разработки
       # (eslint и т. п.) не исполняются в продакшене: их уязвимости видны в отчёте, но merge не блокируют —

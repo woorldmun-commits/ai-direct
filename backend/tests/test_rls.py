@@ -17,7 +17,8 @@ NO_RLS = {"users", "yandex_identities", "sessions", "telegram_links", "organizat
           # вход по телефону: не данные workspace; рабочим ролям таблицы недоступны вовсе — только функции
           "phone_auth_codes", "phone_auth_events",
           # email authentication is global; application roles have function-only access.
-          "email_credentials", "email_pending_signups", "email_reset_tokens", "email_auth_attempts"}
+          "email_credentials", "email_pending_signups", "email_reset_tokens", "email_auth_attempts", "email_reset_mail",
+          "registration_trials"}  # private per-user anti-replay ledger, function-only access
 
 
 def rls_tables(conn) -> set[str]:
@@ -51,7 +52,7 @@ def test_every_table_is_classified(rw):
     with_ws = {r[0] for r in rw.execute("""SELECT table_name FROM information_schema.columns
                                            WHERE table_schema = 'public' AND column_name = 'workspace_id'
                                              AND table_name IN (SELECT tablename FROM pg_tables)""")}
-    assert with_ws | VIA_PARENT | {"workspaces"} <= rls_tables(rw)
+    assert (with_ws - {"registration_trials"}) | VIA_PARENT | {"workspaces"} <= rls_tables(rw)
 
 
 def test_without_workspace_app_role_sees_nothing(app, rw, chain, other):

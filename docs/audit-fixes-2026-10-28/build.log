@@ -1,0 +1,72 @@
+
+> inrou-web@0.1.0 build
+> next build --webpack
+
+▲ Next.js 16.4.2 (webpack)
+- Environments: .env.local
+✓ Running next.config.ts took 30ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 7.2s
+  Running TypeScript ...
+  Finished TypeScript in 2.5s ...
+  Collecting page data using 15 workers ...
+  Generating static pages using 15 workers (0/35) ...
+  Generating static pages using 15 workers (8/35) 
+  Generating static pages using 15 workers (17/35) 
+  Generating static pages using 15 workers (26/35) 
+✓ Generating static pages using 15 workers (35/35) in 484ms
+  Finalizing page optimization ...
+  Collecting build traces ...
+
+Route (app)
+┌ ƒ /
+├ ƒ /_not-found
+├ ƒ /about
+├ ƒ /agencies
+├ ƒ /api/auth/[...path]
+├ ƒ /api/billing/yookassa/webhook
+├ ƒ /api/direct/callback
+├ ƒ /api/health
+├ ƒ /api/workspaces/[...path]
+├ ƒ /api/workspaces/[workspace]/direct/[[...action]]
+├ ƒ /app/[[...path]]
+├ ƒ /blog
+├ ƒ /business
+├ ƒ /cases
+├ ƒ /contact
+├ ƒ /demo
+├ ƒ /demo/[section]
+├ ƒ /demo/midnight/[screen]
+├ ƒ /faq
+├ ƒ /features
+├ ƒ /forgot-password
+├ ƒ /how-it-works
+├ ○ /icon.svg
+├ ƒ /integrations
+├ ƒ /legal
+├ ƒ /legal/[slug]
+├ ƒ /login
+├ ƒ /methodology
+├ ƒ /methodology/[slug]
+├ ƒ /onboarding
+├ ƒ /onboarding/[step]
+├ ƒ /pricing
+├ ƒ /prisma-preview
+├ ƒ /register
+├ ƒ /reset-password
+├ ○ /robots.txt
+├ ƒ /security
+├ ƒ /signup
+├ ○ /sitemap.xml
+├ ƒ /verify-email
+├ ƒ /workspace
+├ ƒ /workspace/[section]
+└ ƒ /workspace/[section]/[id]
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

@@ -68,7 +68,7 @@ export function ValueView({
         {text ?? "Ошибка формата данных"}
       </span>
       {partial && !caption && (
-        <span title={PARTIAL_NOTE} aria-label={PARTIAL_NOTE} className="inline-flex translate-y-[-1px] items-center text-warning">
+        <span role="img" title={PARTIAL_NOTE} aria-label={PARTIAL_NOTE} className="inline-flex translate-y-[-1px] items-center text-warning">
           <RefreshCw size={11} aria-hidden />
         </span>
       )}

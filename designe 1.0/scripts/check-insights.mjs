@@ -47,3 +47,8 @@ assert(!isWeeklyReport({insights:data,decisions:[{type:'automatic_ad_write',coun
 assert(!isWeeklyReport({insights:data,decisions:[{type:'done',count:-1}]}));
 assert(!isWeeklyReport({insights:{...data,budget:{...data.budget,actual:{...value,amount:123}}},decisions:[]}));
 console.log('PASS weekly report validates event kinds, nonnegative counts and nested Value');
+
+const proof={status:'confirmed',reason:'placements_excluded',method:'excluded_sites_membership@1',proof_scope:'final_membership',counted_in_saved_total:false,can_request:false,checked_at:'2026-10-25T12:00:00Z',target_count:2,matched_count:2};
+assert(isPassport({...passport,verification:proof}));
+for(const broken of [{...proof,counted_in_saved_total:true},{...proof,matched_count:1},{...proof,checked_at:null},{...proof,proof_scope:'economic_effect'},{...proof,status:'made_up'},{...proof,can_request:'yes'}])assert(!isPassport({...passport,verification:broken}));
+console.log('PASS independent verification proof scope, source timestamp, membership and no savings promotion');

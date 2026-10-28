@@ -1,0 +1,2 @@
+PASS consent, SPA hits, deduplication and private route exclusion
+PASS rendered onboarding: zero findings, pending audit, active findings and API error; methodology slug boundary

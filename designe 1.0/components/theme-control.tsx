@@ -13,12 +13,12 @@ export function ThemeControl() {
     const timer = setTimeout(refresh, 0);
     media.addEventListener("change", refresh);
     window.addEventListener("storage", refresh);
-    window.addEventListener("adpilot-theme-change", refresh);
+    window.addEventListener("inrou-theme-change", refresh);
     return () => {
       clearTimeout(timer);
       media.removeEventListener("change", refresh);
       window.removeEventListener("storage", refresh);
-      window.removeEventListener("adpilot-theme-change", refresh);
+      window.removeEventListener("inrou-theme-change", refresh);
     };
   }, []);
   return <label className="theme-control" htmlFor={id}><span>Тема</span><select aria-label="Тема" id={id} value={preference} onChange={event => {
@@ -26,8 +26,8 @@ export function ThemeControl() {
     setPreference(value);
     applyTheme(value);
     try {
-      localStorage.setItem("adpilot-theme", value);
-      window.dispatchEvent(new Event("adpilot-theme-change"));
+      localStorage.setItem("inrou-theme", value);
+      window.dispatchEvent(new Event("inrou-theme-change"));
     } catch { /* Preference applies for this visit. */ }
   }}><option value="light">Светлая</option><option value="dark">Тёмная</option><option value="system">Системная</option></select></label>;
 }

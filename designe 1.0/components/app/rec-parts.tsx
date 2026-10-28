@@ -99,7 +99,7 @@ const VERDICT: Record<NonNullable<Measurement["verdict"]>, string> = {
 };
 
 export const EVENT_LABEL: Record<string, string> = {
-  created: "Rekvero нашёл проблему",
+  created: "inrou нашёл проблему",
   seen_again: "Аудит подтвердил проблему",
   viewed: "Вы открыли рекомендацию",
   delivered: "Уведомление доставлено",

@@ -234,7 +234,7 @@ export const RECOMMENDATIONS: Recommendation[] = [
     exposure: estimated((CPA_SEARCH - TARGET_CPA) * CONV_SEARCH, "rub", BOTH, "(cpa − target_cpa) × conversions", RULE_CPA, P7, "partial"),
     can_save: estimated((CPA_SEARCH * CONV_SEARCH * CUT) / 100, "rub", BOTH, "cost × |change_pct| / 100", RULE_CPA, P7, "partial"),
     explanation: {
-      text: `За неделю конверсия в кампании стоила ${CPA_SEARCH} ₽ при цели ${TARGET_CPA} ₽ — на ${DEV}% дороже. Стратегия кампании Rekvero неизвестна: если ставки ручные — снизьте ставку на ${CUT}%, если автостратегия — снизьте целевую цену конверсии или проверьте цели. Через 7 дней после выполнения Rekvero сравнит CPA до и после.`,
+      text: `За неделю конверсия в кампании стоила ${CPA_SEARCH} ₽ при цели ${TARGET_CPA} ₽ — на ${DEV}% дороже. Стратегия кампании inrou неизвестна: если ставки ручные — снизьте ставку на ${CUT}%, если автостратегия — снизьте целевую цену конверсии или проверьте цели. Через 7 дней после выполнения inrou сравнит CPA до и после.`,
       source: "template",
     },
     action: lowerCpa(dec(-CUT)),

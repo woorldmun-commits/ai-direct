@@ -16,14 +16,16 @@ function useMutation(path:string,returnTo:string){
    if(response.status===400&&path.includes('lead-import'))throw new Error(await importError(response));
    if(!response.ok)throw new Error(response.status===409?'Данные изменились. Обновите страницу и проверьте актуальную версию.':response.status===403?'Для этого действия недостаточно прав.':response.status===400?'Проверьте поля и формат данных. Изменения не приняты.':response.status===503?'Функция временно недоступна. Изменение не подтверждено.':'Запрос не завершён. Повторите его или проверьте состояние кабинета.');
    const result:unknown=await response.json();if(!result||typeof result!=='object')throw new Error('Ответ сервера требует проверки.');
-   window.location.replace(returnTo);
+   {const target=new URL(returnTo,window.location.href);
+   // Тот же адрес с якорем не перезагружает страницу: данные нужно получить заново, чтобы увидеть сохранённое.
+   if(target.pathname+target.search===window.location.pathname+window.location.search){window.location.hash=target.hash;window.location.reload();}else window.location.replace(target.href);}
   }catch(e){setError(e instanceof Error?e.message:'Запрос не завершён.');setBusy(false);}
  }
  return {busy,error,submit};
 }
 
 export function BudgetForm({workspace,period}:{workspace:string;period:{from:string;to:string}}){
- const mutation=useMutation(`/workspaces/${workspace}/budget-plan`,`/workspace?workspace=${workspace}#insights`);
+ const mutation=useMutation(`/workspaces/${workspace}/budget-plan`,`/workspace/analysis?workspace=${workspace}#insights`);
  function save(event:FormEvent<HTMLFormElement>){event.preventDefault();const data=new FormData(event.currentTarget);void mutation.submit({period_from:data.get('from'),period_to:data.get('to'),amount:String(data.get('amount')).replace(',','.')});}
  return <form onSubmit={save} className="workspace-form"><label>Начало периода<input name="from" type="date" required defaultValue={period.from}/></label><label>Конец периода<input name="to" type="date" required defaultValue={period.to}/></label><label>План расходов, ₽<input name="amount" inputMode="decimal" pattern="[0-9]+([.,][0-9]{1,2})?" required placeholder="Сумма на весь период" maxLength={15}/></label><p>План не меняет рекламные бюджеты. Сравнение доступно только с сопоставимыми данными за тот же период.</p><button className="ref-button ref-primary" disabled={mutation.busy}>{mutation.busy?'Сохраняем…':'Сохранить план'}</button>{mutation.error&&<p role="alert">{mutation.error}</p>}</form>;
 }
@@ -31,10 +33,10 @@ export function BudgetForm({workspace,period}:{workspace:string;period:{from:str
 const csvHeader='external_id,created_on,status,updated_on,direct_account_id,acquired_on,campaign_id,amount,currency,refund_amount\n';
 export function LeadImportForm({workspace,period,accounts}:{workspace:string;period:{from:string;to:string};accounts:string[]}){
  const path=`/workspaces/${workspace}/lead-import`;
- const mutation=useMutation(path,`/workspace?workspace=${workspace}#lead-quality`);
+ const mutation=useMutation(path,`/workspace/analysis?workspace=${workspace}#lead-quality`);
  const [localError,setLocalError]=useState(''),[busy,setBusy]=useState(false);
  const [preview,setPreview]=useState<{payload:Record<string,unknown>;rows:number;counts:Record<string,number>}|null>(null);
- function template(){const url=URL.createObjectURL(new Blob([csvHeader],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='rekvero-leads-template.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+ function template(){const url=URL.createObjectURL(new Blob([csvHeader],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='inrou-leads-template.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
  async function upload(event:FormEvent<HTMLFormElement>){
   event.preventDefault();if(busy)return;setLocalError('');setPreview(null);
   const data=new FormData(event.currentTarget),file=data.get('file');
@@ -53,13 +55,18 @@ export function LeadImportForm({workspace,period,accounts}:{workspace:string;per
 }
 
 export function DecisionForm({workspace,rec,version,state,allowed}:{workspace:string;rec:string;version:string;state:string;allowed:string[]}){
- const mutation=useMutation(`/workspaces/${workspace}/recommendations/${rec}/decisions`,`/workspace/recommendations/${rec}?workspace=${workspace}`);
+ const mutation=useMutation(`/workspaces/${workspace}/recommendations/${rec}/decisions`,`/workspace/recommendations?workspace=${workspace}&rec=${rec}`);
  const [action,setAction]=useState(allowed.includes('check')?'check':allowed.includes('postpone')?'postpone':'reject');
  function save(event:FormEvent<HTMLFormElement>){event.preventDefault();const data=new FormData(event.currentTarget);void mutation.submit({action,expected_version_id:version,expected_state_version:state,...(action==='postpone'?{until:data.get('until')}:action==='reject'?{reason:data.get('reason')}:{})},true);}
  const choices=[['check','Проверил, изменение не требуется'],['postpone','Вернуться позже'],['reject','Отклонить рекомендацию']].filter(([key])=>allowed.includes(key));
  return <>{choices.length>0&&<form onSubmit={save} className="workspace-form"><label>Решение<select value={action} onChange={e=>setAction(e.target.value)}>{choices.map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>{action==='reject'&&<label>Причина<select name="reason" required><option value="wrong_data">Некорректные данные</option><option value="irrelevant_rule">Правило не подходит</option><option value="not_enough_context">Недостаточно контекста</option><option value="too_risky">Слишком высокий риск</option></select></label>}{action==='postpone'&&<label>Вернуться к рекомендации<input name="until" type="date" required/></label>}<button className="ref-button ref-primary" disabled={mutation.busy}>{mutation.busy?'Сохраняем…':'Сохранить решение'}</button>{mutation.error&&<p role="alert">{mutation.error}</p>}</form>}{allowed.includes('mark_done_manually')&&<ManualForm workspace={workspace} rec={rec} version={version} state={state}/>}</>;
 }
 function ManualForm({workspace,rec,version,state}:{workspace:string;rec:string;version:string;state:string}){
- const mutation=useMutation(`/workspaces/${workspace}/recommendations/${rec}/manual-execution`,`/workspace/recommendations/${rec}?workspace=${workspace}`);
+ const mutation=useMutation(`/workspaces/${workspace}/recommendations/${rec}/manual-execution`,`/workspace/recommendations?workspace=${workspace}&rec=${rec}`);
  return <form className="workspace-form" onSubmit={e=>{e.preventDefault();void mutation.submit({expected_version_id:version,expected_state_version:state},true);}}><label className="workspace-checkbox"><input type="checkbox" required/>Подтверждаю, что самостоятельно внёс изменение в Директе. Эта отметка не подтверждает сверку или экономию.</label><button className="ref-button" disabled={mutation.busy}>{mutation.busy?'Сохраняем…':'Отметить ручное выполнение'}</button>{mutation.error&&<p role="alert">{mutation.error}</p>}</form>;
+}
+
+export function VerificationForm({workspace,rec,version,state,returnTo}:{workspace:string;rec:string;version:string;state:string;returnTo:string}){
+ const mutation=useMutation(`/workspaces/${workspace}/recommendations/${rec}/verification`,returnTo);
+ return <form className="workspace-form" onSubmit={e=>{e.preventDefault();void mutation.submit({expected_version_id:version,expected_state_version:state},true);}}><p>Сервис прочитает исключения площадок в Директе. Сверка показывает состояние на момент чтения; она не доказывает автора изменения или экономию.</p><button className="ix-btn" disabled={mutation.busy}>{mutation.busy?'Ставим сверку в очередь…':'Проверить исключения в Директе'}</button>{mutation.error&&<p role="alert">{mutation.error}</p>}</form>;
 }

@@ -1,0 +1,10 @@
+{
+  "args": [
+    "tests/test_restore.py",
+    "tests/test_direct_connect.py::test_daily_sync_keeps_explicit_counter_per_account"
+  ],
+  "started_utc": "2026-10-28T05:52:01.226509+00:00",
+  "finished_utc": "2026-10-28T05:52:32.487720+00:00",
+  "exit_code": 1,
+  "pg_stop_exit_code": 0
+}

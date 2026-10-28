@@ -7,6 +7,7 @@ Guard решает только «можно ли по состоянию» (ALL
 import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from decimal import Decimal
 from enum import Enum
 from typing import Callable
 
@@ -37,10 +38,21 @@ class State:
     now: datetime
 
     pilot_until: datetime | None = None
+    subscription_plan: str | None = None
+    subscription_price: Decimal | None = None
+    subscription_period_start: datetime | None = None
+    subscription_auto_renew: bool | None = None
+    trial_started_at: datetime | None = None
+    trial_ends_at: datetime | None = None
+
+    @property
+    def trial_active(self) -> bool:
+        return (self.trial_started_at is not None and self.trial_ends_at is not None
+                and self.trial_started_at <= self.now < self.trial_ends_at)
 
     @property
     def has_analysis_access(self) -> bool:
-        return self.paid or (self.pilot_until is not None and self.now < self.pilot_until)
+        return self.paid or self.trial_active or (self.pilot_until is not None and self.now < self.pilot_until)
 
     @property
     def paid(self) -> bool:
@@ -134,9 +146,11 @@ def load_state(conn: psycopg.Connection, workspace_id: int, direct_account_id: i
     if now.tzinfo is None:
         raise ValueError("now: нужна дата с часовым поясом — сравнивается с timestamptz из БД")
     ws = conn.execute("SELECT status FROM workspaces WHERE id = %s", (workspace_id,)).fetchone()
+    trial = conn.execute('SELECT * FROM workspace_trial(%s)', (workspace_id,)).fetchone() if ws else None
     # Будущие периоды не дают доступ. Среди начавшихся: действующая > последняя по окончании.
     # «expired» и «none» — разные действия в UI («продлить» / «оформить»).
-    sub = conn.execute("""SELECT status, current_period_end FROM subscriptions WHERE workspace_id = %s
+    sub = conn.execute("""SELECT status, current_period_end, plan, price, current_period_start, auto_renew
+                          FROM subscriptions WHERE workspace_id = %s
                           AND current_period_start <= %s
                           ORDER BY (status IN ('active', 'past_due', 'canceled')) DESC,
                                    current_period_end DESC, id DESC
@@ -148,4 +162,7 @@ def load_state(conn: psycopg.Connection, workspace_id: int, direct_account_id: i
     return State(pilot_until=pilot_until(workspace_id), workspace_status=ws[0] if ws else None,
                  subscription_status=sub[0] if sub else None, subscription_period_end=sub[1] if sub else None,
                  direct_status=direct[0] if direct else None, direct_account_status=direct[1] if direct else None,
-                 direct_unavailable_reason=direct[2] if direct else None, now=now)
+                 direct_unavailable_reason=direct[2] if direct else None, now=now,
+                 subscription_plan=sub[2] if sub else None, subscription_price=sub[3] if sub else None,
+                 subscription_period_start=sub[4] if sub else None, subscription_auto_renew=sub[5] if sub else None,
+                 trial_started_at=trial[0] if trial else None, trial_ends_at=trial[1] if trial else None)

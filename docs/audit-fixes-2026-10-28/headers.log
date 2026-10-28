@@ -1,0 +1,10 @@
+
+> inrou-web@0.1.0 test:headers
+> node scripts/check-headers.mjs
+
+⚠ "next start" does not work with "output: standalone" configuration. Use "node .next/standalone/server.js" instead.
+browser /: 0 CSP violations, 0 console errors
+browser /login: 0 CSP violations, 0 console errors
+browser legal: 9 pages at 320px
+browser legal: 9 pages at 1440px
+OK test:headers: /, /login, /signup, /verify-email, /forgot-password, /reset-password, /legal, /legal/privacy, /legal/terms, /legal/offer, /legal/consents, /legal/pd-consent, /legal/marketing-consent, /legal/cookies, /legal/requisites + 1 retired-route redirects + anonymous workspace + auth origin + static asset

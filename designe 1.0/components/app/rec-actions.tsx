@@ -86,8 +86,8 @@ const BUTTON: Record<Exclude<UserAction, "view" | "reject">, { label: string; ic
 };
 
 /**
- * Decision buttons, drawn only from `allowed_actions` (blocked ones show their reason). In v1.0 Rekvero never
- * changes the ad account: the user changes it by hand in Direct; Rekvero verifies it by reading Direct data
+ * Decision buttons, drawn only from `allowed_actions` (blocked ones show their reason). In v1.0 inrou never
+ * changes the ad account: the user changes it by hand in Direct; inrou verifies it by reading Direct data
  * and measures the effect 7 days later.
  */
 export function RecActions({ r, onDone, compact = false }: { r: Recommendation; onDone?: () => void; compact?: boolean }) {

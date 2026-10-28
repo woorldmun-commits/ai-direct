@@ -5,6 +5,9 @@ import hashlib
 import hmac
 import secrets
 from typing import Literal
+from uuid import uuid4
+
+import psycopg
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -14,8 +17,7 @@ from psycopg.types.json import Jsonb
 from app.api.auth import LoginStart, _approved
 from app.api.db import request_connection
 from app.api.errors import ApiError
-from app.auth.email_config import send
-from app.auth.email_password import DUMMY_HASH, normalize_email, password_hash, password_matches, token_hash
+from app.auth.email_password import DUMMY_HASH, mail_token, normalize_email, password_hash, password_matches, token_hash
 from app.auth.login import REQUIRED_FOR_SIGN_UP, SESSION_TTL
 from app.legal.documents import record_acceptance, text_sha256
 
@@ -90,21 +92,6 @@ def _kdf(request, callback):
         slots.release()
 
 
-def _deliver(request, address, purpose, token):
-    config = _config(request)
-    path = '/verify-email' if purpose == 'verify' else '/reset-password'
-    url = config.origin + path + '#token=' + token
-    sender = getattr(request.app.state, 'email_sender', None)
-    try:
-        if sender:
-            sender(address, purpose, url)
-        else:
-            send(config, address, purpose, url)
-    except Exception:
-        # Never echo SMTP errors: they may contain credentials, addresses or reset links.
-        raise ApiError(503, 'mail_unavailable') from None
-
-
 def _cookie(request, token):
     config = _config(request)
     response = JSONResponse({'status':'signed_in'})
@@ -131,19 +118,23 @@ def auth_config(request: Request):
 
 @router.post('/email/register', status_code=202)
 def register(request: Request, body: Registration):
-    _config(request)
+    config = _config(request)
     hashes = _accepted(request, body.accepted, body.locale)
     address = _address(body.email)
     _throttle(request, address, 'send')
     pwd = _kdf(request, lambda: password_hash(body.password))
-    token = secrets.token_urlsafe(32)
-    with _connection(request) as conn:
-        created = conn.execute('SELECT email_auth_signup(%s,%s,%s,%s,%s,%s,%s,%s)',
-                              (address, pwd, token_hash(token), Jsonb(body.accepted), Jsonb(hashes), body.locale,
-                               request.client.host if request.client else None,
-                               request.headers.get('user-agent', '')[:256])).fetchone()[0]
-    if created:
-        _deliver(request, address, 'verify', token)
+    job_id = uuid4()
+    token = mail_token(config.hmac_key, job_id, 'verify')
+    try:
+        with _connection(request) as conn:
+            created = conn.execute('SELECT email_auth_signup(%s,%s,%s,%s,%s,%s,%s,%s)',
+                                  (address, pwd, token_hash(token), Jsonb(body.accepted), Jsonb(hashes), body.locale,
+                                   request.client.host if request.client else None,
+                                   request.headers.get('user-agent', '')[:256])).fetchone()[0]
+            if created:
+                conn.execute('SELECT enqueue_email_verify_mail(%s,%s,%s)', (job_id, address, token_hash(token)))
+    except psycopg.Error:
+        raise ApiError(503, 'mail_unavailable') from None
     return {'status':'check_email'}
 
 
@@ -188,7 +179,8 @@ def verify(request: Request, body: Confirmation):
             record_acceptance(conn, user_id=uid, document=document, version=version, accepted_at=accepted_at,
                               locale=locale, ip=ip, user_agent=agent)
         org = conn.execute("SELECT create_organization(%s,'Моя организация','business')", (uid,)).fetchone()[0]
-        conn.execute("SELECT create_workspace(%s,%s,'Мой кабинет')", (uid, org))
+        ws = conn.execute("SELECT create_workspace(%s,%s,'Мой кабинет')", (uid, org)).fetchone()[0]
+        conn.execute('SELECT start_registration_trial(%s,%s)', (uid, ws))
         conn.execute('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(%s,%s,%s)',
                      (token_hash(token), uid, datetime.now(timezone.utc)+SESSION_TTL))
     return _cookie(request, token)
@@ -199,11 +191,12 @@ def reset_request(request: Request, body: Address):
     _config(request)
     address = _address(body.email)
     _throttle(request, address, 'send')
-    token = secrets.token_urlsafe(32)
-    with _connection(request) as conn:
-        created = conn.execute('SELECT email_auth_reset_request(%s,%s)', (address, token_hash(token))).fetchone()[0]
-    if created:
-        _deliver(request, address, 'reset', token)
+    # Queue every valid address before account lookup; provider failures cannot identify an account.
+    try:
+        with _connection(request) as conn:
+            conn.execute('SELECT enqueue_email_reset_mail(%s,%s)', (uuid4(), address))
+    except psycopg.Error:
+        raise ApiError(503, 'mail_unavailable') from None
     return {'status':'check_email'}
 
 

@@ -39,7 +39,7 @@ const MAX_SENDS_PER_HOUR = 5;
 const DEMO_CODE = "123456";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Earlier demo builds kept entered numbers here (personal data, 152-FZ). Nothing is stored now; the key is only removed.
-const LEGACY_PHONES_KEY = "adpilot-demo-phones";
+const LEGACY_PHONES_KEY = "inrou-demo-phones";
 
 /** "8 (912) 345-67-89" → "9123456789" (10 digits of a Russian mobile number) or null. */
 function normalizePhone(raw: string): string | null {
@@ -214,7 +214,7 @@ function ConsentStep({ onDone }: { onDone: () => void }) {
           Даю {docLink("/legal/pd-consent", "согласие на обработку персональных данных")} <span className="text-muted">(обязательно)</span>
         </CheckRow>
         <CheckRow checked={marketing} onChange={setMarketing}>
-          Согласен получать новости и рекламные материалы Rekvero ({docLink("/legal/marketing-consent", "согласие на рассылку")}){" "}
+          Согласен получать новости и рекламные материалы inrou ({docLink("/legal/marketing-consent", "согласие на рассылку")}){" "}
           <span className="text-muted">(необязательно)</span>
         </CheckRow>
         {error && (

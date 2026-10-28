@@ -3,13 +3,13 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from typing import Annotated
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr
 
 from app.api.active import today_msk
 from app.api.deps import Conn, CurrentWorkspace
 from app.api.errors import ApiError
-from app.insights import lead_import, report
+from app.insights import campaign_stats, lead_import, report
 
 router = APIRouter()
 
@@ -48,6 +48,20 @@ def _invalid(exc):
 @router.get('/workspaces/{workspace_id}/insights')
 def insights(conn: Conn, ws: CurrentWorkspace):
     return report.build(conn, ws.id, today_msk(), datetime.now(timezone.utc))
+
+
+@router.get('/workspaces/{workspace_id}/campaign-stats')
+def campaign_statistics(conn: Conn, ws: CurrentWorkspace,
+                        days: Annotated[int, Query(ge=7, le=30)] = 30,
+                        ad_account: Annotated[str | None, Query(pattern=r'^acc_[1-9][0-9]{0,18}$')] = None,
+                        campaign_id: Annotated[str | None, Query(pattern=r'^[1-9][0-9]{0,18}$')] = None,
+                        offset: Annotated[int, Query(ge=0, le=20000)] = 0):
+    if days not in (7, 30) or (campaign_id is not None and ad_account is None):
+        raise ApiError(400, 'invalid_request')
+    if any(value is not None and int(value) > 2**63-1 for value in (campaign_id, ad_account[4:] if ad_account else None)):
+        raise ApiError(400, 'invalid_request')
+    return campaign_stats.build(conn, ws.id, today_msk(), datetime.now(timezone.utc), days,
+                                int(ad_account[4:]) if ad_account else None, int(campaign_id) if campaign_id else None, offset)
 
 
 @router.get('/workspaces/{workspace_id}/weekly-report')

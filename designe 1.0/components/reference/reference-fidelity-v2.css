@@ -128,7 +128,7 @@
  .ap-app .ap-sidebar-home { display:none; }
  .ap-app.ap-landing .ap-landing-scene { display:none; }
  .ap-app.ap-landing .ap-laptop-art { background:none; }
- .ap-app.ap-landing .ap-laptop-art::after { content:'';position:absolute;inset:0;z-index:-1;background:url('/reference/rekvero-hero-scene.png') 97% 27%/210% auto no-repeat;mask-image:linear-gradient(to bottom,transparent,#000 7%,#000 88%,transparent),linear-gradient(to right,transparent,#000 5%,#000 95%,transparent);mask-composite:intersect; }
+ .ap-app.ap-landing .ap-laptop-art::after { content:'';position:absolute;inset:0;z-index:-1;background:url('/reference/inrou-hero-scene.png') 97% 27%/210% auto no-repeat;mask-image:linear-gradient(to bottom,transparent,#000 7%,#000 88%,transparent),linear-gradient(to right,transparent,#000 5%,#000 95%,transparent);mask-composite:intersect; }
  .ap-app .ap-question { grid-template-columns:minmax(0,1fr) 44px; }
  .ap-app .ap-question>.ref-button { width:44px;min-height:44px;height:44px; }
  .ap-app .ap-question-field { min-height:44px; }

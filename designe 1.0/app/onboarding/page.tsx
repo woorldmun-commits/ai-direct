@@ -1,2 +1,2 @@
 import { redirect } from "next/navigation";
-export default function OnboardingPage() { redirect("/workspace"); }
+export default function OnboardingPage() { redirect("/onboarding/organization"); }
