@@ -47,7 +47,7 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements*.txt
       - name: Install dependencies
-        run: python -m pip install -r requirements-dev.txt
+        run: python -m pip install -r requirements.lock.txt -r requirements-dev.txt
       - name: Ruff
         run: ruff check --output-format=github .
       - name: Migrations reproduce schema.sql
@@ -56,12 +56,16 @@ jobs:
         run: python -m pytest -q -p no:cacheprovider --ignore=tests/test_migrations.py
 
   frontend:
-    name: frontend (lint, build, headers)
+    name: frontend ${{ matrix.directory }} (lint, build, headers)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        directory: ["designe 1.0"]
     defaults:
       run:
-        working-directory: frontend
+        working-directory: ${{ matrix.directory }}
     env:
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
@@ -70,9 +74,25 @@ jobs:
         with:
           node-version: lts/*
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: ${{ matrix.directory }}/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - name: Auth and metric contracts
+        run: |
+          node scripts/check-auth-proxy.mjs
+          node --experimental-strip-types scripts/check-pilot.mjs
+      - name: Candidate indexing rules
+        if: matrix.directory == 'designe 1.0'
+        run: |
+          node scripts/check-site.mjs
+          node scripts/check-workspace-proxy.mjs
+          npm run test:ix
+          npm run test:remediation
+          npm run test:deep-audit
+          node scripts/check-billing.mjs
+          node --experimental-strip-types scripts/check-subscription.mjs
+          node scripts/check-direct-proxy.mjs
+          node scripts/check-insights.mjs
       - run: npm run build
       # Браузерная часть проверки (нарушения CSP в консоли) обязательна: без Playwright шаг падает, а не пропускается.
       - name: Install Playwright (Chromium)
@@ -117,14 +137,15 @@ jobs:
       - name: pip-audit
         run: |
           python -m pip install pip-audit==2.10.1
+          pip-audit -r backend/requirements.lock.txt
           pip-audit -r backend/requirements-dev.txt
       # Блокирует high/critical в зависимостях, которые попадают в продакшен-сборку. Инструменты разработки
       # (eslint и т. п.) не исполняются в продакшене: их уязвимости видны в отчёте, но merge не блокируют —
       # иначе advisory без исправленной версии (например, braces через eslint-config-next) останавливает всю работу.
-      - name: npm audit (production, high and critical block)
-        working-directory: frontend
+      - name: npm audit active frontend (production, high and critical block)
+        working-directory: designe 1.0
         run: npm audit --audit-level=high --package-lock-only --omit=dev
-      - name: npm audit (dev tooling, report only)
-        working-directory: frontend
+      - name: npm audit active frontend (dev tooling, report only)
+        working-directory: designe 1.0
         continue-on-error: true
         run: npm audit --audit-level=high --package-lock-only

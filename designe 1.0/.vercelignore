@@ -1,0 +1,12 @@
+node_modules/**
+.next/**
+.git/**
+.vercel/**
+artifacts/**
+scripts/**
+.env*
+**/.env*
+*.log
+*.tsbuildinfo
+AGENTS.md
+CLAUDE.md

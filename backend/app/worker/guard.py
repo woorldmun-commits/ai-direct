@@ -4,8 +4,10 @@
 Guard решает только «можно ли по состоянию» (ALLOW / SKIP). RETRY — результат исполнения (retryIn, временная ошибка API, сбой БД),
 его возвращает воркер, а не guard."""
 
+import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from decimal import Decimal
 from enum import Enum
 from typing import Callable
 
@@ -34,6 +36,23 @@ class State:
     direct_account_status: str | None     # active · unavailable
     direct_unavailable_reason: str | None  # access_denied · account_not_found · api_restricted
     now: datetime
+
+    pilot_until: datetime | None = None
+    subscription_plan: str | None = None
+    subscription_price: Decimal | None = None
+    subscription_period_start: datetime | None = None
+    subscription_auto_renew: bool | None = None
+    trial_started_at: datetime | None = None
+    trial_ends_at: datetime | None = None
+
+    @property
+    def trial_active(self) -> bool:
+        return (self.trial_started_at is not None and self.trial_ends_at is not None
+                and self.trial_started_at <= self.now < self.trial_ends_at)
+
+    @property
+    def has_analysis_access(self) -> bool:
+        return self.paid or self.trial_active or (self.pilot_until is not None and self.now < self.pilot_until)
 
     @property
     def paid(self) -> bool:
@@ -77,7 +96,7 @@ def _direct_detail(s: State) -> str:
 
 
 _ACTIVE = Check("workspace_inactive", lambda s: s.workspace_status == "active", lambda s: s.workspace_status)
-_PAID = Check("subscription_inactive", lambda s: s.paid, lambda s: s.subscription_status or "none")
+_PAID = Check("subscription_inactive", lambda s: s.has_analysis_access, lambda s: s.subscription_status or "none")
 _DIRECT = Check("direct_unavailable", lambda s: s.direct_status == "connected" and s.direct_account_status == "active",
                 _direct_detail)
 # recheck нужен именно недоступному аккаунту; не поможет только отсутствию токена — там нужен новый OAuth
@@ -108,23 +127,42 @@ def guard(task: Task, state: State) -> Decision:
     return Allow()
 
 
+def pilot_until(workspace_id: int) -> datetime | None:
+    """Explicit operator grant; malformed or timezone-free configuration fails closed."""
+    ids = os.environ.get("PILOT_WORKSPACE_IDS", "").split(",")
+    if (os.environ.get("PILOT_OPEN_ACCESS") != "1"
+            and str(workspace_id) not in {item.strip().removeprefix("ws_") for item in ids}):
+        return None
+    try:
+        until = datetime.fromisoformat(os.environ.get("PILOT_ACCESS_UNTIL", ""))
+        return until if until.tzinfo is not None else None
+    except ValueError:
+        return None
+
+
 def load_state(conn: psycopg.Connection, workspace_id: int, direct_account_id: int | None,
                now: datetime) -> State:
     """Текущее состояние из БД — всегда заново, никогда из параметров задачи."""
     if now.tzinfo is None:
         raise ValueError("now: нужна дата с часовым поясом — сравнивается с timestamptz из БД")
     ws = conn.execute("SELECT status FROM workspaces WHERE id = %s", (workspace_id,)).fetchone()
-    # Приоритет: действующая на сейчас (active · past_due · canceled, период уже начался) > последняя по окончании
-    # периода > нет. «expired» и «none» — разные действия в UI («продлить» / «оформить»).
-    sub = conn.execute("""SELECT status, current_period_end FROM subscriptions WHERE workspace_id = %s
-                          ORDER BY (status IN ('active', 'past_due', 'canceled') AND current_period_start <= %s) DESC,
+    trial = conn.execute('SELECT * FROM workspace_trial(%s)', (workspace_id,)).fetchone() if ws else None
+    # Будущие периоды не дают доступ. Среди начавшихся: действующая > последняя по окончании.
+    # «expired» и «none» — разные действия в UI («продлить» / «оформить»).
+    sub = conn.execute("""SELECT status, current_period_end, plan, price, current_period_start, auto_renew
+                          FROM subscriptions WHERE workspace_id = %s
+                          AND current_period_start <= %s
+                          ORDER BY (status IN ('active', 'past_due', 'canceled')) DESC,
                                    current_period_end DESC, id DESC
                           LIMIT 1""", (workspace_id, now)).fetchone()
     direct = conn.execute("""SELECT c.status, a.status, a.unavailable_reason FROM direct_accounts a
                              JOIN direct_connections c ON c.id = a.direct_connection_id
                              WHERE a.id = %s AND c.workspace_id = %s""",
                           (direct_account_id, workspace_id)).fetchone() if direct_account_id else None
-    return State(workspace_status=ws[0] if ws else None,
+    return State(pilot_until=pilot_until(workspace_id), workspace_status=ws[0] if ws else None,
                  subscription_status=sub[0] if sub else None, subscription_period_end=sub[1] if sub else None,
                  direct_status=direct[0] if direct else None, direct_account_status=direct[1] if direct else None,
-                 direct_unavailable_reason=direct[2] if direct else None, now=now)
+                 direct_unavailable_reason=direct[2] if direct else None, now=now,
+                 subscription_plan=sub[2] if sub else None, subscription_price=sub[3] if sub else None,
+                 subscription_period_start=sub[4] if sub else None, subscription_auto_renew=sub[5] if sub else None,
+                 trial_started_at=trial[0] if trial else None, trial_ends_at=trial[1] if trial else None)

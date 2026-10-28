@@ -55,6 +55,8 @@ def _reference(rule: Rule, snap: SnapshotView, settings: AuditSettings, campaign
                evaluation: Window) -> tuple[Decimal, dict[str, Fact]] | Reason:
     if settings.target_cpa is not None:
         return settings.target_cpa, {"reference_cpa": Fact(settings.target_cpa, "rub", "user_input", evaluation)}
+    if any(d.conversions is None for d in campaign_days):
+        return Reason.SOURCE_MISSING
     period = Window(snap.period_from, snap.period_to)
     cost, conv = _sum_cost_conv(campaign_days)
     if conv == 0:

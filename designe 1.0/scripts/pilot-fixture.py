@@ -15,17 +15,27 @@ import uvicorn
 from conftest import db as database_fixture
 from test_api_support import world, session, settings, user
 from test_schema import new_workspace
+from test_lifecycle import sync
 from app.api import create_app
 
 database = database_fixture.__wrapped__()
 with database('app_system') as conn:
     ids = world.__wrapped__(conn)
+    for key in ('rec_a1', 'rec_a2', 'rec_b1'):
+        rec = ids[key]
+        scope = ids[{'rec_a1': 'a1', 'rec_a2': 'a2', 'rec_b1': 'b1'}[key]]
+        sync(conn, scope, rec['account'], rec['release'], 100)
+    conn.execute("INSERT INTO subscriptions(workspace_id,plan,status,price,current_period_start,current_period_end) VALUES(%s,'start','active',1990,now()-interval '1 day',now()+interval '1 month')",(ids['a1'],))
     empty_user = user(conn)
     empty_ws = new_workspace(conn, 'Пустой кабинет', user=empty_user)
     tokens = {name: session(conn, ids[name]) for name in ('owner', 'viewer', 'owner_b', 'member')}
     tokens['empty'] = session(conn, empty_user)
     tokens['expired'] = session(conn, ids['owner'], expires_in=timedelta(seconds=-1))
     tokens['revoked'] = session(conn, ids['owner'], revoked=True)
-(runtime/'fixture.json').write_text(json.dumps({'tokens':tokens,'workspaces':{k:f'ws_{ids[k]}' for k in ('a1','a2','b1')},'empty_workspace':f'ws_{empty_ws}','recommendation':f"rec_{ids['rec_a1']['rec']}"}),encoding='utf-8')
+    conn.execute('SELECT start_registration_trial(%s,%s)', (ids['owner'], ids['a2']))
+(runtime/'fixture.json').write_text(json.dumps({'tokens':tokens,'workspaces':{k:f'ws_{ids[k]}' for k in ('a1','a2','b1')},'empty_workspace':f'ws_{empty_ws}','recommendation':f"rec_{ids['rec_a1']['rec']}",'account':f"acc_{ids['rec_a1']['account']}"}),encoding='utf-8')
 print('Synthetic local fixture ready on 127.0.0.1:3121; session values are not printed.',flush=True)
-uvicorn.run(create_app(settings(database,allowed_origins=frozenset({'http://127.0.0.1:3130','https://app.example.test'}))), host='127.0.0.1', port=3121, access_log=False)
+uvicorn.run(create_app(settings(database,allowed_origins=frozenset({'http://127.0.0.1:3130','https://app.example.test'}),
+                               intelligence_enabled=os.environ.get('INROU_INTELLIGENCE_ENABLED') == '1',
+                               intelligence_real_data_approved=os.environ.get('INROU_INTELLIGENCE_REAL_DATA_APPROVED') == '1')),
+            host='127.0.0.1', port=3121, access_log=False)

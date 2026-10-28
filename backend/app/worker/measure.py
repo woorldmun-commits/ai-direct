@@ -213,19 +213,13 @@ def _input(m: _M, view: SnapshotView) -> MeasureInput:
 
 # --- «Сэкономлено ≈»: только подтверждённое выполнение --------------------------------------------
 
-# Сверку ручного выполнения пишет другой воркер (API_CONTRACT §6.1) событиями рекомендации после 'done'.
-# ОЖИДАЕМЫЙ ИНТЕРФЕЙС (в schema.sql этих типов событий пока нет — CHECK recommendation_events.type их не пускает):
-#   recommendation_events.type ∈ {'verification_confirmed', 'verification_not_confirmed'}, системное (без actor),
-#   id > id события 'done' этого выполнения; последнее из них — текущий статус. Нет ни одного — 'pending'.
-VERIFICATION_EVENTS = {"verification_confirmed": "confirmed", "verification_not_confirmed": "not_confirmed"}
 EXECUTION_MODE_OF_DONE = "manual"  # v1.0: 'done' = manual_claimed («Выполнено вручную»); API-исполнение — v1.1
 
 
 def verification_status(conn: psycopg.Connection, recommendation_id: int, done_event_id: int) -> str:
-    row = conn.execute("""SELECT type FROM recommendation_events WHERE recommendation_id = %s AND id > %s
-                          AND type = ANY(%s) ORDER BY id DESC LIMIT 1""",
-                       (recommendation_id, done_event_id, list(VERIFICATION_EVENTS))).fetchone()
-    return VERIFICATION_EVENTS[row[0]] if row else "pending"
+    # shortcut: final_membership cannot prove economic execution; add an eligible proof method before promotion.
+    return "pending"
+
 
 
 VerificationReader = Callable[[psycopg.Connection, int, int], str]

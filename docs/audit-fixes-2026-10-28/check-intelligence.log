@@ -1,0 +1,4 @@
+PASS intelligence: bounded contracts, no zero fill, explicit synthetic fixtures, unsafe source/status rejection and closed proxy endpoints
+PASS intelligence rendering: disabled/viewer states, nullable metric and escaped evidence; no external execution or model claims
+PASS intelligence source references: bounded same-origin import evidence and read-only paths
+PASS intelligence pagination: current UI link and legacy bookmark preserve cursor/context

@@ -1,3 +1,4 @@
-import {PublicSectionPage} from '@/components/reference/landing';
-export const metadata={title:'Безопасность'};
-export default function Page(){return <PublicSectionPage section="security"/>;}
+import {publicMetadata} from '@/lib/public-metadata';
+import {PublicPage} from '@/components/ix/public/pages';
+export const metadata=publicMetadata('/security', 'Безопасность', 'Как INROU разделяет доступ к рабочим пространствам и сохраняет основания решений. Изменения в рекламе выполняются вручную.');
+export default function Page(){return <PublicPage page="security"/>;}

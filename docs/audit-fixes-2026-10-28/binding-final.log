@@ -1,0 +1,47 @@
+............F...                                                         [100%]
+================================== FAILURES ===================================
+________ test_worker_uses_bound_metrika_token_and_skips_stale_binding _________
+
+pilot = (<starlette.testclient.TestClient object at 0x0000021DE393A190>, 11, 13)
+db = <function db.<locals>.connect at 0x0000021DE34C3880>
+rw = <psycopg.Connection [IDLE] (host=127.0.0.1 port=61298 user=app_system database=ai_direct_test_12828) at 0x21de39a2d10>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000021DE39A2850>
+root = <function root.<locals>.account at 0x0000021DE39FF1A0>
+
+    def test_worker_uses_bound_metrika_token_and_skips_stale_binding(pilot, db, rw, monkeypatch, root):
+        from app.auth.tokens import store
+        from app.auth.yandex_oauth import Tokens
+        client, ws, _ = pilot
+        fake_yandex(monkeypatch)
+        response = begin(client, ws, counter_id=555, goal_ids=[111])
+        state = parse_qs(urlsplit(response.json()['authorize_url']).query)['state'][0]
+        assert 'direct=connected' in finish(client, state).headers['location']
+        run, account, counter = rw.execute('SELECT id,direct_account_id,metrika_counter_id FROM sync_runs WHERE workspace_id=%s', (ws,)).fetchone()
+        mc = one(rw, 'SELECT metrika_connection_id FROM metrika_counters WHERE id=%s', counter)
+        now = datetime.now(timezone.utc)
+        store(rw, KEYS, ConnectionRef('metrika', ws, mc), Tokens('metrika-only-token', None, now+timedelta(days=365)))
+        root('pilot-account')
+        monkeypatch.setattr(runner, 'DirectApi', lambda *args: DirectFixture(root.path))
+        observed = []
+        monkeypatch.setattr(runner, 'MetrikaApi', lambda http, access: observed.append(access))
+        rw.execute('UPDATE sync_runs SET period_to=%s WHERE id=%s', (TO, run))
+        release = one(rw, "INSERT INTO releases(commit_sha,build_id) VALUES(%s,%s) RETURNING id", 'c'*40, f'binding-{ws}')
+        with db('app_token') as worker, db('app_system') as queue:
+            runner.process(queue, worker, run, provider=PROVIDER, keys=KEYS, release_id=release, http=None, now=now)
+        assert observed == ['metrika-only-token']
+>       assert one(rw, 'SELECT status FROM sync_runs WHERE id=%s', run) == 'succeeded'
+E       AssertionError: assert 'failed' == 'succeeded'
+E         
+E         - succeeded
+E         + failed
+
+tests\test_direct_connect.py:255: AssertionError
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\woorl\Documents\inrou\backend\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_direct_connect.py::test_worker_uses_bound_metrika_token_and_skips_stale_binding
+1 failed, 15 passed, 1 warning in 6.81s

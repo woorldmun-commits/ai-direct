@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { apiOrigin } from './api-origin';
 
 export const LEGAL_VERSION = '2026-10-01';
-export const LEGAL_KEYS = { offer: 'offer', 'pd-consent': 'pd_consent', 'marketing-consent': 'marketing' } as const;
+export const LEGAL_KEYS = { offer: 'offer', 'pd-consent': 'pd_consent', 'marketing-consent': 'marketing', privacy: 'privacy', cookies: 'cookies', requisites: 'requisites' } as const;
 export type LegalDocument = { document: string; version: string; locale: string; sha256: string; text: string; approved: boolean };
 
 export function validLegalDocument(value: unknown, key: string): value is LegalDocument {

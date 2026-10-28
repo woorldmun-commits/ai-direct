@@ -180,8 +180,8 @@ def test_top_items_carry_computed_at_and_action(api, rw, audited, monkeypatch):
     for item in body["top"]:
         assert item["computed_at"] == created[int(item["version_id"].removeprefix("rv_"))].isoformat()
         actions[item["action"]["type"]] = item["action"]
-    levers = actions["lower_cpa"]  # кандидат decrease_bid на review без известной стратегии
-    assert levers["execution"] == "manual" and levers["strategy"] == "unknown"
+    levers = actions["lower_cpa"]  # кандидат decrease_bid на review с зафиксированной ручной стратегией
+    assert levers["execution"] == "manual" and levers["strategy"] == "manual"
     [bid] = [lv for lv in levers["levers"] if lv["lever"] == "decrease_bid"]
     assert re.fullmatch(r"-[0-9]+\.[0-9]{2}", bid["change_pct"])
     assert actions["investigate"] == {"type": "investigate", "topic": "spend_block", "execution": "manual",

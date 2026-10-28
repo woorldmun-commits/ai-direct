@@ -35,7 +35,7 @@ def campaign_tsv(days=37, eval_cost="42000.00", eval_conv=("5", "3"), base_cost=
     поэтому, чтобы задать глубину истории, в первый день кладём 1 показ."""
     columns = columns or CAMPAIGN_REPORT.fields + CONV
     first = TO - timedelta(days - 1)
-    rows = {first: ("1", "0", "0.00", ("--",) * len(CONV))}
+    rows = {first: ("1", "0", "0.00", ("0",) * len(CONV))}
     rows[TO - timedelta(7)] = ("5000", "700", base_cost, base_conv)
     rows[TO] = ("3000", "300", eval_cost, eval_conv)
     lines = ["\t".join(columns)]
@@ -114,12 +114,12 @@ def test_campaign_paused_mid_history_keeps_baseline(root):
     assert finding.reference_type == "baseline"
 
 
-def test_zero_conversions_shown_as_dashes(root):
+def test_unknown_conversions_shown_as_dashes(root):
     snap = snapshot_of(root, campaign=campaign_tsv(eval_conv=("--", "--")))
-    assert [r.conversions for r in snap.rows if r.level == "campaign" and r.date == TO] == [Decimal(0)]
+    assert [r.conversions for r in snap.rows if r.level == "campaign" and r.date == TO] == [None]
     high_cpa, zero_conv = audit(snap, AuditSettings(target_cpa=Decimal(3000)))
-    assert high_cpa == NotEnoughData("high_cpa_target@1", Reason.NO_CONVERSIONS, "campaign", CID)
-    assert isinstance(zero_conv, Finding) and zero_conv.rule_version == "zero_conv_campaign@1"  # «--» = ноль, не None
+    assert high_cpa == NotEnoughData("high_cpa_target@1", Reason.SOURCE_MISSING, "campaign", CID)
+    assert zero_conv == NotEnoughData("zero_conv_campaign@1", Reason.SOURCE_MISSING, "campaign", CID)
 
 
 def test_without_metrika_conversions_are_none_and_rules_are_not_computed(root):
@@ -184,9 +184,14 @@ def test_api_payload_with_missing_column_is_rejected():
 HEADER = "\t".join(CAMPAIGN_REPORT.fields + CONV)
 
 
-def test_dashes_in_conversions_mean_zero():
+def test_any_unknown_goal_makes_conversion_total_unknown():
     (row,) = parse_report(f"{HEADER}\n{TO}\t{CID}\t10\t2\t150.00\t--\t1\n", CAMPAIGN_REPORT, GOALS, FROM, TO)
-    assert (row.cost, row.conversions) == (Decimal("150.00"), Decimal(1))
+    assert (row.cost, row.conversions) == (Decimal("150.00"), None)
+
+
+def test_explicit_zero_conversions_remain_known_zero():
+    row, = parse_report(f"{HEADER}\n{TO}\t{CID}\t10\t2\t150.00\t0\t0\n", CAMPAIGN_REPORT, GOALS, FROM, TO)
+    assert row.conversions == Decimal(0)
 
 
 @pytest.mark.parametrize("column, cells", [

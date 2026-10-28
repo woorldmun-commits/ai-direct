@@ -2,7 +2,7 @@
 
 > Основа: [PRD.md](PRD.md) v1.0, [ARCHITECTURE.md](ARCHITECTURE.md), [API_CONTRACT.md](API_CONTRACT.md). **Точная схема — [backend/db/schema.sql](../backend/db/schema.sql)** (при расхождении в реализованном права она; инварианты проверяются тестами `backend/tests/test_schema.py`). Этот документ — смысл и состояния. PostgreSQL 16. Деньги — `numeric(14,2)` в рублях, даты периодов — `date` (МСК), моменты времени — `timestamptz`.
 
-Обозначения: **[A]** — append-only (роль `app`: только `SELECT, INSERT`; `UPDATE/DELETE` запрещены триггером, кроме роли `deleter`). **[O]** — операционная таблица (`app` может `UPDATE`). **[schema]** — новое v1.0, уже реализованное в `schema.sql`. **[v1.0]** — целевая модель v1.0, в `schema.sql` ещё нет: появляется миграцией вместе с кодом, который её использует. **[v1.1]** — модель исполнения через Direct API (Deferred to v1.1): спроектирована, в v1.0 не создаётся и не обещается — в v1.0 AdPilot не изменяет рекламные кабинеты. Что в какой версии — [VERSION_SCOPE.md](VERSION_SCOPE.md); риск, capability, предусловия и откат (v1.1) — [EXECUTION_SAFETY.md](EXECUTION_SAFETY.md), [API_CONTRACT_EXECUTION.md](API_CONTRACT_EXECUTION.md); exposure — [ECONOMICS.md](ECONOMICS.md); AI — [AI_GOVERNANCE.md](AI_GOVERNANCE.md).
+Обозначения: **[A]** — append-only (роль `app`: только `SELECT, INSERT`; `UPDATE/DELETE` запрещены триггером, кроме роли `deleter`). **[O]** — операционная таблица (`app` может `UPDATE`). **[schema]** — новое v1.0, уже реализованное в `schema.sql`. **[v1.0]** — целевая модель v1.0, в `schema.sql` ещё нет: появляется миграцией вместе с кодом, который её использует. **[v1.1]** — модель исполнения через Direct API (Deferred to v1.1): спроектирована, в v1.0 не создаётся и не обещается — в v1.0 Rekvero не изменяет рекламные кабинеты. Что в какой версии — [VERSION_SCOPE.md](VERSION_SCOPE.md); риск, capability, предусловия и откат (v1.1) — [EXECUTION_SAFETY.md](EXECUTION_SAFETY.md), [API_CONTRACT_EXECUTION.md](API_CONTRACT_EXECUTION.md); exposure — [ECONOMICS.md](ECONOMICS.md); AI — [AI_GOVERNANCE.md](AI_GOVERNANCE.md).
 
 ## 1. Карта сущностей
 
@@ -97,7 +97,7 @@ PK (`user_id`, `workspace_id`), `ws_role`: `approver` (смотреть, decide;
 Изменения настроек не ломают воспроизводимость: `audit_runs.settings` хранит замороженную копию. `approval_mode` (`single_step` / `two_step` по `kind`) убран: в v1.1 число одобрений задаёт риск действия (EXECUTION_SAFETY.md); в v1.0 решение принимает один человек с правом decide.
 
 ### `telegram_links` [O] — не используется в v1.0
-Telegram в AdPilot не используется (D15, VERSION_SCOPE §3.2). Таблица (`user_id` PK, `chat_id` UNIQUE, `linked_at`) осталась в схеме и в релизной миграции `0001_baseline`; к удалению отдельной миграцией (документация код не меняет).
+Telegram в Rekvero не используется (D15, VERSION_SCOPE §3.2). Таблица (`user_id` PK, `chat_id` UNIQUE, `linked_at`) осталась в схеме и в релизной миграции `0001_baseline`; к удалению отдельной миграцией (документация код не меняет).
 
 ## 3. Подключения
 
@@ -168,7 +168,7 @@ Telegram в AdPilot не используется (D15, VERSION_SCOPE §3.2). Т
 
 ### `legal_acceptances` [A]
 Принятые пользователем документы: `document` (`offer` · `pd_consent` · `marketing` · `agency_client_mandate`), `version` (дата редакции), `accepted_at` и поля доказательности (ниже). Каждый документ — отдельная строка (согласие на ПД — отдельно от оферты, 156-ФЗ); новая редакция или отзыв — новая строка. Пишется в транзакции создания пользователя (`auth/login.py`; **[v1.0]** — после проверки кода); без `offer` **и** `pd_consent` пользователь не создаётся. `ip` / `user_agent` скрыты от `app_rw` (нет `SELECT` на столбцы) и обнуляются через 30 дней после деактивации пользователя (ретеншн под `app_deleter`). При удалении пользователя его принятия обезличиваются функцией удаления: `user_id`, `ip`, `user_agent` → NULL; `document`, `version`, `document_sha256`, `accepted_at` остаются. Срок хранения доказательств — открытый вопрос юристу (LEGAL.md). Мандат агентства пишется при добавлении клиента. См. LEGAL.md.
-**[schema] Доказательность:** `document_sha256` (хэш точного текста редакции, который видел пользователь; реестр версий и хэшей — `app/legal/documents.py`, `VERSIONS`), `locale`, `ip` inet, `user_agent` (≤ 256 символов). `workspace_id` — только у `agency_client_mandate` (CHECK): агентство подтверждает право передавать данные клиента, поручение клиента на обработку рекламных данных и право дать AdPilot доступ к его Директу. Без этой строки workspace организации `agency` не подключает Директ (§9.3 №14).
+**[schema] Доказательность:** `document_sha256` (хэш точного текста редакции, который видел пользователь; реестр версий и хэшей — `app/legal/documents.py`, `VERSIONS`), `locale`, `ip` inet, `user_agent` (≤ 256 символов). `workspace_id` — только у `agency_client_mandate` (CHECK): агентство подтверждает право передавать данные клиента, поручение клиента на обработку рекламных данных и право дать Rekvero доступ к его Директу. Без этой строки workspace организации `agency` не подключает Директ (§9.3 №14).
 
 ### `search_query_texts` [A, отдельный срок хранения]
 `id`, `workspace_id`, `text_sanitized`, `text_hash` (sha256 исходного текста — чтобы один запрос в разных снимках был одной строкой), `first_seen_at`. UNIQUE(`workspace_id`, `text_hash`).
@@ -316,7 +316,7 @@ Telegram в AdPilot не используется (D15, VERSION_SCOPE §3.2). Т
 `queued → running → waiting_report (Reports API 201/202, опрос по retryIn) → running → succeeded | failed`. Снимок создаётся только при `succeeded` — частично загруженных снимков не бывает.
 
 ### 8.3 Рекомендация [v1.0]
-Состояние — **основной `status` (6 значений v1.0) и независимые поля** `execution_mode` (`manual` · `none`), `verification_status`, `measurement` (API_CONTRACT.md §3). Ничего из этого не хранится колонкой: всё выводится из append-only `recommendation_events` — история фактическая и не зависит от трактовки статуса. В v1.0 AdPilot не изменяет рекламные кабинеты: изменение вносит человек, AdPilot сверяет его чтением.
+Состояние — **основной `status` (6 значений v1.0) и независимые поля** `execution_mode` (`manual` · `none`), `verification_status`, `measurement` (API_CONTRACT.md §3). Ничего из этого не хранится колонкой: всё выводится из append-only `recommendation_events` — история фактическая и не зависит от трактовки статуса. В v1.0 Rekvero не изменяет рекламные кабинеты: изменение вносит человек, Rekvero сверяет его чтением.
 
 ```
 new ──▶ requires_decision ──accepted──▶ accepted ──manual_claimed──▶ applied (manual) ── verification_* ── measured
@@ -340,7 +340,7 @@ new ──▶ requires_decision ──accepted──▶ accepted ──manual_cl
 | `measured` · `measurement_skipped` | система | заполняют `measurement` (ARCHITECTURE.md §5) |
 | `seen_again` | система | новая версия вывода; статус не меняется (`accepted` ссылается на версию, которую принимали) |
 
-- **Ручное ≠ исполненное.** `manual_claimed` — заявление пользователя: AdPilot не утверждает, что изменение сделано. `verification_confirmed` пишется только когда синхронизация параметров затронутого объекта из Директа показала ожидаемое изменение относительно `before_state` из `accepted` (или из `manual_claimed` с `reliability = reduced`, если `accept` не было; ARCHITECTURE.md §4.2); до этого ручное выполнение остаётся `pending`. Автоматически «подтверждённым» оно не становится.
+- **Ручное ≠ исполненное.** `manual_claimed` — заявление пользователя: Rekvero не утверждает, что изменение сделано. `verification_confirmed` пишется только когда синхронизация параметров затронутого объекта из Директа показала ожидаемое изменение относительно `before_state` из `accepted` (или из `manual_claimed` с `reliability = reduced`, если `accept` не было; ARCHITECTURE.md §4.2); до этого ручное выполнение остаётся `pending`. Автоматически «подтверждённым» оно не становится.
 - **Неполные данные** (`data_status = partial`) решения v1.0 не блокируют — все они ручные; пометка видна в паспорте.
 - **Решение относится к версии.** `accepted.finding_id` и `manual_claimed.finding_id` — версия, которую видел пользователь; при `seen_again` с другим `action` принятая версия устарела — UI показывает новую, `manual_claimed` по старой → `409 version_outdated`.
 - `resolved` (проблема исчезла в аудите без действий) — закрытие **проблемы** (`issues.close_reason`), не статус рекомендации; в «Сэкономлено» не входит.
@@ -428,7 +428,7 @@ workspace: active ──«деактивировать»──▶ deactivated �
 | 5e | **[v1.1]** Кворум — разные люди, одно ожидаемое состояние | `approved` только при ≥ `approval_policy[risk_level]` не истёкших `approval_granted` разных `actor_user_id` с одинаковыми `finding_id` и `precondition_hash` (триггер); повтор того же человека — частичный UNIQUE; `execution_attempts.precondition_hash` = хэш кворума |
 | 5f | **[v1.1]** Откат не перезаписывает чужое изменение | `rollback` пишет только если текущее значение == `applied_value` исполнения, иначе `rollback_blocked`; не позже 7 дней после `execution_succeeded` |
 | 5c | **[v1.1]** Без полных данных — без API | `approved` / `execution_started` отклоняются триггером, если вывод версии `partial`; воркер перепроверяет перед запросом к Директу |
-| 5g | **[v1.0]** AdPilot не пишет в рекламный кабинет | в v1.0 нет `execution_attempts` и событий исполнения (CHECK перечисления `recommendation_events.type`); клиент Директа — только методы чтения (тест, ARCHITECTURE.md §11) |
+| 5g | **[v1.0]** Rekvero не пишет в рекламный кабинет | в v1.0 нет `execution_attempts` и событий исполнения (CHECK перечисления `recommendation_events.type`); клиент Директа — только методы чтения (тест, ARCHITECTURE.md §11) |
 | 5h | **[v1.0]** Отклонение — с причиной | `rejected` ⇔ `reason` NOT NULL из закрытого списка (CHECK) |
 | 5d | **[v1.0]** Изоляция workspace в API | каждый запрос API — через функции доступа с обязательным `workspace_id` и проверкой членства (`organization_memberships` owner/admin или `workspace_memberships`); тест: пользователь A не читает, не меняет и не узнаёт о существовании объектов B, включая вложенные (`history`, `evidence`); `member` без `workspace_memberships` — так же. RLS — §9.5 |
 | 5a | Событие и результат не ссылаются на чужую проблему | составные FK через `issue_id` (§ `recommendation_events`); тесты `backend/tests/test_issue_integrity.py` |
@@ -444,7 +444,7 @@ workspace: active ──«деактивировать»──▶ deactivated �
 | 15 | **[v1.0]** Итог exposure без двойного счёта | `audit/exposure.py`: объединение затронутого расхода по кабинету · кампании · объекту · дню; итог ≤ суммы карточек и ≥ максимальной (golden-набор, AI_GOVERNANCE.md / ECONOMICS.md) |
 
 ### 9.4 Исполнение и автоматизация
-В v1.0 исполнения через API нет: человек выполняет вручную, AdPilot сверяет чтением (§8.3). **[v1.1]** Исполнение — §8.3 (раздел v1.1): `execution_started` только после `approved` (или в одной транзакции с ним при `approve_and_apply`), `approved` — только при кворуме `approval_granted` людей с правом approve (`actor_user_id NOT NULL`, CHECK на тип события). Риск, capability, предусловие и откат — EXECUTION_SAFETY.md. Автоматизация v2.0 (PRD §10, вопрос 8) — только через явно одобренное правило со своей записью одобрения; до решения по нему схему не расширяем.
+В v1.0 исполнения через API нет: человек выполняет вручную, Rekvero сверяет чтением (§8.3). **[v1.1]** Исполнение — §8.3 (раздел v1.1): `execution_started` только после `approved` (или в одной транзакции с ним при `approve_and_apply`), `approved` — только при кворуме `approval_granted` людей с правом approve (`actor_user_id NOT NULL`, CHECK на тип события). Риск, capability, предусловие и откат — EXECUTION_SAFETY.md. Автоматизация v2.0 (PRD §10, вопрос 8) — только через явно одобренное правило со своей записью одобрения; до решения по нему схему не расширяем.
 
 ### 9.5 Изоляция арендаторов — RLS **[schema]**
 Второй барьер после проверки членства в коде (`workspace_role`, `app/tenancy.py`).

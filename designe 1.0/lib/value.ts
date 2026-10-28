@@ -148,6 +148,12 @@ export const UNAVAILABLE_REASON_LABEL: Record<UnavailableReason, string> = {
 
 export const PARTIAL_NOTE = "Данные за последние дни могут уточниться";
 
+/** Plain-text exports preserve the same estimate, missing-data and maturity labels as ValueView. */
+export function valueText(v: Value): string {
+  if (v.calculation_type === 'unavailable') return `${CALCULATION_LABEL.unavailable}: ${UNAVAILABLE_REASON_LABEL[v.unavailable_reason]}`;
+  return `${CALCULATION_LABEL[v.calculation_type]}: ${formatValue(v) ?? 'Ошибка формата данных'}${v.data_status === 'partial' ? ` · ${PARTIAL_NOTE}` : ''}`;
+}
+
 const MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
 
 function parseDate(d: string): { y: number; m: number; day: number } | null {

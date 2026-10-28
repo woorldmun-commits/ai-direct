@@ -1,2 +1,5 @@
-import { AnalysisScreen } from '@/components/reference/cabinet';
-export default function DemoPage() { return <AnalysisScreen />; }
+import {redirect} from 'next/navigation';
+
+export default function DemoIndex() {
+  redirect('/demo/overview');
+}

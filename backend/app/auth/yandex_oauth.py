@@ -7,6 +7,8 @@
 Ошибки — коды без текста сервера (как last_error в БД): invalid_grant → ReauthorizationRequired (код или refresh-токен
 недействителен/отозван — нужен новый вход через Яндекс), сеть и 5xx → yandex_unavailable (можно повторить)."""
 
+import base64
+import hashlib
 import os
 import re
 import secrets
@@ -19,6 +21,7 @@ import httpx
 
 AUTHORIZE_URL = "https://oauth.yandex.ru/authorize"
 TOKEN_URL = "https://oauth.yandex.ru/token"
+MANUAL_CODE_REDIRECT_URI = "https://oauth.yandex.ru/verification_code"
 TIMEOUT = httpx.Timeout(10.0)
 
 
@@ -60,14 +63,22 @@ def new_state() -> str:
     return secrets.token_urlsafe(32)
 
 
-def authorize_url(app: OAuthApp, state: str) -> str:
-    return AUTHORIZE_URL + "?" + urlencode({"response_type": "code", "client_id": app.client_id,
-                                            "redirect_uri": app.redirect_uri, "scope": " ".join(app.scopes),
-                                            "state": state})
+def authorize_url(app: OAuthApp, state: str, *, code_verifier: str | None = None) -> str:
+    params = {"response_type": "code", "client_id": app.client_id,
+              "redirect_uri": app.redirect_uri, "scope": " ".join(app.scopes), "state": state}
+    if code_verifier:
+        params.update(code_challenge=base64.urlsafe_b64encode(
+            hashlib.sha256(code_verifier.encode("ascii")).digest()).rstrip(b"=").decode(),
+            code_challenge_method="S256")
+    return AUTHORIZE_URL + "?" + urlencode(params)
 
 
-def exchange_code(http: httpx.Client, app: OAuthApp, code: str, now: datetime) -> Tokens:
-    return _token(http, app, {"grant_type": "authorization_code", "code": code}, now)
+def exchange_code(http: httpx.Client, app: OAuthApp, code: str, now: datetime,
+                  *, code_verifier: str | None = None) -> Tokens:
+    data = {"grant_type": "authorization_code", "code": code}
+    if code_verifier:
+        data["code_verifier"] = code_verifier
+    return _token(http, app, data, now)
 
 
 def refresh(http: httpx.Client, app: OAuthApp, refresh_token: str, now: datetime) -> Tokens:
@@ -84,9 +95,14 @@ def _token(http: httpx.Client, app: OAuthApp, data: dict, now: datetime) -> Toke
     if r.status_code == 200:
         try:
             body = r.json()
-            return Tokens(body["access_token"], body.get("refresh_token"),
-                          now + timedelta(seconds=int(body["expires_in"])))
-        except (ValueError, KeyError, TypeError, AttributeError):
+            access, refresh_token = body["access_token"], body.get("refresh_token")
+            expires = int(body["expires_in"])
+            if (not isinstance(access, str) or not access or len(access) > 16384 or expires <= 0
+                    or (refresh_token is not None and (not isinstance(refresh_token, str) or not refresh_token
+                                                       or len(refresh_token) > 16384))):
+                raise ValueError
+            return Tokens(access, refresh_token, now + timedelta(seconds=expires))
+        except (ValueError, KeyError, TypeError, AttributeError, OverflowError):
             raise OAuthError("bad_response") from None
     if r.status_code >= 500:
         raise OAuthError("yandex_unavailable")
@@ -98,7 +114,8 @@ def _token(http: httpx.Client, app: OAuthApp, data: dict, now: datetime) -> Toke
 
 def _error_code(r: httpx.Response) -> str:
     try:
-        code = r.json().get("error", "")
+        body = r.json()
+        code = body.get("error", "") if isinstance(body, dict) else ""
     except ValueError:
         code = ""
-    return code if re.fullmatch(r"[a-z_]+", code or "") else f"http_{r.status_code}"
+    return code if isinstance(code, str) and re.fullmatch(r"[a-z_]+", code) else f"http_{r.status_code}"

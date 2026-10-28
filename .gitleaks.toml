@@ -1,0 +1,62 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "SHA256 evidence manifests contain content hashes, not API credentials."
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = [
+  '''(^|/)docs/audit\-fixes\-2026\-10\-28/artifact\-manifest\.json$''',
+  '''(^|/)docs/audit\-fixes\-2026\-10\-28/source\-after\-checks\.json$''',
+  '''(^|/)docs/audit\-fixes\-2026\-10\-28/source\-before\-checks\.json$''',
+  '''(^|/)docs/audit\-fixes\-2026\-10\-28/source\-final\.json$''',
+  '''(^|/)docs/audit\-fixes\-2026\-10\-28/source\-frozen\.json$''',
+  '''(^|/)docs/audit\-remediation\-2026\-10\-25/backend\-before\-tests\-first\.json$''',
+  '''(^|/)docs/audit\-remediation\-2026\-10\-25/backend\-before\-tests\.json$''',
+  '''(^|/)docs/audit\-remediation\-2026\-10\-25/frontend\-before\-build\.json$''',
+  '''(^|/)docs/audit\-remediation\-2026\-10\-25/manifest\.json$''',
+  '''(^|/)docs/audit\-remediation\-2026\-10\-25/source\-final\.json$''',
+  '''(^|/)docs/deep\-audit\-fixes\-2026\-10\-26/source\-manifest\.json$''',
+  '''(^|/)docs/design\-implementation/acceptance\-fifth\-failed\.json$''',
+  '''(^|/)docs/design\-implementation/acceptance\-fourth\-pass\.json$''',
+  '''(^|/)docs/design\-implementation/acceptance\-sixth\-failed\.json$''',
+  '''(^|/)docs/design\-implementation/acceptance\-third\-pass\.json$''',
+  '''(^|/)docs/design\-implementation/new_screen_baselines/results\.json$''',
+  '''(^|/)docs/design\-implementation/screens/reference\-19/results\.json$''',
+  '''(^|/)docs/design\-polish\-2026\-10\-25/verification\-receipt\.json$''',
+  '''(^|/)docs/emil\-design\-2026\-10\-23/fidelity\-manifest\.json$''',
+  '''(^|/)docs/emil\-design\-2026\-10\-23/fidelity\-routes/results\.json$''',
+  '''(^|/)docs/emil\-design\-2026\-10\-23/finish\-manifest\.json$''',
+  '''(^|/)docs/emil\-design\-2026\-10\-23/finish\-routes/results\.json$''',
+  '''(^|/)docs/master\-motion\-2026\-10\-23/routes/results\.json$''',
+  '''(^|/)docs/pixel\-fidelity\-2026\-10\-23/direct/manifest\.json$''',
+  '''(^|/)docs/pixel\-fidelity\-2026\-10\-23/direct/routes/results\.json$''',
+  '''(^|/)docs/project\-check\-2026\-10\-25/source\-after\.json$''',
+  '''(^|/)docs/project\-check\-2026\-10\-25/source\-before\.json$''',
+  '''(^|/)docs/project\-check\-fixes\-2026\-10\-25/source\-after\.json$''',
+  '''(^|/)docs/project\-check\-fixes\-2026\-10\-25/source\-before\.json$''',
+  '''(^|/)docs/remediation\-2026\-10\-27/source\-after\.json$''',
+  '''(^|/)docs/remediation\-2026\-10\-27/source\-before\.json$''',
+  '''(^|/)docs/signup\-illustration\-2026\-10\-25/verification\-receipt\.json$''',
+  '''(^|/)docs/skills\-audit\-2026\-10\-27/artifact\-manifest\.json$''',
+  '''(^|/)docs/skills\-audit\-2026\-10\-27/source\-after\.json$''',
+  '''(^|/)docs/skills\-audit\-2026\-10\-27/source\-before\.json$''',
+]
+regexTarget = "secret"
+regexes = ['''^[a-f0-9]{64}$''']
+
+[[allowlists]]
+description = "Synthetic failed-test output includes UUID idempotency keys."
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''(^|/)docs/audit-fixes-2026-10-28/backend-full\.log$''']
+regexTarget = "match"
+regexes = ['''^idempotency_key': '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'$''']
+
+[[allowlists]]
+description = "Figma document identifiers are references, not authentication tokens."
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''(^|/)docs/pixel-fidelity-2026-10-23/evidence/figma-access\.json$''']
+regexTarget = "match"
+regexes = ['''^fileKey": "[A-Za-z0-9]{22}"$''']

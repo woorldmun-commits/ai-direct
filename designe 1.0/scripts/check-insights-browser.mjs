@@ -15,10 +15,10 @@ try {
  await context.addCookies([{name:'session',value:fixture.tokens.owner,url:base,httpOnly:true,sameSite:'Lax'}]);
  await context.addInitScript(()=>{window.__violations=[];document.addEventListener('securitypolicyviolation',event=>window.__violations.push(event.violatedDirective));});
  const page=await context.newPage(); page.on('pageerror',error=>errors.push(error.message));
- const location=base+'/workspace?workspace='+fixture.workspaces.a1;
+ const location=base+'/workspace/analysis?workspace='+fixture.workspaces.a1;
  const response=await page.goto(location,{waitUntil:'networkidle'});
  assert.match(response.headers()['cache-control'],/no-store/);
- assert.equal(await page.locator('.pilot-metric').count(),3);
+ assert.equal(await page.locator('.ix-kpi').count(),4);
  assert(await page.getByRole('heading',{name:'Контроль данных и бюджета'}).isVisible());
  assert(await page.getByRole('heading',{name:'Качество заявок',exact:true}).isVisible());
  assert.match(await page.locator('meta[name=robots]').getAttribute('content'),/noindex/);
@@ -34,7 +34,8 @@ try {
   await page.screenshot({path:path.join(out,`workspace-${width}.png`),fullPage:true});
  }
  await page.goto(base+`/workspace/recommendations/${fixture.recommendation}?workspace=${fixture.workspaces.a1}`,{waitUntil:'networkidle'});
- assert(await page.getByRole('heading',{name:'Решение специалиста'}).isVisible());
+ assert(await page.getByRole('heading',{name:'Решение человека'}).isVisible());
+ await page.getByRole('tab',{name:'Обзор',exact:true}).click();
  assert(await page.getByRole('heading',{name:'Что проверить или изменить вручную'}).isVisible());
  assert.match(await page.locator('main').innerText(),/Автоматическая сверка пока недоступна/);
  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));

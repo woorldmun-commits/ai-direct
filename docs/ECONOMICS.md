@@ -1,6 +1,6 @@
 # Экономика выводов — v1.0
 
-> Какие денежные суммы показывает AdPilot, как они называются, как считается итог без двойного счёта и как замеряется эффект. Основа — решения D9, D10 (P0, 2026-10-02). Связанные документы: [PRD.md](PRD.md) §1 «Главный KPI», §4 (правила), [ARCHITECTURE.md](ARCHITECTURE.md) §3 (`Value`), §4, §5, [API_CONTRACT.md](API_CONTRACT.md) §7–8, [DATA_MODEL.md](DATA_MODEL.md) §4, [AI_GOVERNANCE.md](AI_GOVERNANCE.md) §4 (гейт).
+> Какие денежные суммы показывает Rekvero, как они называются, как считается итог без двойного счёта и как замеряется эффект. Основа — решения D9, D10 (P0, 2026-10-02). Связанные документы: [PRD.md](PRD.md) §1 «Главный KPI», §4 (правила), [ARCHITECTURE.md](ARCHITECTURE.md) §3 (`Value`), §4, §5, [API_CONTRACT.md](API_CONTRACT.md) §7–8, [DATA_MODEL.md](DATA_MODEL.md) §4, [AI_GOVERNANCE.md](AI_GOVERNANCE.md) §4 (гейт).
 >
 > Все суммы — `Decimal`, рубли с двумя знаками, всегда через `Value` (`calculation_type = estimated`, с `formula` и версией). Считает детерминированный код; LLM чисел не вводит.
 

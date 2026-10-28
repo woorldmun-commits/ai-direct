@@ -41,7 +41,7 @@ CAPTCHA_AFTER_DEVICE = 3
 DEFAULT_DAILY_CAP = 500  # глобальный потолок отправок за скользящие сутки (бюджет SMS)
 RETENTION = timedelta(days=30)
 MIN_KEY_LENGTH = 32
-SMS_TEXT = "Код входа AdPilot: {code}. Никому его не сообщайте."
+SMS_TEXT = "Код входа inrou: {code}. Никому его не сообщайте."
 _TRUE = {"1", "true", "yes", "on"}
 
 

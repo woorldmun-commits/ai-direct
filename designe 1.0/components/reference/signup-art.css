@@ -1,0 +1,12 @@
+/* Decorative signup-only artwork; the form and other authentication screens retain their layout. */
+.ix.ix-auth .ix-auth-art--signup {
+  position:relative;
+  padding:0;
+  height:clamp(620px,calc(100dvh - 128px),820px);
+  background:var(--panel);
+  border:1px solid var(--line);
+}
+.ix.ix-auth .ix-auth-art--signup img {
+  object-fit:cover;
+  object-position:50% 55%;
+}

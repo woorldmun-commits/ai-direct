@@ -40,11 +40,40 @@ function isAction(v:unknown):v is ManualAction|null{
  if(v.type==='exclude_placements')return Array.isArray(v.placements)&&placements(v.placements);
  return v.type==='lower_cpa'&&['unknown','manual','auto'].includes(String(v.strategy))&&Array.isArray(v.levers)&&v.levers.length<=10&&v.levers.every(l=>record(l)&&['manual','auto'].includes(String(l.strategy))&&['decrease_bid','lower_target_cpa','check_conversion_goals'].includes(String(l.lever))&&(l.lever==='decrease_bid'?pct(l.change_pct):l.change_pct===null));
 }
+export type Measurement={id:string;policy:string;status:'pending'|'complete'|'skipped';reason:string|null;next_check_on:string|null;before_period:{from:string;to:string};after_period:{from:string;to:string};result:null|{verdict:'effect'|'no_effect'|'not_confirmed'|'insufficient';before:Record<string,Value>;after:Record<string,Value>;computed_at:string;counted_in_saved_total:false}};
+export const decisionLabels:Record<string,string>={done:'Заявлено ручное выполнение',checked:'Проверено специалистом',rejected:'Отклонено',postponed:'Отложено',measured:'Выполнен замер',measurement_skipped:'Замер пропущен'};
+export type WeeklyReportData={insights:WorkspaceInsights;decisions:{type:string;count:number}[]};
+export function isWeeklyReport(v:unknown):v is WeeklyReportData{
+ return record(v)&&isInsights(v.insights)&&Array.isArray(v.decisions)&&v.decisions.length<=6&&v.decisions.every(d=>record(d)&&text(d.type)&&Object.hasOwn(decisionLabels,d.type)&&count(d.count));
+}
+export type RecommendationActivity={items:{id:string;title:string;status:string;execution_mode:'manual'|null;updated_at:string;measurement:Measurement|null}[];next_cursor:string|null};
+export function isMeasurement(v:unknown):v is Measurement|null{
+ if(v===null)return true;
+ if(!record(v)||!text(v.id)||!/^measurement_[1-9]\d{0,18}$/.test(v.id)||!text(v.policy)||!['pending','complete','skipped'].includes(String(v.status))||!period(v.before_period)||!period(v.after_period)||!(v.reason===null||text(v.reason))||!(v.next_check_on===null||day(v.next_check_on)))return false;
+ const r=v.result;
+ if(r===null)return v.status!=='complete';
+ return v.status==='complete'&&record(r)&&['effect','no_effect','not_confirmed','insufficient'].includes(String(r.verdict))&&record(r.before)&&record(r.after)&&Object.values(r.before).every(isValue)&&Object.values(r.after).every(isValue)&&text(r.computed_at)&&Number.isFinite(Date.parse(r.computed_at))&&r.counted_in_saved_total===false;
+}
+export function isActivity(v:unknown):v is RecommendationActivity{
+ return record(v)&&(v.next_cursor===null||text(v.next_cursor)&&/^[1-9]\d{0,18}$/.test(v.next_cursor))&&Array.isArray(v.items)&&v.items.length<=50&&v.items.every(i=>record(i)&&text(i.id)&&/^rec_[1-9]\d{0,18}$/.test(i.id)&&text(i.title)&&text(i.status)&&(i.execution_mode===null||i.execution_mode==='manual')&&text(i.updated_at)&&Number.isFinite(Date.parse(i.updated_at))&&isMeasurement(i.measurement));
+}
+export type RecommendationVerification={status:'pending'|'confirmed'|'not_confirmed'|'unknown'|'unavailable'|'not_required';reason:string;method?:'excluded_sites_membership@1';proof_scope?:'final_membership';counted_in_saved_total?:false;can_request?:boolean;request_id?:string;checked_at?:string|null;target_count?:number|null;matched_count?:number|null};
+export function isVerification(v:unknown):v is RecommendationVerification {
+ if(!record(v)||typeof v.status!=='string'||!['pending','confirmed','not_confirmed','unknown','unavailable','not_required'].includes(v.status)||!text(v.reason))return false;
+ // Legacy unavailable fixtures carry no source proof.
+ if(v.method===undefined)return v.status==='unavailable'&&v.can_request===undefined;
+ if(v.method!=='excluded_sites_membership@1'||v.proof_scope!=='final_membership'||v.counted_in_saved_total!==false||typeof v.can_request!=='boolean')return false;
+ if(v.request_id!==undefined&&!(typeof v.request_id==='string'&&/^verification_[1-9]\d{0,18}$/.test(v.request_id)))return false;
+ if(v.checked_at!==undefined&&v.checked_at!==null&&!(typeof v.checked_at==='string'&&Number.isFinite(Date.parse(v.checked_at))))return false;
+ for(const key of ['target_count','matched_count'])if(v[key]!==undefined&&v[key]!==null&&!(Number.isSafeInteger(v[key])&&Number(v[key])>=0))return false;
+ if(v.status==='confirmed'&&!(typeof v.target_count==='number'&&v.target_count>0&&v.matched_count===v.target_count&&typeof v.checked_at==='string'))return false;
+ return !(typeof v.target_count==='number'&&typeof v.matched_count==='number'&&v.matched_count>v.target_count);
+}
 export type RecommendationPassport={
  id:string;version_id:string;state_version:string;status:string;title?:string;action_level:string;
  action:ManualAction|null;object:{type:string;id:string;name:string|null};evidence_current:boolean;evidence:Record<string,Value>;explanation:{text:string;source:string}|null;exposure:Value;can_save:Value;computed_at:string;allowed_actions:string[];
  history:{id:string;type:string;actor_id:string|null;created_at:string;version_id:string|null}[];
- latest_measurement:unknown;verification:{status:string;reason:string};
+ latest_measurement:Measurement|null;verification:RecommendationVerification;
 };
 export function isPassport(v:unknown):v is RecommendationPassport{
  return record(v)&&text(v.id)&&/^rec_[1-9]\d{0,18}$/.test(v.id)&&text(v.version_id)&&/^rv_[1-9]\d{0,18}$/.test(v.version_id)
@@ -56,5 +85,5 @@ export function isPassport(v:unknown):v is RecommendationPassport{
  &&text(v.computed_at)&&Number.isFinite(Date.parse(v.computed_at))
  &&(v.explanation===null||record(v.explanation)&&text(v.explanation.text)&&text(v.explanation.source))
  &&(v.title===undefined||text(v.title))
- &&record(v.verification)&&text(v.verification.status)&&text(v.verification.reason);
+ &&isVerification(v.verification)&&isMeasurement(v.latest_measurement);
 }

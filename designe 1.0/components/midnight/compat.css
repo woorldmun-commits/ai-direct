@@ -1,0 +1,36 @@
+/* Presentation primitives still used by authenticated business forms and system pages. */
+.ref-button {display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:11px 18px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text);text-decoration:none;font:400 13px/1.4 Arial,sans-serif;cursor:pointer;transition:transform 160ms,background-color 180ms}
+.ref-primary {background:linear-gradient(#315a7c,#112e43);border-color:#426783;color:#fff;box-shadow:inset 0 1px #ffffff33,0 5px 12px #132a6226}
+.ref-button:disabled,.ref-button[aria-disabled=true] {opacity:.5;cursor:not-allowed;box-shadow:none}
+.ref-button:not(:disabled):active {transform:scale(.98)}
+.workspace-form,.ap-form {display:grid;gap:14px;max-width:100%}
+.workspace-form fieldset,.ap-form fieldset {margin:0;padding:0;border:0;display:grid;gap:14px;min-width:0}
+.workspace-form label,.ap-form label {display:grid;gap:7px;font-size:13px;color:var(--muted)}
+.workspace-form :is(input:not([type=checkbox]),select,textarea),.ap-form :is(input:not([type=checkbox]),select,textarea) {width:100%;min-height:44px;border:1px solid var(--border);border-radius:9px;padding:11px 12px;background:var(--surface);color:var(--text);font:inherit}
+.workspace-form input[type=checkbox],.ap-form input[type=checkbox] {accent-color:var(--brand);width:16px;height:16px;flex:none}
+.workspace-checkbox {display:flex!important;align-items:flex-start;gap:9px}
+.workspace-actions {display:flex;flex-wrap:wrap;gap:9px;margin-top:16px}
+.pilot-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.pilot-card,.mc-source-card,.mc-empty {padding:20px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:14px}
+.pilot-card :is(p,li,dt,dd) {font-size:14px;line-height:1.65}
+.pilot-card h2 {font:400 19px/1.3 Arial,sans-serif;margin-bottom:14px}
+.pilot-eyebrow {font-size:10px;letter-spacing:1.2px;color:var(--brand);text-transform:uppercase}
+.pilot-warning {color:var(--danger)}.pilot-ok {color:var(--success)}
+.pilot-section-title {display:flex;justify-content:space-between;align-items:center;gap:16px}
+.launch-charts {margin-block:24px}
+.launch-charts figure {margin:16px 0}
+.launch-charts figcaption,.ap-footnote {font-size:12px;color:var(--muted);margin-bottom:16px}
+.launch-bar-row {display:grid;grid-template-columns:140px minmax(50px,1fr) auto;gap:14px;align-items:center;margin:16px 0;font-size:13px}
+.launch-bar-row meter {width:100%;height:18px;accent-color:var(--brand)}
+.launch-bar-row meter::-webkit-meter-bar {background:var(--surface-3);border:0;border-radius:8px}
+.launch-bar-row meter::-webkit-meter-optimum-value {background:var(--brand);border-radius:8px}
+.pilot-campaigns {width:100%;overflow:auto}.pilot-campaigns table {width:100%;border-collapse:collapse}
+.pilot-campaigns :is(td,th) {padding:12px;border-bottom:1px solid var(--border);text-align:left}
+.ref-auth-error {color:var(--danger)}
+.ref-email-form button:disabled,.ref-auth-submit:disabled {opacity:.5;cursor:not-allowed;box-shadow:none}
+.ref-email-form .ref-email-password button {width:44px;min-height:44px;flex:none;background:var(--surface-2);border:1px solid var(--border);border-radius:9px;display:grid;place-items:center}
+.ref-email-links {display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;font-size:12px}
+.ref-email-local {font-size:12px;padding:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px}
+@media(max-width:767px) {.workspace-form :is(input,select,textarea),.ap-form :is(input,select,textarea) {font-size:16px}.pilot-grid {grid-template-columns:minmax(0,1fr)}}
+@media(max-width:767px) {.launch-bar-row {grid-template-columns:1fr auto}.launch-bar-row meter {grid-row:2;grid-column:1/-1}}
+@media(prefers-reduced-motion:reduce) {.ref-button {transition:none}}

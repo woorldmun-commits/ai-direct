@@ -13,7 +13,7 @@ from app.sources.direct import ReportSpec
 from app.sync.sanitize import MASK, sanitize, sanitize_placement
 
 # Reports API показывает отсутствующее значение как "--". Смысл зависит от столбца:
-#   Conversions_*            "--" → 0: за день по цели конверсий не было;
+#   Conversions_*            "--" → None: неизвестное значение не доказывает нулевую конверсию;
 #   Impressions/Clicks/Cost  "--" → ошибка формата: базовая метрика строки не может отсутствовать,
 #                            а 0 выдал бы непроверенное значение за факт.
 # Производные метрики (CostPerConversion и т. п.) не запрашиваем: CPA считает правило, и при 0 конверсий
@@ -124,8 +124,8 @@ def _row(values: dict[str, str], spec: ReportSpec, conv_columns: tuple[str, ...]
     if not date_from <= day <= date_to:
         raise ReportFormatError(FormatError.DATE_OUT_OF_RANGE, f"Date {day} вне {date_from}–{date_to}")
     campaign_id = _count(values["CampaignId"], "CampaignId")
-    conversions = (sum((Decimal(0) if values[c] == EMPTY else _money(values[c], c) for c in conv_columns),
-                       Decimal(0)) if conv_columns else None)
+    goals = [None if values[c] == EMPTY else _money(values[c], c) for c in conv_columns]
+    conversions = sum(goals, Decimal(0)) if goals and all(v is not None for v in goals) else None
     common = dict(
         level=spec.level, campaign_id=campaign_id, date=day,
         impressions=_count(values["Impressions"], "Impressions"), clicks=_count(values["Clicks"], "Clicks"),

@@ -1,0 +1,24 @@
+services:
+  db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: inrou
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run python deploy/configure_local.py first}
+    volumes:
+      - inrou-db:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres -d inrou"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+  app:
+    build: .
+    env_file: deploy/.env
+    ports:
+      - "127.0.0.1:10000:10000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+volumes:
+  inrou-db:

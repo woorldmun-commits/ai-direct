@@ -552,7 +552,8 @@ CREATE TABLE snapshots (
   sealed_at    timestamptz,
   CHECK ((status = 'complete') = (sealed_at IS NOT NULL)),
   CHECK (period_from <= period_to),
-  CHECK (partial_from BETWEEN period_from AND period_to + 1)
+  CHECK (partial_from BETWEEN period_from AND period_to + 1),
+  campaign_strategies jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(campaign_strategies) = 'object')
 );
 
 CREATE TABLE stat_rows (
@@ -1130,6 +1131,10 @@ BEGIN
                       WHERE o.user_id = m.user_id AND o.organization_id <> org);
   END IF;
 
+  DELETE FROM recommendation_verification_reads WHERE workspace_id = ws;
+  GET DIAGNOSTICS n = ROW_COUNT; counts := counts || jsonb_build_object('recommendation_verification_reads', n);
+  DELETE FROM recommendation_verification_jobs WHERE workspace_id = ws;
+  GET DIAGNOSTICS n = ROW_COUNT; counts := counts || jsonb_build_object('recommendation_verification_jobs', n);
   DELETE FROM outbox_events WHERE workspace_id = ws;
   GET DIAGNOSTICS n = ROW_COUNT; counts := counts || jsonb_build_object('outbox_events', n);
   DELETE FROM notifications WHERE workspace_id = ws;
@@ -1957,3 +1962,642 @@ GRANT SELECT, INSERT ON placement_names TO app_rw;
 ALTER TABLE placement_names ENABLE ROW LEVEL SECURITY;
 CREATE POLICY tenant ON placement_names TO app_rw USING (workspace_id = app_workspace_id());
 CREATE POLICY system ON placement_names TO app_system USING (true) WITH CHECK (true);
+
+-- Operational input only: no ad-platform writes, credentials or free-form contact data.
+CREATE TABLE workspace_budget_plans (
+  workspace_id bigint PRIMARY KEY REFERENCES workspaces ON DELETE CASCADE,
+  period_from date NOT NULL,
+  period_to date NOT NULL,
+  amount numeric(14,2) NOT NULL CHECK (amount > 0),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (period_to >= period_from AND period_to - period_from < 366)
+);
+CREATE TABLE workspace_lead_imports (
+  workspace_id bigint PRIMARY KEY REFERENCES workspaces ON DELETE CASCADE,
+  fingerprint text NOT NULL CHECK (fingerprint ~ '^[0-9a-f]{64}$'),
+  period_from date,
+  period_to date,
+  cohort_complete boolean NOT NULL DEFAULT false,
+  imported_ids uuid[] NOT NULL,
+  imported_at timestamptz NOT NULL DEFAULT now(),
+  CHECK ((period_from IS NULL) = (period_to IS NULL)),
+  CHECK (NOT cohort_complete OR period_from IS NOT NULL),
+  CHECK (period_to >= period_from AND period_to - period_from < 366)
+);
+CREATE TABLE workspace_leads (
+  workspace_id bigint NOT NULL REFERENCES workspaces ON DELETE CASCADE,
+  external_id uuid NOT NULL,
+  created_on date NOT NULL,
+  acquired_on date,
+  updated_on date NOT NULL,
+  direct_account_id bigint NOT NULL,
+  campaign_id bigint,
+  status text NOT NULL CHECK (status IN ('new','qualified','rejected','won','lost','refunded')),
+  amount numeric(14,2) CHECK (amount >= 0),
+  refund_amount numeric(14,2) NOT NULL DEFAULT 0 CHECK (refund_amount >= 0),
+  PRIMARY KEY (workspace_id, external_id),
+  CHECK (updated_on >= created_on AND (acquired_on IS NULL OR acquired_on <= created_on)),
+  CHECK (refund_amount = 0 OR (amount IS NOT NULL AND refund_amount <= amount)),
+  CHECK (campaign_id IS NULL OR campaign_id > 0)
+);
+CREATE INDEX workspace_leads_cohort ON workspace_leads (workspace_id, created_on);
+-- ON DELETE CASCADE integrates all three tables with delete_workspace_data without changing its security boundary.
+DO $$ DECLARE t text; BEGIN
+  FOREACH t IN ARRAY ARRAY['workspace_budget_plans','workspace_lead_imports','workspace_leads'] LOOP
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('CREATE POLICY tenant ON %I TO app_rw USING (workspace_id = app_workspace_id())', t);
+    EXECUTE format('CREATE POLICY system ON %I TO app_system USING (true) WITH CHECK (true)', t);
+    EXECUTE format('GRANT SELECT, INSERT ON %I TO app_rw', t);
+  END LOOP;
+END $$;
+GRANT UPDATE (period_from,period_to,amount,updated_at) ON workspace_budget_plans TO app_rw;
+GRANT UPDATE (fingerprint,period_from,period_to,cohort_complete,imported_ids,imported_at)
+  ON workspace_lead_imports TO app_rw;
+GRANT UPDATE (updated_on,status,amount,refund_amount) ON workspace_leads TO app_rw;
+CREATE FUNCTION workspace_lead_account_fit() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM direct_accounts a JOIN direct_connections c ON c.id=a.direct_connection_id
+                 WHERE a.id=NEW.direct_account_id AND c.workspace_id=NEW.workspace_id) THEN
+    RAISE EXCEPTION 'lead account outside workspace' USING ERRCODE='integrity_constraint_violation';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER workspace_lead_account_fit BEFORE INSERT OR UPDATE ON workspace_leads
+  FOR EACH ROW EXECUTE FUNCTION workspace_lead_account_fit();
+
+-- Global authentication identities; workspace RLS is not an identity boundary.
+CREATE TABLE email_credentials (
+ user_id bigint PRIMARY KEY REFERENCES users ON DELETE CASCADE,
+ email text NOT NULL UNIQUE CHECK(length(email)<=254 AND email=lower(email)),
+ password_hash text NOT NULL CHECK(length(password_hash)<=256),
+ verified_at timestamptz NOT NULL DEFAULT now(),
+ password_changed_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE email_pending_signups (
+ email text PRIMARY KEY CHECK(length(email)<=254 AND email=lower(email)),
+ password_hash text NOT NULL CHECK(length(password_hash)<=256),
+ token_hash bytea NOT NULL UNIQUE CHECK(length(token_hash)=32),
+ expires_at timestamptz NOT NULL,
+ accepted jsonb NOT NULL,
+ hashes jsonb NOT NULL,
+ locale text NOT NULL,
+ accepted_at timestamptz NOT NULL DEFAULT now(),
+ ip text,
+ user_agent text
+);
+CREATE TABLE email_reset_tokens (
+ token_hash bytea PRIMARY KEY CHECK(length(token_hash)=32),
+ user_id bigint NOT NULL REFERENCES users ON DELETE CASCADE,
+ expires_at timestamptz NOT NULL
+);
+CREATE TABLE email_auth_attempts (
+ operation text NOT NULL CHECK(operation IN ('login','send','confirm')),
+ email_key bytea NOT NULL CHECK(length(email_key)=32),
+ ip_key bytea NOT NULL CHECK(length(ip_key)=32),
+ occurred_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX email_auth_attempts_at ON email_auth_attempts(occurred_at);
+CREATE INDEX email_auth_attempts_email ON email_auth_attempts(email_key,operation,occurred_at);
+CREATE INDEX email_auth_attempts_ip ON email_auth_attempts(ip_key,occurred_at);
+REVOKE ALL ON email_credentials,email_pending_signups,email_reset_tokens,email_auth_attempts FROM PUBLIC,app_rw,app_system;
+
+CREATE FUNCTION email_auth_attempt(op text, ek bytea, ik bytea) RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE n integer; BEGIN
+ IF op NOT IN ('login','send','confirm') OR length(ek)<>32 OR length(ik)<>32 THEN RETURN false; END IF;
+ PERFORM pg_advisory_xact_lock(70192387001);
+ DELETE FROM email_auth_attempts WHERE occurred_at<now()-interval '1 day';
+ SELECT count(*) INTO n FROM email_auth_attempts WHERE occurred_at>now()-interval '1 hour';
+ IF n>=1000 THEN RETURN false; END IF;
+ SELECT count(*) INTO n FROM email_auth_attempts WHERE ip_key=ik AND occurred_at>now()-interval '15 minutes';
+ IF n>=100 THEN RETURN false; END IF;
+ SELECT count(*) INTO n FROM email_auth_attempts WHERE email_key=ek AND operation=op
+  AND occurred_at>now()-CASE WHEN op='send' THEN interval '1 hour' ELSE interval '15 minutes' END;
+ IF n>=(CASE WHEN op='send' THEN 5 WHEN op='confirm' THEN 20 ELSE 10 END) THEN RETURN false; END IF;
+ INSERT INTO email_auth_attempts(operation,email_key,ip_key) VALUES(op,ek,ik);
+ RETURN true;
+END $$;
+
+CREATE FUNCTION email_auth_credential(address text)
+RETURNS TABLE(user_id bigint,password_hash text,status text)
+LANGUAGE sql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+ SELECT c.user_id,c.password_hash,u.status FROM email_credentials c JOIN users u ON u.id=c.user_id WHERE c.email=address
+$$;
+
+CREATE FUNCTION email_auth_signup(address text, pwd text, tok bytea, versions jsonb, digests jsonb, language text, client_ip text, agent text)
+RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN
+ PERFORM pg_advisory_xact_lock(hashtextextended('email:'||address,0));
+ IF EXISTS(SELECT 1 FROM email_credentials WHERE email=address) THEN RETURN false; END IF;
+ INSERT INTO email_pending_signups(email,password_hash,token_hash,expires_at,accepted,hashes,locale,ip,user_agent)
+ VALUES(address,pwd,tok,now()+interval '30 minutes',versions,digests,language,client_ip,agent)
+ ON CONFLICT(email) DO UPDATE SET password_hash=EXCLUDED.password_hash,token_hash=EXCLUDED.token_hash,
+ expires_at=EXCLUDED.expires_at,accepted=EXCLUDED.accepted,hashes=EXCLUDED.hashes,locale=EXCLUDED.locale,
+ accepted_at=now(),ip=EXCLUDED.ip,user_agent=EXCLUDED.user_agent;
+ RETURN true;
+END $$;
+
+CREATE FUNCTION email_auth_pending(tok bytea)
+RETURNS TABLE(email text,password_hash text,accepted jsonb,hashes jsonb,locale text,accepted_at timestamptz,ip text,user_agent text)
+LANGUAGE sql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+ SELECT p.email,p.password_hash,p.accepted,p.hashes,p.locale,p.accepted_at,p.ip,p.user_agent
+ FROM email_pending_signups p WHERE p.token_hash=tok AND p.expires_at>now()
+$$;
+
+CREATE FUNCTION email_auth_finish(tok bytea, expected_pwd text) RETURNS bigint
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE p email_pending_signups%ROWTYPE; uid bigint; address text; BEGIN
+ SELECT email INTO address FROM email_pending_signups WHERE token_hash=tok;
+ IF address IS NULL THEN RETURN NULL; END IF;
+ PERFORM pg_advisory_xact_lock(hashtextextended('email:'||address,0));
+ SELECT * INTO p FROM email_pending_signups WHERE token_hash=tok AND expires_at>now() FOR UPDATE;
+ IF NOT FOUND OR p.password_hash<>expected_pwd THEN RETURN NULL; END IF;
+ IF EXISTS(SELECT 1 FROM email_credentials WHERE email=p.email) THEN RETURN NULL; END IF;
+ INSERT INTO users(email) VALUES(p.email) RETURNING id INTO uid;
+ INSERT INTO email_credentials(user_id,email,password_hash) VALUES(uid,p.email,p.password_hash);
+ DELETE FROM email_pending_signups WHERE email=p.email;
+ RETURN uid;
+END $$;
+
+CREATE FUNCTION email_auth_login(address text,expected_pwd text,session_token bytea) RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE uid bigint; BEGIN
+ SELECT c.user_id INTO uid FROM email_credentials c JOIN users u ON u.id=c.user_id
+  WHERE c.email=address AND c.password_hash=expected_pwd AND u.status='active' FOR UPDATE OF c,u;
+ IF uid IS NULL THEN RETURN false; END IF;
+ INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(session_token,uid,now()+interval '30 days');
+ RETURN true;
+END $$;
+
+CREATE FUNCTION email_auth_reset_request(address text,tok bytea) RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE uid bigint; BEGIN
+ PERFORM pg_advisory_xact_lock(hashtextextended('email:'||address,0));
+ SELECT c.user_id INTO uid FROM email_credentials c JOIN users u ON u.id=c.user_id WHERE c.email=address AND u.status='active';
+ IF uid IS NULL THEN RETURN false; END IF;
+ DELETE FROM email_reset_tokens WHERE user_id=uid;
+ INSERT INTO email_reset_tokens(token_hash,user_id,expires_at) VALUES(tok,uid,now()+interval '15 minutes');
+ RETURN true;
+END $$;
+
+CREATE FUNCTION email_auth_reset_finish(tok bytea,pwd text) RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE uid bigint; BEGIN
+ SELECT t.user_id INTO uid FROM email_reset_tokens t JOIN users u ON u.id=t.user_id
+  WHERE t.token_hash=tok AND t.expires_at>now() AND u.status='active' FOR UPDATE OF t;
+ IF uid IS NULL THEN RETURN false; END IF;
+ PERFORM 1 FROM email_credentials WHERE user_id=uid FOR UPDATE;
+ DELETE FROM email_reset_tokens WHERE user_id=uid;
+ UPDATE email_credentials SET password_hash=pwd,password_changed_at=now() WHERE user_id=uid;
+ DELETE FROM sessions WHERE user_id=uid;
+ RETURN true;
+END $$;
+
+DO $$ DECLARE f regprocedure; BEGIN
+ FOR f IN SELECT oid::regprocedure FROM pg_proc WHERE pronamespace='public'::regnamespace AND proname LIKE 'email_auth_%' LOOP
+  EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC',f);
+  EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO app_rw',f);
+ END LOOP;
+END $$;
+
+ALTER FUNCTION purge_personal_data(timestamptz) RENAME TO purge_personal_data_before_email;
+REVOKE ALL ON FUNCTION purge_personal_data_before_email(timestamptz) FROM PUBLIC,app_rw,app_system,app_deleter;
+CREATE FUNCTION purge_personal_data(cutoff timestamptz) RETURNS integer
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE old_n integer; n integer; total integer:=0; BEGIN
+ DELETE FROM email_reset_tokens WHERE expires_at<cutoff OR user_id IN
+  (SELECT id FROM users WHERE status='deactivated' AND deactivated_at<cutoff);
+ GET DIAGNOSTICS n=ROW_COUNT; total:=total+n;
+ DELETE FROM email_credentials WHERE user_id IN(SELECT id FROM users WHERE status='deactivated' AND deactivated_at<cutoff);
+ GET DIAGNOSTICS n=ROW_COUNT; total:=total+n;
+ DELETE FROM email_pending_signups WHERE expires_at<cutoff;
+ GET DIAGNOSTICS n=ROW_COUNT; total:=total+n;
+ DELETE FROM email_auth_attempts WHERE occurred_at<cutoff;
+ GET DIAGNOSTICS n=ROW_COUNT; total:=total+n;
+ old_n:=purge_personal_data_before_email(cutoff);
+ IF total>0 THEN
+  INSERT INTO deletion_requests(requested_by,scope,status,started_at,completed_at,verification,deleted_by)
+  VALUES('system:retention','personal_data_expired','completed',now(),now(),jsonb_build_object('email_auth_records',total,'cutoff',cutoff),'purge_personal_data');
+ END IF;
+ RETURN old_n+total;
+END $$;
+REVOKE ALL ON FUNCTION purge_personal_data(timestamptz) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION purge_personal_data(timestamptz) TO app_deleter;
+
+-- Durable pilot queue; old runs are not replayed by the new runner.
+ALTER TABLE sync_runs ADD COLUMN available_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE sync_runs ADD COLUMN period_to date;
+ALTER TABLE sync_runs ADD COLUMN runner_managed boolean NOT NULL DEFAULT false;
+CREATE INDEX sync_runs_runner_ready ON sync_runs(available_at,id)
+  WHERE runner_managed AND status IN ('queued','running','waiting_report');
+
+-- Additive import-only analysis; legacy snapshots, Value and recommendation events stay unchanged.
+CREATE TABLE intelligence_profiles (
+  workspace_id bigint NOT NULL REFERENCES workspaces ON DELETE CASCADE,
+  revision integer NOT NULL CHECK (revision > 0),
+  payload jsonb NOT NULL CHECK (jsonb_typeof(payload) = 'object'),
+  created_by bigint NOT NULL REFERENCES users,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (workspace_id, revision)
+);
+CREATE TABLE intelligence_imports (
+  id uuid PRIMARY KEY,
+  workspace_id bigint NOT NULL REFERENCES workspaces ON DELETE CASCADE,
+  fingerprint text NOT NULL CHECK (fingerprint ~ '^[0-9a-f]{64}$'),
+  data_mode text NOT NULL CHECK (data_mode IN ('synthetic','imported')),
+  payload jsonb NOT NULL CHECK (jsonb_typeof(payload) = 'object'),
+  created_by bigint NOT NULL REFERENCES users,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (workspace_id, fingerprint),
+  UNIQUE (workspace_id, id)
+);
+CREATE TABLE intelligence_runs (
+  id uuid PRIMARY KEY,
+  workspace_id bigint NOT NULL REFERENCES workspaces ON DELETE CASCADE,
+  import_id uuid NOT NULL,
+  before_import_id uuid,
+  profile_revision integer NOT NULL,
+  idempotency_key uuid NOT NULL,
+  request_hash text NOT NULL CHECK (request_hash ~ '^[0-9a-f]{64}$'),
+  payload jsonb NOT NULL CHECK (jsonb_typeof(payload) = 'object'),
+  created_by bigint NOT NULL REFERENCES users,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (workspace_id, idempotency_key),
+  UNIQUE (workspace_id, id),
+  FOREIGN KEY (workspace_id, import_id) REFERENCES intelligence_imports(workspace_id,id),
+  FOREIGN KEY (workspace_id, before_import_id) REFERENCES intelligence_imports(workspace_id,id),
+  FOREIGN KEY (workspace_id, profile_revision) REFERENCES intelligence_profiles(workspace_id,revision)
+);
+CREATE TABLE intelligence_decisions (
+  workspace_id bigint NOT NULL REFERENCES workspaces ON DELETE CASCADE,
+  run_id uuid NOT NULL,
+  recommendation_id text NOT NULL CHECK (length(recommendation_id) BETWEEN 1 AND 100),
+  revision integer NOT NULL CHECK (revision = 1),
+  state_version integer NOT NULL CHECK (state_version > 0),
+  status text NOT NULL CHECK (status IN ('approved','postponed','rejected','cancelled')),
+  reason text NOT NULL CHECK (length(reason) BETWEEN 1 AND 500),
+  actor_id bigint NOT NULL REFERENCES users,
+  idempotency_key uuid NOT NULL,
+  request_hash text NOT NULL CHECK (request_hash ~ '^[0-9a-f]{64}$'),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (workspace_id, run_id, recommendation_id, state_version),
+  UNIQUE (workspace_id, idempotency_key),
+  FOREIGN KEY (workspace_id, run_id) REFERENCES intelligence_runs(workspace_id,id)
+);
+DO $$ DECLARE t text; BEGIN
+  FOREACH t IN ARRAY ARRAY['intelligence_profiles','intelligence_imports','intelligence_runs','intelligence_decisions'] LOOP
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('CREATE POLICY tenant ON %I TO app_rw USING (workspace_id = app_workspace_id())', t);
+    EXECUTE format('CREATE POLICY system ON %I TO app_system USING (true) WITH CHECK (true)', t);
+    EXECUTE format('GRANT SELECT, INSERT ON %I TO app_rw', t);
+  END LOOP;
+END $$;
+
+-- Independent read-only verification. No recommendation event types or advertising writes.
+CREATE TABLE recommendation_verification_jobs (
+ id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+ workspace_id bigint NOT NULL REFERENCES workspaces,
+ recommendation_id bigint NOT NULL REFERENCES recommendations,
+ finding_id bigint NOT NULL REFERENCES findings,
+ done_event_id bigint NOT NULL UNIQUE REFERENCES recommendation_events,
+ requested_by bigint NOT NULL REFERENCES users,
+ idempotency_key uuid NOT NULL,
+ request_sha256 text NOT NULL CHECK(request_sha256 ~ '^[0-9a-f]{64}$'),
+ method text NOT NULL CHECK(method = 'excluded_sites_membership@1'),
+ created_at timestamptz NOT NULL DEFAULT now(),
+ available_at timestamptz NOT NULL DEFAULT now(),
+ attempts integer NOT NULL DEFAULT 0 CHECK(attempts BETWEEN 0 AND 5),
+ finished_at timestamptz,
+ last_error text,
+ UNIQUE(workspace_id,idempotency_key),
+ UNIQUE(id,workspace_id)
+);
+CREATE INDEX recommendation_verification_due ON recommendation_verification_jobs(available_at,id) WHERE finished_at IS NULL;
+CREATE FUNCTION check_verification_job() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='UPDATE' AND (NEW.id,NEW.workspace_id,NEW.recommendation_id,NEW.finding_id,NEW.done_event_id,
+    NEW.requested_by,NEW.idempotency_key,NEW.request_sha256,NEW.method,NEW.created_at)
+    IS DISTINCT FROM (OLD.id,OLD.workspace_id,OLD.recommendation_id,OLD.finding_id,OLD.done_event_id,
+    OLD.requested_by,OLD.idempotency_key,OLD.request_sha256,OLD.method,OLD.created_at) THEN
+    RAISE EXCEPTION 'verification identity is immutable' USING ERRCODE='integrity_constraint_violation';
+ END IF;
+ IF NOT EXISTS(SELECT 1 FROM recommendation_events e JOIN issues i ON i.id=e.issue_id
+    WHERE e.id=NEW.done_event_id AND e.type='done' AND e.recommendation_id=NEW.recommendation_id
+    AND e.finding_id=NEW.finding_id AND i.workspace_id=NEW.workspace_id) THEN
+    RAISE EXCEPTION 'verification must reference the exact manual done finding' USING ERRCODE='integrity_constraint_violation';
+ END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER recommendation_verification_identity BEFORE INSERT OR UPDATE ON recommendation_verification_jobs
+ FOR EACH ROW EXECUTE FUNCTION check_verification_job();
+CREATE TABLE recommendation_verification_reads (
+ id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+ job_id bigint NOT NULL,
+ workspace_id bigint NOT NULL REFERENCES workspaces,
+ release_id bigint NOT NULL REFERENCES releases,
+ attempt integer NOT NULL CHECK(attempt BETWEEN 1 AND 5),
+ read_at timestamptz NOT NULL,
+ status text NOT NULL CHECK(status IN ('confirmed','not_confirmed','unknown','unavailable')),
+ reason text NOT NULL,
+ params_hash text CHECK(params_hash ~ '^[0-9a-f]{64}$'),
+ target_count integer NOT NULL CHECK(target_count>=0),
+ matched_count integer NOT NULL CHECK(matched_count>=0 AND matched_count<=target_count),
+ masked_count integer NOT NULL CHECK(masked_count>=0),
+ FOREIGN KEY(job_id,workspace_id) REFERENCES recommendation_verification_jobs(id,workspace_id),
+ UNIQUE(job_id,attempt),
+ CHECK(status<>'confirmed' OR (target_count>0 AND matched_count=target_count AND params_hash IS NOT NULL)),
+ CHECK(status<>'not_confirmed' OR (target_count>matched_count AND masked_count=0 AND params_hash IS NOT NULL)),
+ CHECK(status<>'unknown' OR (target_count>matched_count AND masked_count>0 AND params_hash IS NOT NULL))
+);
+CREATE TRIGGER recommendation_verification_reads_append_only BEFORE UPDATE OR DELETE ON recommendation_verification_reads
+ FOR EACH ROW EXECUTE FUNCTION forbid_mutation();
+ALTER TABLE recommendation_verification_jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE recommendation_verification_reads ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant ON recommendation_verification_jobs TO app_rw USING(workspace_id=app_workspace_id());
+CREATE POLICY system ON recommendation_verification_jobs TO app_system USING(true) WITH CHECK(true);
+CREATE POLICY tenant ON recommendation_verification_reads TO app_rw USING(workspace_id=app_workspace_id());
+CREATE POLICY system ON recommendation_verification_reads TO app_system USING(true) WITH CHECK(true);
+REVOKE ALL ON recommendation_verification_jobs,recommendation_verification_reads FROM PUBLIC;
+GRANT SELECT,INSERT ON recommendation_verification_jobs TO app_rw;
+GRANT SELECT ON recommendation_verification_reads TO app_rw;
+REVOKE INSERT ON recommendation_verification_reads FROM app_rw;
+GRANT INSERT ON recommendation_verification_reads TO app_token;
+GRANT UPDATE(available_at,attempts,finished_at,last_error) ON recommendation_verification_jobs TO app_token,app_system;
+GRANT USAGE ON SEQUENCE recommendation_verification_jobs_id_seq,recommendation_verification_reads_id_seq TO app_rw;
+REVOKE ALL ON FUNCTION check_verification_job() FROM PUBLIC;
+
+-- Apply as migration 0012 and append verbatim to the full schema.
+CREATE TABLE billing_orders (
+  id uuid PRIMARY KEY,
+  workspace_id bigint REFERENCES workspaces ON DELETE SET NULL,
+  actor_id bigint REFERENCES users ON DELETE SET NULL,
+  subscription_id bigint REFERENCES subscriptions ON DELETE SET NULL,
+  sku text NOT NULL CHECK (sku IN ('control','business','agency')),
+  plan text NOT NULL CHECK (plan IN ('start','business','business_plus')),
+  amount_minor bigint NOT NULL CHECK (amount_minor > 0),
+  currency text NOT NULL DEFAULT 'RUB' CHECK (currency = 'RUB'),
+  terms_sha256 text NOT NULL CHECK (terms_sha256 ~ '^[a-f0-9]{64}$'),
+  provider_payment_id text UNIQUE,
+  provider_status text CHECK (provider_status IN ('pending','waiting_for_capture','succeeded','canceled')),
+  verified_at timestamptz,
+  provider_body jsonb NOT NULL,
+  test boolean NOT NULL,
+  shop_id text NOT NULL CHECK (shop_id ~ '^[0-9]+$'),
+  status text NOT NULL DEFAULT 'creating' CHECK (status IN ('creating','pending','succeeded','canceled','review_required')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  fulfilled_at timestamptz,
+  refunded_minor bigint NOT NULL DEFAULT 0 CHECK (refunded_minor BETWEEN 0 AND amount_minor),
+  CHECK (fulfilled_at IS NULL OR provider_payment_id IS NOT NULL)
+);
+CREATE UNIQUE INDEX billing_orders_one_pending ON billing_orders(workspace_id)
+  WHERE status IN ('creating','pending','review_required');
+ALTER TABLE billing_orders ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant ON billing_orders TO app_rw
+  USING (workspace_id = app_workspace_id()) WITH CHECK (workspace_id = app_workspace_id());
+CREATE POLICY system ON billing_orders TO app_system USING (true) WITH CHECK (true);
+REVOKE ALL ON billing_orders FROM PUBLIC;
+GRANT SELECT, INSERT, UPDATE ON billing_orders TO app_rw;
+
+CREATE FUNCTION billing_order_anonymize() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF (NEW.id,NEW.sku,NEW.plan,NEW.amount_minor,NEW.currency,NEW.terms_sha256,NEW.created_at,NEW.test,NEW.shop_id)
+     IS DISTINCT FROM
+     (OLD.id,OLD.sku,OLD.plan,OLD.amount_minor,OLD.currency,OLD.terms_sha256,OLD.created_at,OLD.test,OLD.shop_id)
+     OR (NEW.workspace_id IS DISTINCT FROM OLD.workspace_id AND NEW.workspace_id IS NOT NULL)
+     OR (OLD.provider_payment_id IS NOT NULL AND NEW.provider_payment_id IS DISTINCT FROM OLD.provider_payment_id)
+     OR (NEW.provider_body IS DISTINCT FROM OLD.provider_body AND NEW.provider_body <> '{}'::jsonb)
+     OR (OLD.fulfilled_at IS NOT NULL AND NEW.fulfilled_at IS DISTINCT FROM OLD.fulfilled_at)
+     OR NEW.refunded_minor < OLD.refunded_minor THEN
+    RAISE EXCEPTION 'billing order evidence is immutable' USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  IF NEW.workspace_id IS NULL OR NEW.actor_id IS NULL THEN
+    NEW.provider_body := '{}';
+    IF NEW.status IN ('creating','pending') THEN
+      NEW.status := 'review_required';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER billing_order_anonymize BEFORE UPDATE ON billing_orders
+  FOR EACH ROW EXECUTE FUNCTION billing_order_anonymize();
+
+-- Request email is needed only within the provider's safe creation replay window.
+CREATE FUNCTION purge_billing_request_snapshots(cutoff timestamptz, batch_size integer) RETURNS integer
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE n integer;
+BEGIN
+  IF cutoff IS NULL OR cutoff > statement_timestamp()-interval '24 hours'
+     OR batch_size IS NULL OR batch_size NOT BETWEEN 1 AND 10000 THEN
+    RAISE EXCEPTION 'invalid billing retention boundary';
+  END IF;
+  WITH expired AS (
+    SELECT id FROM billing_orders WHERE created_at < cutoff AND provider_body <> '{}'::jsonb
+    ORDER BY created_at,id LIMIT batch_size FOR UPDATE SKIP LOCKED
+  )
+  UPDATE billing_orders o SET provider_body='{}',
+    status=CASE WHEN o.status='creating' THEN 'review_required' ELSE o.status END
+    FROM expired WHERE o.id=expired.id;
+  GET DIAGNOSTICS n=ROW_COUNT;
+  IF n>0 THEN
+    INSERT INTO deletion_requests(requested_by,scope,status,started_at,completed_at,verification,deleted_by)
+    VALUES('system:retention','personal_data_expired','completed',now(),now(),
+      jsonb_build_object('billing_request_snapshots',n,'cutoff',cutoff),'purge_billing_request_snapshots');
+  END IF;
+  RETURN n;
+END $$;
+REVOKE ALL ON FUNCTION purge_billing_request_snapshots(timestamptz,integer) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION purge_billing_request_snapshots(timestamptz,integer) TO app_deleter;
+
+-- Authentication mail is global private data; delivery is separate from HTTP requests.
+CREATE TABLE email_reset_mail (
+ id uuid PRIMARY KEY,
+ recipient text NOT NULL CHECK(length(recipient)<=254 AND recipient=lower(recipient)),
+ purpose text NOT NULL DEFAULT 'reset' CHECK(purpose IN ('reset','verify')),
+ created_at timestamptz NOT NULL DEFAULT now(),
+ expires_at timestamptz NOT NULL DEFAULT now()+interval '15 minutes',
+ available_at timestamptz NOT NULL DEFAULT now(),
+ locked_until timestamptz,
+ lease_token uuid,
+ attempts integer NOT NULL DEFAULT 0 CHECK(attempts>=0),
+ prepared boolean NOT NULL DEFAULT false
+);
+CREATE INDEX email_reset_mail_due ON email_reset_mail(available_at,created_at);
+REVOKE ALL ON email_reset_mail FROM PUBLIC,app_rw,app_system,app_token,app_deleter;
+
+CREATE FUNCTION enqueue_email_reset_mail(job uuid,address text) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN
+ PERFORM pg_advisory_xact_lock(hashtextextended('reset-mail:'||address,0));
+ DELETE FROM email_reset_mail WHERE recipient=address AND purpose='reset';
+ INSERT INTO email_reset_mail(id,recipient) VALUES(job,address);
+END $$;
+REVOKE ALL ON FUNCTION enqueue_email_reset_mail(uuid,text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION enqueue_email_reset_mail(uuid,text) TO app_rw;
+
+CREATE FUNCTION enqueue_email_verify_mail(job uuid,address text,token_digest bytea) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN
+ PERFORM pg_advisory_xact_lock(hashtextextended('verify-mail:'||address,0));
+ DELETE FROM email_reset_mail WHERE recipient=address AND purpose='verify';
+ INSERT INTO email_reset_mail(id,recipient,purpose,expires_at)
+ SELECT job,address,'verify',p.expires_at FROM email_pending_signups p
+ WHERE p.email=address AND p.token_hash=token_digest AND p.expires_at>now();
+ IF NOT FOUND THEN RAISE EXCEPTION 'Pending signup unavailable'; END IF;
+END $$;
+REVOKE ALL ON FUNCTION enqueue_email_verify_mail(uuid,text,bytea) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION enqueue_email_verify_mail(uuid,text,bytea) TO app_rw;
+
+CREATE FUNCTION purge_email_reset_mail(expired_before timestamptz) RETURNS integer
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE n integer; BEGIN
+ DELETE FROM email_reset_mail WHERE expires_at<=expired_before;
+ GET DIAGNOSTICS n=ROW_COUNT;
+ IF n>0 THEN
+  INSERT INTO deletion_requests(requested_by,scope,status,started_at,completed_at,verification,deleted_by)
+  VALUES('system:retention','personal_data_expired','completed',now(),now(),
+   jsonb_build_object('email_reset_mail',n,'cutoff',expired_before),'purge_email_reset_mail');
+ END IF;
+ RETURN n;
+END $$;
+REVOKE ALL ON FUNCTION purge_email_reset_mail(timestamptz) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION purge_email_reset_mail(timestamptz) TO app_deleter;
+
+CREATE FUNCTION claim_email_reset_mail() RETURNS TABLE(job_id uuid,lease uuid,mail_purpose text)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE selected uuid; BEGIN
+ PERFORM purge_email_reset_mail(now());
+ SELECT q.id INTO selected FROM email_reset_mail q
+ WHERE q.available_at<=now() AND q.expires_at>now()
+  AND (q.locked_until IS NULL OR q.locked_until<=now())
+ ORDER BY q.created_at,q.id LIMIT 1 FOR UPDATE SKIP LOCKED;
+ IF selected IS NULL THEN RETURN; END IF;
+ RETURN QUERY UPDATE email_reset_mail q SET locked_until=now()+interval '1 minute',
+  lease_token=gen_random_uuid(),attempts=q.attempts+1
+ WHERE q.id=selected RETURNING q.id,q.lease_token,q.purpose;
+END $$;
+REVOKE ALL ON FUNCTION claim_email_reset_mail() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION claim_email_reset_mail() TO app_system;
+
+CREATE FUNCTION prepare_email_reset_mail(job uuid,lease uuid,token_digest bytea)
+RETURNS TABLE(address text,should_send boolean)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE q email_reset_mail%ROWTYPE; required boolean; BEGIN
+ IF length(token_digest)<>32 THEN RAISE EXCEPTION 'Invalid token digest'; END IF;
+ SELECT * INTO q FROM email_reset_mail m WHERE m.id=job AND m.lease_token=lease
+  AND m.locked_until>now() AND m.expires_at>now() FOR UPDATE;
+ IF NOT FOUND THEN RETURN; END IF;
+ IF q.purpose='verify' THEN
+  SELECT EXISTS(SELECT 1 FROM email_pending_signups p WHERE p.email=q.recipient
+   AND p.token_hash=token_digest AND p.expires_at>now()) INTO required;
+  UPDATE email_reset_mail SET prepared=true WHERE id=job;
+ ELSIF NOT q.prepared THEN
+  required:=email_auth_reset_request(q.recipient,token_digest);
+  IF required THEN
+   UPDATE email_reset_tokens SET expires_at=least(expires_at,q.expires_at) WHERE token_hash=token_digest;
+  END IF;
+  UPDATE email_reset_mail SET prepared=true WHERE id=job;
+ ELSE
+  SELECT EXISTS(SELECT 1 FROM email_reset_tokens t JOIN email_credentials c ON c.user_id=t.user_id
+   JOIN users u ON u.id=t.user_id WHERE t.token_hash=token_digest AND t.expires_at>now()
+   AND c.email=q.recipient AND u.status='active') INTO required;
+ END IF;
+ RETURN QUERY SELECT q.recipient,required;
+END $$;
+REVOKE ALL ON FUNCTION prepare_email_reset_mail(uuid,uuid,bytea) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION prepare_email_reset_mail(uuid,uuid,bytea) TO app_system;
+
+CREATE FUNCTION finish_email_reset_mail(job uuid,lease uuid,succeeded boolean) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN
+ IF succeeded THEN
+  DELETE FROM email_reset_mail WHERE id=job AND lease_token=lease;
+ ELSE
+  UPDATE email_reset_mail SET locked_until=NULL,lease_token=NULL,
+   available_at=now()+least(60,power(2,least(attempts,6))) * interval '1 second'
+  WHERE id=job AND lease_token=lease;
+ END IF;
+END $$;
+REVOKE ALL ON FUNCTION finish_email_reset_mail(uuid,uuid,boolean) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION finish_email_reset_mail(uuid,uuid,boolean) TO app_system;
+
+-- pg_restore clears the caller search_path while loading populated CHECK constraints.
+ALTER FUNCTION value_is_valid_raw(jsonb) SET search_path=pg_catalog,public,pg_temp;
+ALTER FUNCTION value_is_valid(jsonb) SET search_path=pg_catalog,public,pg_temp;
+ALTER FUNCTION evidence_is_valid(jsonb) SET search_path=pg_catalog,public,pg_temp;
+ALTER FUNCTION values_are_valid(jsonb) SET search_path=pg_catalog,public,pg_temp;
+
+-- NULL + configured means an explicit choice to use Direct without a Metrika counter.
+-- Existing accounts must reconnect; historical scheduled rows cannot prove the intended binding.
+ALTER TABLE direct_accounts ADD COLUMN metrika_counter_id bigint REFERENCES metrika_counters
+  DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE direct_accounts ADD COLUMN metrika_configured boolean NOT NULL DEFAULT false;
+ALTER TABLE direct_accounts ADD CONSTRAINT direct_accounts_metrika_binding_check
+  CHECK (metrika_configured OR metrika_counter_id IS NULL);
+
+CREATE OR REPLACE FUNCTION check_same_workspace() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE ok boolean := true;
+BEGIN
+  IF TG_TABLE_NAME = 'sync_runs' THEN
+    ok := EXISTS (SELECT 1 FROM direct_accounts a JOIN direct_connections c ON c.id = a.direct_connection_id
+                  WHERE a.id = NEW.direct_account_id AND c.workspace_id = NEW.workspace_id)
+      AND (NEW.metrika_counter_id IS NULL OR EXISTS (
+            SELECT 1 FROM metrika_counters mc JOIN metrika_connections m ON m.id = mc.metrika_connection_id
+            WHERE mc.id = NEW.metrika_counter_id AND m.workspace_id = NEW.workspace_id));
+  ELSIF TG_TABLE_NAME = 'direct_accounts' THEN
+    ok := NEW.metrika_counter_id IS NULL OR EXISTS (
+      SELECT 1 FROM direct_connections d JOIN metrika_counters mc ON mc.id=NEW.metrika_counter_id
+      JOIN metrika_connections m ON m.id=mc.metrika_connection_id
+      WHERE d.id=NEW.direct_connection_id AND d.workspace_id=m.workspace_id);
+  ELSIF TG_TABLE_NAME = 'issues' THEN
+    ok := EXISTS (SELECT 1 FROM direct_accounts a JOIN direct_connections c ON c.id = a.direct_connection_id
+                  WHERE a.id = NEW.direct_account_id AND c.workspace_id = NEW.workspace_id);
+  ELSIF TG_TABLE_NAME IN ('digests', 'notifications') THEN
+    ok := NEW.snapshot_id IS NULL
+          OR EXISTS (SELECT 1 FROM snapshots s WHERE s.id = NEW.snapshot_id AND s.workspace_id = NEW.workspace_id);
+  ELSIF TG_TABLE_NAME = 'recommendation_results' THEN
+    ok := NEW.snapshot_id IS NULL OR EXISTS (SELECT 1 FROM snapshots s JOIN issues i ON i.id = NEW.issue_id
+                  WHERE s.id = NEW.snapshot_id AND s.workspace_id = i.workspace_id);
+  END IF;
+  IF NOT ok THEN
+    RAISE EXCEPTION '%: reference to another workspace', TG_TABLE_NAME USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  RETURN NEW;
+END
+$$;
+CREATE TRIGGER direct_accounts_same_workspace BEFORE INSERT OR UPDATE ON direct_accounts
+  FOR EACH ROW EXECUTE FUNCTION check_same_workspace();
+
+
+CREATE TABLE registration_trials (
+  user_id bigint PRIMARY KEY REFERENCES users ON DELETE CASCADE,
+  workspace_id bigint UNIQUE REFERENCES workspaces ON DELETE SET NULL,
+  started_at timestamptz NOT NULL,
+  ends_at timestamptz NOT NULL,
+  CHECK (ends_at-started_at=interval '168 hours')
+);
+REVOKE ALL ON registration_trials FROM PUBLIC,app_rw,app_token,app_system,app_deleter;
+
+CREATE FUNCTION start_registration_trial(usr bigint,ws bigint) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN
+  IF workspace_role(usr,ws) IS DISTINCT FROM 'owner' THEN
+    RAISE EXCEPTION 'trial requires the workspace owner' USING ERRCODE='insufficient_privilege';
+  END IF;
+  INSERT INTO registration_trials(user_id,workspace_id,started_at,ends_at)
+  VALUES(usr,ws,now(),now()+interval '168 hours') ON CONFLICT(user_id) DO NOTHING;
+END $$;
+REVOKE ALL ON FUNCTION start_registration_trial(bigint,bigint) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION start_registration_trial(bigint,bigint) TO app_rw;
+
+CREATE FUNCTION workspace_trial(ws bigint) RETURNS TABLE(started_at timestamptz,ends_at timestamptz)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN
+  IF session_user NOT IN ('app_system','app_migrator') AND app_workspace_id() IS DISTINCT FROM ws THEN
+    RAISE EXCEPTION 'trial requires workspace context' USING ERRCODE='insufficient_privilege';
+  END IF;
+  PERFORM require_workspace_context(ws);
+  RETURN QUERY SELECT t.started_at,t.ends_at FROM registration_trials t WHERE t.workspace_id=ws;
+END $$;
+REVOKE ALL ON FUNCTION workspace_trial(bigint) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION workspace_trial(bigint) TO app_rw;

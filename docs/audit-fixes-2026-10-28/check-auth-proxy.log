@@ -1,0 +1,1 @@
+PASS: auth proxy origin, path, method, configuration, callback, cookie, redirect and no-cache; exact legal bytes/hash/version/locale and bounded fail-closed fetching.

@@ -268,3 +268,17 @@ def test_measurement_runs_under_worker_role_only_in_own_workspace(db, rw, ws):
         assert isinstance(out, Measured)
         assert one(worker, "SELECT count(*) FROM recommendation_results") == 0
     assert one(rw, "SELECT count(*) FROM recommendation_results WHERE id = %s", out.result_id) == 1
+
+
+def test_runner_processes_due_measurement_under_worker_role(db,rw,ws,monkeypatch):
+    from app.worker import runner
+    rec,finding=audited(rw,ws)
+    m=done(rw,ws,rec,finding)
+    measurement_snapshot(rw,ws,m)
+    monkeypatch.setattr(runner,'due_measurements',lambda queue,today:[m['id']])
+    monkeypatch.setattr(runner,'schedule_syncs',lambda *args:None)
+    monkeypatch.setattr(runner,'process',lambda *args,**kwargs:None)
+    with db('app_system') as queue,db('app_token') as worker:
+        runner.tick(queue,worker,provider=None,keys=None,release_id=ws['release'],http=None,now=after_window(m))
+    assert one(rw,'SELECT verdict FROM recommendation_results WHERE measurement_id=%s',m['id'])=='effect'
+    assert one(rw,'SELECT count(*) FROM recommendation_results WHERE measurement_id=%s',m['id'])==1

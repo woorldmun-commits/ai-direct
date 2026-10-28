@@ -61,6 +61,8 @@ def _reference(rule: Rule, snap: SnapshotView, settings: AuditSettings, days, ev
     # Директ не отдаёт, и кампания на паузе в начале окна иначе выглядела бы новой.
     if snap.period_from > baseline.date_from or account_history_from > baseline.date_from:
         return Reason.BASELINE_HISTORY_INSUFFICIENT
+    if any(d.conversions is None for d in days if d.date in baseline):
+        return Reason.BASELINE_DATA_INSUFFICIENT
     base_cost, base_conv = _sum(days, baseline)
     quality = _baseline_quality(base_conv, rule.params)
     if quality is None:  # baseline_cpa = null, а не 0 и не бесконечность
@@ -81,6 +83,8 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings,
     p, mode = rule.params, rule.params["mode"]
     evaluation, baseline = windows(snap.period_to)
 
+    if any(d.conversions is None for d in days if d.date in evaluation):
+        return NotEnoughData(rule.rule_version, Reason.SOURCE_MISSING, "campaign", campaign_id)
     cost, conv = _sum(days, evaluation)
     if conv == 0:  # CPA не существует; расход без конверсий ловит другое правило
         return NotEnoughData(rule.rule_version, Reason.NO_CONVERSIONS, "campaign", campaign_id)

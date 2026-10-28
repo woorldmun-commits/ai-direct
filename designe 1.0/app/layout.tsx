@@ -8,31 +8,33 @@ import "./palette.css";
 import "./fonts.css";
 import "./inter.css";
 import "./responsive.css";
-import "@/components/reference/midnight.css";
-import "@/components/reference/launch-reference.css";
+import "@/components/midnight/compat.css";
+import "@/components/midnight/midnight.css";
+import "@/components/midnight/reference.css";
+import "@/components/midnight/site.css";
 
-const TITLE = "AdPilot — контроль кабинетов Яндекс Директа для агентств и директологов";
+const TITLE = "inrou — контроль кабинетов Яндекс Директа для агентств и директологов";
 const DESCRIPTION =
-  "AdPilot — аналитика Яндекс Директа и Метрики для директологов и агентств. Поймите, куда уходит рекламный бюджет: расходы, CPA и рекомендации с основаниями. Подписка от 1 990 ₽ в месяц.";
+  "inrou — аналитика Яндекс Директа и Метрики для директологов и агентств. Поймите, куда уходит рекламный бюджет: расходы, CPA и рекомендации с основаниями. Планируемая подписка от 2 990 ₽ в месяц.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: { default: TITLE, template: "%s — AdPilot" },
+  title: { default: TITLE, template: "%s — inrou" },
   description: DESCRIPTION,
-  applicationName: "AdPilot",
-  robots: { index: PUBLIC_SITE_CONFIGURED, follow: PUBLIC_SITE_CONFIGURED },
+  applicationName: "inrou",
+  robots: { index: PUBLIC_SITE_CONFIGURED && process.env.INROU_STAGING !== '1', follow: PUBLIC_SITE_CONFIGURED && process.env.INROU_STAGING !== '1' },
   ...(process.env.NEXT_PUBLIC_YANDEX_VERIFICATION && {
     verification: { yandex: process.env.NEXT_PUBLIC_YANDEX_VERIFICATION },
   }),
   openGraph: {
     type: "website",
     locale: "ru_RU",
-    siteName: "AdPilot",
+    siteName: "inrou",
     title: TITLE,
     description: DESCRIPTION,
-    images: [{ url: "/social-preview.png", width: 1200, height: 630, alt: "AdPilot — аналитика Директа и Метрики" }],
+    images: [{url: '/social-preview.png', alt: 'INROU — контроль рекламных расходов'}],
   },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/social-preview.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ['/social-preview.png'] },
 };
 
 export const viewport: Viewport = {

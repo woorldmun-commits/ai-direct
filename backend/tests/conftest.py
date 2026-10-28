@@ -26,7 +26,7 @@ def _with_user(uri: str, user: str, dbname: str) -> str:
 def db():
     """Чистая БД со схемой, накатанной ролью-владельцем. Возвращает фабрику подключений по ролям."""
     admin = _admin_uri()
-    dbname = "ai_direct_test"
+    dbname = f"ai_direct_test_{os.getpid()}"
     with psycopg.connect(admin, autocommit=True) as conn:
         conn.execute(f"DROP DATABASE IF EXISTS {dbname}")
         for role in ROLES:

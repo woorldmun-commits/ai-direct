@@ -2,9 +2,19 @@
 API работает прикладной ролью под RLS; суперпользователь или роль с BYPASSRLS отвергаются при подключении (db.py)."""
 
 import os
+import json
 from dataclasses import dataclass, field
 from typing import Mapping
 from urllib.parse import urlsplit
+
+from app.billing.provider import BillingConfig
+from app.legal.documents import VERSIONS, text_path
+import hashlib
+import hmac
+from app.auth.login import SCOPES
+from app.auth.yandex_oauth import MANUAL_CODE_REDIRECT_URI, OAuthApp
+from app.auth.email_config import EmailAuthConfig
+from app.auth.tokens import EnvKeys, KeyProvider
 
 DEFAULT_MAX_BODY = 64 * 1024
 SESSION_COOKIE = "session"
@@ -36,8 +46,29 @@ class Settings:
     pool_min_size: int = 1
     pool_max_size: int = 10
     pool_timeout: float = 5.0
+    oauth_login: OAuthApp | None = field(default=None, repr=False)
+    signup_approved_hashes: dict[str, str] = field(default_factory=dict, repr=False)
+    email_auth: EmailAuthConfig | None = field(default=None, repr=False)
+    billing: BillingConfig | None = field(default=None, repr=False)
+
+    oauth_direct: OAuthApp | None = field(default=None, repr=False)
+    token_keys: KeyProvider | None = field(default=None, repr=False)
+    proxy_hmac_key: str = field(default='', repr=False)
+    intelligence_enabled: bool = False
+    intelligence_real_data_approved: bool = False
 
     def __post_init__(self):
+        if self.proxy_hmac_key and len(self.proxy_hmac_key) < 32:
+            raise SettingsError('API_PROXY_HMAC_KEY: минимум 32 символа')
+        if self.oauth_direct:
+            uri = urlsplit(self.oauth_direct.redirect_uri)
+            manual_code = self.oauth_direct.redirect_uri == MANUAL_CODE_REDIRECT_URI
+            if self.token_keys is None or (not manual_code and (
+                    f"{uri.scheme}://{uri.netloc}" not in self.allowed_origins
+                    or uri.path != "/api/direct/callback" or uri.query or uri.fragment
+                    or uri.username or uri.password
+                    or (uri.scheme != "https" and uri.hostname not in ("localhost", "127.0.0.1", "::1")))):
+                raise SettingsError("YANDEX_API_REDIRECT_URI: нужен доверенный HTTPS callback и ключ токенов")
         if not self.database_url:
             raise SettingsError("API_DATABASE_URL не задан")
         if not self.allowed_origins:
@@ -45,11 +76,49 @@ class Settings:
         object.__setattr__(self, "allowed_origins", frozenset(_origin(o) for o in self.allowed_origins))
         if self.max_body_bytes <= 0:
             raise SettingsError("API_MAX_BODY_BYTES: нужно положительное число")
+        if self.billing and self.billing.origin not in self.allowed_origins:
+            raise SettingsError('INROU_BILLING_ORIGIN must be an API_ALLOWED_ORIGINS member')
+        if self.billing:
+            raw = text_path('offer', VERSIONS['offer'][-1]).read_bytes()
+            digest = hashlib.sha256(raw).hexdigest()
+            if ('ЗАГЛУШКА' in raw.decode('utf-8')
+                    or not hmac.compare_digest(self.billing.terms_sha256, digest)
+                    or not hmac.compare_digest(self.signup_approved_hashes.get('offer', ''), digest)):
+                raise SettingsError('Billing requires the exact published approved offer')
+        if self.email_auth and self.email_auth.origin not in self.allowed_origins:
+            raise SettingsError('INROU_EMAIL_ORIGIN must be an API_ALLOWED_ORIGINS member')
+        if self.oauth_login:
+            uri = urlsplit(self.oauth_login.redirect_uri)
+            origin = f"{uri.scheme}://{uri.netloc}".lower()
+            if (origin not in self.allowed_origins or uri.username or uri.password or uri.query or uri.fragment
+                    or uri.path != "/api/auth/yandex/callback"
+                    or (uri.scheme != "https" and uri.hostname not in ("localhost", "127.0.0.1", "::1"))):
+                raise SettingsError("YANDEX_LOGIN_REDIRECT_URI: нужен доверенный callback сайта по HTTPS")
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] = os.environ) -> "Settings":
         origins = frozenset(o.strip() for o in env.get("API_ALLOWED_ORIGINS", "").split(",") if o.strip())
+        oauth = None
+        if _flag(env.get("YANDEX_LOGIN_ENABLED")) and all(
+                env.get(f"YANDEX_LOGIN_{key}") for key in ("CLIENT_ID", "CLIENT_SECRET", "REDIRECT_URI")):
+            oauth = OAuthApp.from_env("YANDEX_LOGIN", SCOPES, env)
+        try:
+            approvals = json.loads(env.get("API_SIGNUP_APPROVED_HASHES", "{}"))
+        except (ValueError, TypeError):
+            raise SettingsError("API_SIGNUP_APPROVED_HASHES: нужен JSON объект хэшей документов") from None
+        if not isinstance(approvals, dict) or any(not isinstance(k, str) or not isinstance(v, str)
+                                                for k, v in approvals.items()):
+            raise SettingsError("API_SIGNUP_APPROVED_HASHES: нужен JSON объект хэшей документов")
+        direct = None
+        keys = None
+        if _flag(env.get("YANDEX_API_ENABLED")):
+            direct = OAuthApp.from_env("YANDEX_API", ("direct:api", "metrika:read"), env)
+            keys = EnvKeys(env)
         return cls(
+            proxy_hmac_key=env.get('API_PROXY_HMAC_KEY',''),
+            intelligence_enabled=_flag(env.get('INROU_INTELLIGENCE_ENABLED')),
+            intelligence_real_data_approved=_flag(env.get('INROU_INTELLIGENCE_REAL_DATA_APPROVED')),
+            oauth_direct=direct, token_keys=keys,
             database_url=env.get("API_DATABASE_URL", ""),
             allowed_origins=origins,
             hsts=_flag(env.get("API_HSTS")),
@@ -57,4 +126,8 @@ class Settings:
             session_cookie=env.get("API_SESSION_COOKIE", SESSION_COOKIE),
             pool_min_size=int(env.get("API_POOL_MIN", 1)),
             pool_max_size=int(env.get("API_POOL_MAX", 10)),
+            oauth_login=oauth,
+            signup_approved_hashes=approvals,
+            email_auth=EmailAuthConfig.from_env(env),
+            billing=BillingConfig.from_env(env),
         )
