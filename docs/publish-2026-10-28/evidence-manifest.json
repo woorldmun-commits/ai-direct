@@ -1,0 +1,27 @@
+{
+  "created_utc": "2026-10-28T07:58:55.766845+00:00",
+  "runtime_commit": "e582cc550d8e845169783a53de614fabb4c2c613",
+  "source_merge": "f6ddd644afe5cee90d99a266d47da4bd74e382f3",
+  "files": {
+    "browser-results.json": "47c5ce8e9bab57a7e88d147d0af2a0c39da55fae496068be34b8401a9ac88404",
+    "browser.mjs": "17f310d5bfe6d7bc4d5a0662d1e0da11a5fcc0145f41be375b2cc39b83d11ed5",
+    "github-deploy-ci.json": "78a597f9d5849083612838f4de33b39577a9c5c7175a5715768c68b7f93d1e30",
+    "github-deploy-frontend.json": "f152ce5a88016c19271f5dd402fcadaa8cac61e6d430acf6e0653f4c7f71d388",
+    "github-merge.json": "3246b27fd0fad6f8e8d346ad67a02c68aeda206fa1049638da285b51ab4ff8ba",
+    "github-source-ci.json": "abfd89a4f928bcb56fc93aab5a21f33751898d7895578a23d3d09e7a2428a002",
+    "github-source-frontend.json": "0dbcb84ffa771abe4be05e487a3f84be7004848eb309982fbf1bd5eca1d530ab",
+    "hosted-1440--.png": "a53b2c9bb9d7b85c3272f1cc6c810b3c12866057ccca0914810605bb5afad8ef",
+    "hosted-1440--demo-analysis.png": "bb1ab714e062fc10dde165f3108a980984e0e08fd335a56c6e107abadf65c2d5",
+    "hosted-1440--demo-recommendations.png": "37c6d577e39a34f0fb5d9f888e74798a11ba2f265806815bf58796b069a52719",
+    "hosted-1440--signup.png": "0a95c06fe4f91cc40661e2a8f97f4e34ad638fc7b6f3c1783168f1a604bf410b",
+    "hosted-390--.png": "7e60003e0825cf3a2f06a03fe7ce01b8303bceb5960664840e76ec1405e1204e",
+    "hosted-390--demo-analysis.png": "05f4e263b03b6d04ee4a4c49a216da4b6037378cd8c8c764ff2dfa06490452a6",
+    "hosted-390--demo-recommendations.png": "2748a0d7e3e576e81d667580900ba465b4566df3495d4849e4f7c455c5bfa0ad",
+    "hosted-390--signup.png": "c7eb1cb65fbddf0abb3b43f424faeb1a6882b4b0980b5269935d7455e20f7b71",
+    "preflight.json": "dec26f822c3032442a9f2ce4055f6e3f389c61d0eb1de887f3f1f04f6a9404d3",
+    "render-deploy.json": "0046be69dd320d859b2bde0c58825ee45abcd5c32708e69eac6b8ebedd731236",
+    "render-startup.json": "4593b64b68e4c9c561884f64c59497e1cc05a42ed42cec4bfb8b0dee6f10af85",
+    "RESULT.md": "cb5f54ff79e5e1a1650556ffe0ef8908eb0529ee5afbc43f15159940049b45be",
+    "scanner-selftest.json": "3799234c3126a26fb691c64fc1add1d6cc7f050f3bdb59737b7da8b291c1fd87"
+  }
+}

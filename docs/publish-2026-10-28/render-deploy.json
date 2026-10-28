@@ -1,0 +1,14 @@
+{
+  "commit": {
+    "createdAt": "2026-10-28T07:51:26Z",
+    "id": "e582cc550d8e845169783a53de614fabb4c2c613",
+    "message": "Fix INROU audit findings and prepare verified pilot release"
+  },
+  "createdAt": "2026-10-28T07:51:45.058667Z",
+  "finishedAt": "2026-10-28T07:53:50.194948Z",
+  "id": "dep-dbgqj4avcj2c73dnc7k0",
+  "startedAt": "2026-10-28T07:51:45.034787Z",
+  "status": "live",
+  "trigger": "new_commit",
+  "updatedAt": "2026-10-28T07:53:50.195357Z"
+}
