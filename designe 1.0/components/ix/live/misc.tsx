@@ -35,7 +35,7 @@ export async function Ai({ws, cursor}: {ws: string; cursor?: string}) {
       </>:<p>{snapshots.data.reason==='no_snapshot'?'Нет пригодных снимков выбранных аккаунтов. Проверьте подключение и период данных.':'Разбор подключённых данных откроется после допуска реальных источников. Синтетический пример доступен отдельно.'}</p>:<ErrorState code={snapshots.code}/>}
       {today.ok&&!!today.data.top?.length&&<><h3>Рекомендации последнего аудита</h3><p className="ix-muted ix-mini">Период аудита может отличаться от периода расчёта выше. Проверяйте дату и основания в паспорте.</p><ul>{today.data.top.map(rec=><li key={rec.id}><Link href={`/workspace/recommendations?workspace=${ws}&rec=${rec.id}`}>{rec.title}</Link></li>)}</ul></>}
     </Card><Gap />
-    {intel.ok ? <IntelligencePanel workspace={ws} data={intel.data} /> : <ErrorState code={intel.code} />}
+    <details className="ix-card"><summary>Ручной импорт и отдельные расчёты</summary><p>Этот раздел не нужен для разбора подключённого Директа. Он работает с загруженными агрегатами; синтетические примеры не относятся к вашему кабинету.</p>{intel.ok ? <IntelligencePanel workspace={ws} data={intel.data} /> : <ErrorState code={intel.code} />}</details>
     <Gap /><details className="ix-card ix-analyst-method"><summary>Методика, факты и ограничения</summary>
       <p className="ix-muted ix-mini">Расчёты выполняет детерминированный код на сервере. Результат сохраняется с источниками и ограничениями. Уверенность зависит от полноты данных; при нехватке показано «Недостаточно данных».</p>
       {insights.ok && <div><b>Факты за период</b>
@@ -156,7 +156,7 @@ export async function ConnectionDetail({ws, id}: {ws: string; id: string}) {
     <PageHead title={id === 'yandex_direct' ? 'Яндекс Директ' : 'Яндекс Метрика'} sub="Права, свежесть и последняя синхронизация." actions={<LinkBtn href={`/workspace/connections?workspace=${ws}`}>← Все подключения</LinkBtn>} />
     <Card><dl className="ix-kv"><dt>Состояние</dt><dd><Tag tone={st.warn ? 'warn' : undefined}>{st.label}</Tag></dd><dt>Данные по</dt><dd>{s.data_to ?? 'нет данных'}</dd><dt>Последняя успешная синхронизация</dt><dd>{stamp(s.last_success_at)}</dd><dt>Права</dt><dd>только чтение статистики</dd></dl>
       <p className="ix-muted ix-mini">Журнал синхронизаций и срок действия токена API пока не передаёт.</p></Card><Gap />
-    {id === 'yandex_direct' && <DirectConnect workspace={ws} />}</>;
+    {id === 'yandex_direct' ? <DirectConnect workspace={ws} /> : <Card><p>Счётчик и цели Метрики задаются при подключении Директа. Для смены подтвердите настройки нужного рекламного аккаунта заново.</p><LinkBtn variant="primary" href={`/onboarding/connect?workspace=${encodeURIComponent(ws)}`}>Настроить счётчик и цели</LinkBtn></Card>}</>;
 }
 
 export async function AlertDetail({ws, id}: {ws: string; id: string}) {

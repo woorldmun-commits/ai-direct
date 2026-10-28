@@ -286,6 +286,20 @@ def test_same_query_campaign_date_split_by_hidden_dimension_is_one_row(root):
     assert (row.cost, row.clicks, row.impressions, row.conversions) == (Decimal("140.00"), 6, 20, Decimal(2))
 
 
+@pytest.mark.parametrize('parts', [
+    (('--', '0'), ('1', '0')),
+    (('1', '0'), ('--', '0')),
+    (('--', '0'), ('--', '0')),
+    (('--', '0'), ('1', '0'), ('2', '0')),
+    (('1', '0'), ('--', '0'), ('2', '0')),
+])
+def test_merged_query_keeps_unknown_conversions_in_every_order(root, parts):
+    snap = snapshot_of(root, query=query_tsv(tuple(('диван', '10.00', part) for part in parts)))
+    (row,) = [row for row in snap.rows if row.level == 'query']
+    assert row.cost == Decimal('10.00') * len(parts)
+    assert row.conversions is None
+
+
 def test_queries_are_sanitized_before_snapshot_and_merged(root):
     snap = snapshot_of(root, query=query_tsv((
         ("звонок 8 916 123 45 67", "100.00", ("1", "0")),

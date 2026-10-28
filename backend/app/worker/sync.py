@@ -12,7 +12,7 @@ from datetime import date, datetime, timedelta
 import psycopg
 
 from app.sources.conversion import ConversionDefinition
-from app.sources.direct import AccountUnavailable, ConnectionUnavailable, DirectApiError, DirectSource, RetryLater
+from app.sources.direct import AccountUnavailable, ConnectionUnavailable, DirectApiError, DirectSource, RetryLater, UnsupportedCurrency
 from app.sources.metrika import MetrikaSource
 from app.sync.snapshot import Snapshot, SyncFailure, sync_account, sync_metrika, with_metrika
 from app.sync.store import SyncRunStateError, record_failure, write_snapshot
@@ -198,6 +198,8 @@ def _execute(conn: psycopg.Connection, run: _Run, *, direct: DirectSource, metri
         return _fail(conn, run, SyncFailure(run.login, e.error_code), now)
     except DirectApiError as e:
         return _fail(conn, run, SyncFailure(run.login, 'invalid_request', request_id=e.request_id), now)
+    except UnsupportedCurrency:
+        return _fail(conn, run, SyncFailure(run.login, 'unsupported_currency'), now)
     if isinstance(snap, SyncFailure):
         return _fail(conn, run, snap, now)
 

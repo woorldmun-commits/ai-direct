@@ -33,8 +33,11 @@ export async function Overview({ws, q}: {ws: string; q: Query}) {
   const [today, insights] = await Promise.all([safe(pilotGet(`/workspaces/${ws}/today`, isToday)), safe(pilotGet(`/workspaces/${ws}/insights`, isInsights))]);
   if (!today.ok) return <ErrorState page code={today.code} />;
   const t = today.data;
+  const needsConnection = t.data_freshness.yandex_direct.status === null;
+  const connectHref = `/onboarding/connect?workspace=${encodeURIComponent(ws)}`;
   return <>
-    <PageHead title="Обзор" sub={`Последний аудит: ${stamp(t.last_audit_at)}. Сначала доказательства — затем решение.`} actions={<LinkBtn variant="primary" href={`/workspace/analysis?workspace=${ws}`}>Открыть анализ</LinkBtn>} />
+    <PageHead title="Обзор" sub={`Последний аудит: ${stamp(t.last_audit_at)}. Сначала доказательства — затем решение.`} actions={<LinkBtn variant="primary" href={needsConnection?connectHref:`/workspace/analysis?workspace=${ws}`}>{needsConnection?'Подключить Яндекс Директ':'Открыть анализ'}</LinkBtn>} />
+    {needsConnection&&<><Info>Начните с подключения своего рекламного кабинета. Укажите счётчик и цели Метрики, затем дождитесь загрузки и первого аудита. Данные других пользователей в ваш обзор не подставляются.</Info><Gap /></>}
     <HealthBanner ws={ws} today={t} checkedAt={checkedAt} /><Gap />
     <LiveStats ws={ws} q={q} title="Динамика показателей" compact /><Gap />
     <div className="ix-grid ix-kpis">

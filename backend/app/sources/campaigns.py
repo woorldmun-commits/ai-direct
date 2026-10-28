@@ -81,7 +81,7 @@ class CampaignContext:
     campaign_id: int
     campaign_type: str             # TEXT_CAMPAIGN · UNIFIED_CAMPAIGN · …
     currency: str | None
-    time_zone: str | None          # даты отчётов Директа — в поясе кампании (сверка с Метрикой)
+    time_zone: str | None          # пояс таргетинга; статистика Директа — по московскому времени
     search: StrategySide | None    # None: тип кампании не поддержан — стратегия не читалась
     network: StrategySide | None
     priority_goals: tuple[int, ...]

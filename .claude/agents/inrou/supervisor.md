@@ -16,6 +16,7 @@ tools: Read, Grep, Glob, Bash
 | inrou-seo | `designe 1.0/app/robots.ts`, `app/sitemap.ts`, `lib/site.ts`, `public/llms.txt`, `export const metadata` в страницах |
 | inrou-release-ops | `Dockerfile`, `deploy/`, `.github/workflows/`, `.gitignore`, `.gitattributes` |
 | inrou-qa | `backend/tests/`, e2e-проверки |
+| inrou-data-contract-qa, inrou-runtime-reliability | только чтение; независимая сверка и эксплуатационная приёмка |
 | inrou-security, inrou-legal, inrou-product | только чтение (legal и product могут писать свои документы в `docs/`) |
 
 Общие файлы (`backend/db/schema.sql`, `backend/migrations/`, `auth/`, остальное `api/`, `tenancy.py`, lock-файлы) меняет только основная сессия (руководитель интеграции).

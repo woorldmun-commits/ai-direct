@@ -34,6 +34,8 @@ def inspect(env):
         parts = urlsplit('')
     checks['public_https_origin'] = bool(parts.scheme == 'https' and parts.hostname
         and not parts.username and not parts.password and not parts.path and not parts.query and not parts.fragment)
+    checks['frontend_build_origin_configuration'] = bool(checks['public_https_origin']
+        and env.get('NEXT_PUBLIC_SITE_URL', '').rstrip('/') == origin)
     checks['matching_email_origin'] = bool(settings and settings.email_auth
         and settings.email_auth.origin == origin)
     header = env.get('INROU_CLIENT_IP_HEADER', '')

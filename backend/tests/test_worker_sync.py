@@ -158,6 +158,20 @@ def snapshots(rw, run_id):
     return one(rw, "SELECT count(*) FROM snapshots WHERE sync_run_id = %s", run_id)
 
 
+def test_unsupported_currency_fails_before_snapshot_without_revoking_connection(rw, ws):
+    from app.sources.direct import UnsupportedCurrency
+
+    class NonRuble(Spy):
+        def fetch_campaign_strategies(self, login, campaign_ids):
+            raise UnsupportedCurrency()
+
+    run_id = new_run(rw, ws)
+    assert isinstance(work(rw, ws, run_id, direct=NonRuble(ws['root'].path)), Failed)
+    assert run_status(rw, run_id)[:2] == ('failed', 'unsupported_currency')
+    assert snapshots(rw, run_id) == 0
+    assert one(rw, 'SELECT status FROM direct_connections WHERE workspace_id=%s', ws['ws']) == 'connected'
+
+
 def test_sync_writes_snapshot_with_frozen_definition(rw, ws):
     run_id = new_run(rw, ws)
     out = work(rw, ws, run_id)

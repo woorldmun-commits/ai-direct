@@ -3,6 +3,7 @@
 Состояние на 28.10.2026. Исходники и проверки определяют реализованное поведение; продуктовые планы сами по себе не доказывают готовность функции.
 
 - [Статус выпуска и ограничения пилота](RELEASE_STATUS.md).
+- [Пошаговый запуск с настоящими аккаунтами и оставшиеся условия](LAUNCH_READINESS.md).
 - [Стратегия](STRATEGY.md), [границы версий](VERSION_SCOPE.md), [PRD](PRD.md), [продуктовая спецификация](PRODUCT_SPEC.md).
 - [Архитектура](ARCHITECTURE.md), [модель данных](DATA_MODEL.md), [API](API_CONTRACT.md), [контракт выполнения](API_CONTRACT_EXECUTION.md), [безопасность выполнения](EXECUTION_SAFETY.md).
 - [Коммерческий статус и trial](COMMERCIAL_STATUS.md), [экономика](ECONOMICS.md), [протокол пилота](PILOT_PROTOCOL.md), [шаблон отчёта](PILOT_REPORT_TEMPLATE.md).

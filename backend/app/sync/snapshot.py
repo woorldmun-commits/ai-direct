@@ -53,7 +53,7 @@ def _merge(rows: tuple[StatRow, ...]) -> tuple[StatRow, ...]:
         if prev is None:
             merged[r.key()] = r
             continue
-        conv = None if r.conversions is None else prev.conversions + r.conversions
+        conv = None if prev.conversions is None or r.conversions is None else prev.conversions + r.conversions
         merged[r.key()] = replace(prev, impressions=prev.impressions + r.impressions, clicks=prev.clicks + r.clicks,
                                   cost=prev.cost + r.cost, conversions=conv)
     return tuple(sorted(merged.values(), key=lambda r: (r.level, r.campaign_id, r.date, r.query or "",

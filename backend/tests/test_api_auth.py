@@ -220,6 +220,27 @@ def test_exact_document_endpoint_and_approval(browser):
     assert browser.get("/api/v1/legal/documents/offer", params={"version": "../unknown"}).status_code == 404
 
 
+def test_latest_document_uses_registry_and_preserves_history(browser, monkeypatch, tmp_path):
+    from app.legal import documents
+
+    old = browser.get('/api/v1/legal/documents/offer', params={'version': SIGN_UP['offer']}).json()
+    revised = tmp_path / '2026-10-28.ru-RU.md'
+    revised.write_text('Synthetic revised terms, not a legal approval.', encoding='utf-8')
+    registered_path = documents.text_path
+    monkeypatch.setitem(documents.VERSIONS, 'offer', (*documents.VERSIONS['offer'], '2026-10-28'))
+    monkeypatch.setattr('app.api.legal.text_path', lambda key, version, locale: revised if key == 'offer' and version == '2026-10-28' else registered_path(key, version, locale))
+    response = browser.get('/api/v1/legal/documents/offer')
+    assert response.status_code == 200
+    latest = response.json()
+    assert latest['version'] == '2026-10-28' and latest['approved'] is False
+    assert latest['text'] == revised.read_text(encoding='utf-8')
+    assert browser.get('/api/v1/legal/documents/offer', params={'version': SIGN_UP['offer']}).json() == old
+    browser.app.state.settings.signup_approved_hashes['offer'] = latest['sha256']
+    assert browser.get('/api/v1/legal/documents/offer').json()['approved'] is True
+    assert browser.get('/api/v1/legal/documents/offer', params={'version': SIGN_UP['offer']}).json()['approved'] is False
+    assert browser.get('/api/v1/legal/documents/no_such_document').status_code == 404
+
+
 def test_successful_callback_clears_flow_and_replay_has_no_provider_request(browser):
     state, _ = begin(browser)
     assert finish(browser, state).headers["location"] == "/workspace"

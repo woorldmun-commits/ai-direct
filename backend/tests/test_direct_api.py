@@ -217,7 +217,7 @@ def test_worker_waits_for_offline_report_then_writes_snapshot(rw, ws):
 
     def handler(request):
         if request.url.path.endswith('/campaigns'):
-            return httpx.Response(200, json={'result': {'Campaigns': []}})
+            return httpx.Response(200, json={'result': {'Campaigns': [{'Id': 12345, 'Type': 'TEXT_CAMPAIGN', 'Currency': 'RUB'}]}})
         calls.append(json.loads(request.content)["params"]["ReportName"])
         if len(calls) == 1:
             return httpx.Response(201, headers={"retryIn": "10"})

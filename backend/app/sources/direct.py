@@ -103,6 +103,10 @@ class DirectApiError(Exception):
         self.error_code, self.request_id = error_code, request_id
 
 
+class UnsupportedCurrency(Exception):
+    """The RUB-only pilot must not label another or unknown currency as rubles."""
+
+
 class DirectSource(Protocol):
     def fetch_report(self, login: str, spec: ReportSpec, conversions: ConversionDefinition | None,
                      date_from: date, date_to: date) -> str: ...
@@ -236,8 +240,13 @@ class DirectApi:
         from app.sources.campaigns import get_campaign_contexts
         out = {}
         for offset in range(0, len(campaign_ids), 100):
+            requested = campaign_ids[offset:offset+100]
             contexts = get_campaign_contexts(self.http, self.access_token, login,
-                                            campaign_ids[offset:offset+100], env=self.env)
+                                            requested, env=self.env)
+            if set(contexts) != set(requested):
+                raise DirectApiError(502, None)
+            if any(context.currency != 'RUB' for context in contexts.values()):
+                raise UnsupportedCurrency()
             out.update({str(cid): context.strategy.value for cid, context in contexts.items()})
         return out
 
