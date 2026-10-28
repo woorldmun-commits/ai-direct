@@ -1,7 +1,0 @@
-(node:19200) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///C:/Users/woorl/Documents/inrou/designe%201.0/components/reference/model.ts is not specified and it doesn't parse as CommonJS.
-Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
-To eliminate this warning, add "type": "module" to \\?\C:\Users\woorl\Documents\inrou\designe 1.0\package.json.
-(Use `node --trace-warnings ...` to show where the warning was created)
-PASS: totals, zero CPA, daily allocation, account/period filters, idempotent apply, annual discount
-PASS: restored state validation and chart/table/KPI consistency
-PASS: scoped recommendation identities/effects, bounded savings, nine chart/KPI slices, modeled deltas and empty evidence

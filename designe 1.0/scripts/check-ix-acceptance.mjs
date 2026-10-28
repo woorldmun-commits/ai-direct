@@ -108,7 +108,7 @@ try {
   const legalSlugs = [...(await fs.readFile(path.join(root, 'lib/site.ts'), 'utf8')).matchAll(/slug: ["']([^"']+)["']/g)].map(m => m[1]);
   const details = ['campaigns/unavailable', 'connections/yandex_direct', 'connections/yandex_metrika', 'reports/weekly', 'alerts/freshness', `team/${member}`, 'history/' + fixture.recommendation, 'recommendations/' + fixture.recommendation];
   const routes = [...publics, ...legalSlugs.map(s => '/legal/' + s), ...nav.map(s => '/workspace/' + s + '?workspace=' + ws),
-    ...details.map(s => '/workspace/' + s + '?workspace=' + ws), ...['organization', 'business-profile', 'connect', 'first-audit'].map(s => '/onboarding/' + s + '?workspace=' + ws), '/demo/states', ...nav.filter(s=>!['data-health','onboarding-review'].includes(s)).map(s=>'/demo/'+s), ...['landing','overview','recommendation'].map(s=>'/demo/midnight/'+s)];
+    ...details.map(s => '/workspace/' + s + '?workspace=' + ws), ...['organization', 'business-profile', 'connect', 'first-audit'].map(s => '/onboarding/' + s + '?workspace=' + ws), '/demo/states', ...nav.filter(s=>!['data-health','onboarding-review'].includes(s)).map(s=>'/demo/'+s)];
   report.expectedRoutes=routes.length;
   const axeSource = process.env.AXE_PATH ? await fs.readFile(process.env.AXE_PATH, 'utf8') : null;
   report.axe = axeSource ? 'WCAG 2 A/AA + 2.1 A/AA' : 'UNAVAILABLE: set AXE_PATH to an installed axe.min.js';

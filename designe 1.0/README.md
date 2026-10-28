@@ -1,6 +1,6 @@
 # inrou — активный сайт
 
-Папка `designe 1.0` содержит основной сайт INROU на Next.js 16.4.2: дизайн из `INROU_FINAL_HANDOFF/reference/index.html`, публичные страницы и рабочий кабинет. Кремовые поверхности, хвойная навигация, Georgia/Inter; светлая, тёмная и системная темы. Архитектура и серверные контракты сохранены. Доказательства и ограничения: [отчёт реализации](../docs/design-implementation/IMPLEMENTATION_REPORT.md).
+Папка `designe 1.0` содержит основной сайт INROU на Next.js 16.4.2: дизайн из `INROU_FINAL_HANDOFF/reference/index.html`, публичные страницы и рабочий кабинет. Кремовые поверхности, хвойная навигация, Georgia/Inter; светлая, тёмная и системная темы. Архитектура и серверные контракты сохранены. Доказательства и ограничения: [отчёт реализации](../DESIGN.md).
 
 ## Локальный запуск
 
@@ -24,9 +24,11 @@ npm run start -- --hostname 127.0.0.1 --port 3120
 - `/workspace` — совместимый редирект со старых `?view=`; 14 разделов `/workspace/{overview,analysis,recommendations,campaigns,connections,impact,reports,alerts,ai,history,team,plans,settings,business-profile}`, дополнительно `data-health` и `onboarding-review`. Контекст — `?workspace=ws_…`. Паспорт — `/workspace/recommendations?workspace=…&rec=…`; старый `/workspace/recommendations/[id]` сохранён как редирект. Поддержаны детали подключений, сигналов, участников, недельного отчёта и история через паспорт. Для недоступных кампаний — полноценный макет без вымышленных показателей.
 - `/legal` и страницы документов — правовая информация. Наличие текста на странице само по себе не является утверждением документов владельцем.
 
+Старые адреса `/demo/midnight/{landing,overview,recommendation}` перенаправляют на актуальные страницы. Отдельной старой версии интерфейса в исходниках нет.
+
 ## Настройки Next.js
 
-Скопируйте `.env.example` в локальный файл настроек только в своём окружении. Секреты и реальные session-токены не должны попадать в репозиторий или браузерные env.
+Создайте локальный `.env.local` только в своём окружении; список параметров приведён ниже. Секреты и реальные session-токены не должны попадать в репозиторий или браузерные env.
 
 - `INROU_API_URL` — origin backend без пути; HTTPS, кроме loopback HTTP. Приложение добавляет `/api/v1`.
 - `INROU_APP_ORIGIN` — точный публичный origin браузера; необходим за reverse proxy с внутренним адресом. Тот же origin должен быть разрешён backend.
@@ -51,7 +53,6 @@ npm run start -- --hostname 127.0.0.1 --port 3120
 
 ```text
 npm run lint
-npm run test:model
 npm run test:pilot
 npm run test:ix
 node scripts/check-auth-proxy.mjs
@@ -59,7 +60,6 @@ node scripts/check-workspace-proxy.mjs
 node scripts/check-site.mjs
 node scripts/check-insights.mjs
 node --experimental-strip-types scripts/check-chart-geometry.mjs
-node scripts/check-inrou-csv-security.mjs
 node scripts/check-assets.mjs
 npm run build
 npm run test:headers

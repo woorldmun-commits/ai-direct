@@ -49,7 +49,7 @@ Status mapping:
 
 ## qCPL admissibility
 
-A declaration means **the user asserts this file contains ALL leads acquired in the period for every imported account**, not just qualified leads or a subset of campaigns. Rekvero cannot verify CRM completeness. UI checkbox must explain this. Every row must have acquired_on within closed period; all qualifications resolved; latest complete manifest IDs must exactly match all stored cohort rows. Counts reflect unique UUIDs. Rows with no acquired_on are counted by created_on but cannot support qCPL.
+A declaration means **the user asserts this file contains ALL leads acquired in the period for every imported account**, not just qualified leads or a subset of campaigns. INROU cannot verify CRM completeness. UI checkbox must explain this. Every row must have acquired_on within closed period; all qualifications resolved; latest complete manifest IDs must exactly match all stored cohort rows. Counts reflect unique UUIDs. Rows with no acquired_on are counted by created_on but cannot support qCPL.
 
 Actual spend must cover precisely the same period and imported account scope (other selected accounts excluded); optional campaign IDs must match rows in those snapshots. Missing denominator, unknown scope, incomplete snapshots or unresolved leads => unavailable. qCPL = imported-account-period spend / qualified leads; source `yandex_direct+user_input`, completeness source user_input. This is a fact conditional on user declaration, not a verified CRM fact, profit, causal effect or guaranteed saving. No cohort attribution model is inferred.
 

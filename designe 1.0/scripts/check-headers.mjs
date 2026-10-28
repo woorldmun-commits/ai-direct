@@ -178,7 +178,7 @@ async function httpChecks(base) {
   const forged = await fetch(base + "/api/auth/logout", { method: "POST", headers: { Origin: "https://untrusted.example" }, redirect: "manual" });
   if (forged.status !== 403 || forged.headers.get("cache-control") !== "no-store") fail("auth: foreign-origin POST must fail closed without caching");
 
-  for (const route of ['/demo', '/demo/recommendations', '/demo/reports', '/demo/settings', '/demo/ai']) {
+  for (const route of ['/demo', '/demo/recommendations', '/demo/reports', '/demo/settings', '/demo/ai', '/demo/midnight/landing', '/demo/midnight/overview', '/demo/midnight/recommendation']) {
     const retired = await fetch(base + route, {redirect:'manual'});
     if (retired.status !== 404) fail(`${route}: removed demo must return 404, got ${retired.status}`);
   }
