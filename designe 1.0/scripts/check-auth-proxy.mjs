@@ -3,10 +3,11 @@ import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 import * as crypto from 'node:crypto';
 import * as net from 'node:net';
+import {jsx, jsxs} from 'react/jsx-runtime';
 
 function load(file, dependencies = {}) {
   const exports = {};
-  const compiled = ts.transpileModule(readFileSync(new URL(file, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  const compiled = ts.transpileModule(readFileSync(new URL(file, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   new Function('exports', 'require', compiled)(exports, name => {
     assert(name in dependencies, `Unexpected dependency: ${name}`);
     return dependencies[name];
@@ -21,7 +22,7 @@ const proxyAuth = async (...args) => {
   assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
   return response;
 };
-const { validLegalDocument, legalDocument } = load('../lib/legal-document.ts', { 'server-only': {}, 'node:crypto': crypto, './api-origin': origin });
+const { validLegalDocument, legalDocument, registrationDocuments } = load('../lib/legal-document.ts', { 'server-only': {}, 'node:crypto': crypto, './api-origin': origin });
 const text = 'Точный текст\r\nБез изменения пробелов.\n';
 const document = { document: 'offer', version: '2026-10-01', locale: 'ru-RU', approved: true, text, sha256: crypto.createHash('sha256').update(text).digest('hex') };
 assert(validLegalDocument(document, 'offer'));
@@ -29,9 +30,35 @@ assert(!validLegalDocument({ ...document, text: text.replaceAll('\r\n', '\n') },
 assert(!validLegalDocument({ ...document, sha256: 'a'.repeat(64) }, 'offer'));
 assert(!validLegalDocument(document, 'pd_consent'));
 assert(!validLegalDocument({ ...document, approved: 'true' }, 'offer'));
-assert(!validLegalDocument({ ...document, version: '2026-10-02' }, 'offer'));
+const revised = { ...document, version: '2026-10-28' };
+assert(validLegalDocument(revised, 'offer'), 'A new registered revision must not need a frontend release.');
+assert(!validLegalDocument(revised, 'offer', '2026-10-01'), 'An explicit historical revision must match.');
+for (const version of ['', '../2026-10-28', '2026-02-30', '2026-1-1', '2026-10-28?next=x']) assert(!validLegalDocument({...document, version}, 'offer'));
 assert(!validLegalDocument({ ...document, locale: 'en-US' }, 'offer'));
 assert(validLegalDocument({ ...document, approved: false }, 'offer'), 'Draft status must remain explicit, never coerced into approval.');
+const terms = registrationDocuments(revised, {...revised, document:'pd_consent', version:'2026-10-27'});
+assert.deepEqual(terms, {offer:'2026-10-28', pd_consent:'2026-10-27'});
+assert.equal(registrationDocuments({...revised, approved:false}, {...revised, document:'pd_consent'}), null);
+const {EmailForm} = load('../components/reference/email-form.tsx', {
+  react:{useEffect:()=>{},useRef:value=>({current:value}),useState:value=>[value,()=>{}]},
+  'react/jsx-runtime':{jsx,jsxs}, 'lucide-react':{Eye:()=>null,EyeOff:()=>null},
+});
+const signup = EmailForm({mode:'signup',enabled:true,acceptedDocuments:terms});
+const links=[];
+function inspect(element){if(!element||typeof element!=='object')return;if(element.type==='a')links.push(element.props.href);for(const child of [element.props?.children].flat(Infinity))inspect(child);}
+inspect(signup);
+assert(links.includes('/legal/offer?version=2026-10-28'));
+assert(links.includes('/legal/pd-consent?version=2026-10-27'));
+const savedFetch=globalThis.fetch,savedFormData=globalThis.FormData;
+try{
+  globalThis.FormData=class{get(key){return {email:'synthetic@example.test',password:'synthetic-passphrase',confirm:'synthetic-passphrase'}[key]??null;}};
+  let sent=0;
+  globalThis.fetch=async(url,options)=>{sent++;assert.equal(url,'/api/auth/email/register');assert.deepEqual(JSON.parse(options.body).accepted,terms);return Response.json({status:'check_email'},{status:202});};
+  await signup.props.onSubmit({preventDefault(){},currentTarget:{}});
+  assert.equal(sent,1);
+  await EmailForm({mode:'signup',enabled:true}).props.onSubmit({preventDefault(){},currentTarget:{}});
+  assert.equal(sent,1,'Unapproved/missing documents must block the client submit too.');
+}finally{globalThis.fetch=savedFetch;globalThis.FormData=savedFormData;}
 assert.equal(origin.apiOrigin('http://example.com'), null);
 assert.equal(origin.apiOrigin('https://user:secret@example.com'), null);
 assert.equal(origin.apiOrigin('https://example.com/credentials'), null);
@@ -45,7 +72,7 @@ try {
   globalThis.fetch = async (url, options) => {
     calls++;
     assert.equal(new URL(url).pathname, '/api/v1/legal/documents/offer');
-    assert.equal(new URL(url).searchParams.get('version'), '2026-10-01');
+    assert.equal(new URL(url).searchParams.get('version'), null);
     assert.equal(new URL(url).searchParams.get('locale'), 'ru-RU');
     assert.equal(options.cache, 'no-store');
     assert.equal(options.redirect, 'error');
@@ -55,6 +82,14 @@ try {
   assert.deepEqual(await legalDocument('offer'), document);
   assert.equal(await legalDocument('unrecognized'), null);
   assert.equal(calls, 1, 'Unknown legal key must not issue a request.');
+  globalThis.fetch = async () => Response.json(revised);
+  assert.deepEqual(await legalDocument('offer'), revised);
+  assert.equal(await legalDocument('offer', '2026-10-01'), null);
+  globalThis.fetch = async (url) => {
+    assert.equal(new URL(url).searchParams.get('version'), '2026-10-28');
+    return Response.json(revised);
+  };
+  assert.deepEqual(await legalDocument('offer', '2026-10-28'), revised);
   globalThis.fetch = async () => Response.json({ ...document, text: 'tampered' });
   assert.equal(await legalDocument('offer'), null);
   globalThis.fetch = async () => new Response(JSON.stringify(document), { headers: { 'Content-Type': 'text/plain' } });

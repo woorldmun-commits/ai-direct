@@ -12,7 +12,11 @@ services:
       retries: 20
     restart: unless-stopped
   app:
-    build: .
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:10000}
+        INROU_STAGING: ${INROU_STAGING:-1}
     env_file: deploy/.env
     ports:
       - "127.0.0.1:10000:10000"

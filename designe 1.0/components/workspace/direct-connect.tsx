@@ -7,6 +7,7 @@ const labels:Record<string,string>={queued:'В очереди',running:'Загр
 
 export function DirectConnect({workspace}:{workspace:string}){
  const [state,setState]=useState<State|null>(null),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
+ const [statusError,setStatusError]=useState(false);
  const [manual,setManual]=useState<{url:string;state:string}|null>(null);
  const codeInput=useRef<HTMLInputElement>(null);
  useEffect(()=>{if(manual)codeInput.current?.focus();},[manual]);
@@ -18,8 +19,8 @@ export function DirectConnect({workspace}:{workspace:string}){
     const r=await fetch(base,{cache:'no-store'});
     if(!r.ok)throw new Error();
     const value=await r.json();
-    if(active)setState(value);
-   }catch{if(active)setMessage('Статус подключения недоступен. Обновите страницу.');}
+    if(active){setState(value);setStatusError(false);}
+   }catch{if(active)setStatusError(true);}
   };
   void load();const timer=setInterval(load,10000);
   return()=>{active=false;clearInterval(timer);};
@@ -70,10 +71,11 @@ export function DirectConnect({workspace}:{workspace:string}){
   <p>Вы перейдёте на сайт Яндекса и разрешите доступ к статистике. inrou не меняет объявления, ставки и бюджеты.</p>
   <p>Яндекс выдаёт приложению право API, которое технически позволяет управлять рекламой. В этом сервисе используются только запросы чтения.</p>
   {message&&<p role="status">{message}</p>}
-  {!state?<p>Проверяем доступ…</p>:!state.manager?<p>Подключение доступно владельцу или администратору.</p>:
+  {statusError&&<p role="alert">Статус подключения временно недоступен. Повторяем запрос каждые 10 секунд. <button type="button" className="ref-button" onClick={()=>window.location.reload()}>Обновить страницу</button></p>}
+  {!state?!statusError&&<p>Проверяем доступ…</p>:!state.manager?<p>Подключение доступно владельцу или администратору.</p>:
    !state.enabled?<p>Администратор ещё не настроил OAuth-приложение Директа.</p>:
    !state.analysis_access?<p>Доступ к анализу завершён или ещё не предоставлен. Проверьте пробный период и подписку в разделе «Тарифы» либо обратитесь к оператору пилота.</p>:<>
-   {state.run&&<p role="status">Последняя загрузка: {labels[state.run.status]||'Статус неизвестен'}. {state.run.error_code&&'Код: '+state.run.error_code+'. '}После загрузки обновите страницу: аудит может занять дополнительное время.</p>}
+   {state.run&&<p role="status">Последняя загрузка: {labels[state.run.status]||'Статус неизвестен'}. {state.run.error_code==='unsupported_currency'?'Пилот поддерживает расходы в рублях. Валюта кампании не RUB или не подтверждена; снимок не сохранён. ':state.run.error_code&&'Код: '+state.run.error_code+'. '}После загрузки обновите страницу: аудит может занять дополнительное время.</p>}
    {state.reconfiguration_required&&<p role="status">Переподключите каждый ранее подключённый аккаунт: подтвердите его счётчик и цели либо работу без Метрики. Счётчик другого аккаунта не подставляется автоматически.</p>}
    {state.connected&&<button type="button" className="ref-button" onClick={sync} disabled={busy||state.reconfiguration_required||!!state.run&&['queued','running','waiting_report'].includes(state.run.status)}>Обновить данные и анализ</button>}
    {manual?<form className="ap-form" onSubmit={complete}>
@@ -83,10 +85,10 @@ export function DirectConnect({workspace}:{workspace:string}){
     <button className="ref-button ref-primary" disabled={busy}>{busy?'Проверяем код…':'Подключить кабинет'}</button>
     <button type="button" className="ref-button" disabled={busy} onClick={()=>setManual(null)}>Начать заново</button>
    </form>:<form className="ap-form" onSubmit={submit}>
-    <label>Логин рекламного кабинета<input name="login" required maxLength={100} pattern="[A-Za-z0-9][A-Za-z0-9_.\-]*" autoComplete="off"/></label>
-    <label>Номер счётчика Метрики<input name="counter" inputMode="numeric" pattern="[0-9]+"/></label>
-    <label>ID целей через запятую<input name="goals" placeholder="12345, 67890"/></label>
-    <label>Целевая стоимость конверсии, ₽<input name="cpa" type="number" min="0.01" step="0.01"/></label>
+    <div><label>Логин рекламного кабинета<input name="login" required maxLength={100} pattern="[A-Za-z0-9][A-Za-z0-9_.\-]*" autoComplete="off" aria-describedby="direct-login-help"/></label><small id="direct-login-help">Логин выбранного кабинета, без @ и домена почты. При агентском доступе — логин клиента, к которому у вас есть права.</small></div>
+    <div><label>Номер счётчика Метрики<input name="counter" inputMode="numeric" pattern="[0-9]+" aria-describedby="direct-counter-help"/></label><small id="direct-counter-help">Номер рядом с названием сайта в списке счётчиков Метрики.</small></div>
+    <div><label>ID целей через запятую<input name="goals" placeholder="12345, 67890" aria-describedby="direct-goals-help"/></label><small id="direct-goals-help">Откройте настройки этого счётчика → Цели → ID. Укажите цели только этого счётчика.</small></div>
+    <div><label>Целевая стоимость конверсии, ₽<input name="cpa" type="number" min="0.01" step="0.01" aria-describedby="direct-cpa-help"/></label><small id="direct-cpa-help">Ваш ориентир для выбранных конверсий. Если он неизвестен, оставьте поле пустым: отраслевой норматив не подставляется.</small></div>
     <p>Без счётчика и целей анализ конверсий будет недоступен. Используйте цели из вашего счётчика Метрики.</p>
     <button className="ref-button ref-primary" disabled={busy}>{busy?'Подключаем…':'Разрешить доступ через Яндекс'}</button>
    </form>}</>}

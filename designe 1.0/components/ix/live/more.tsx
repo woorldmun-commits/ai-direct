@@ -44,12 +44,12 @@ export async function Connections({ws}: {ws: string; q: Query}) {
     <Gap /><DirectConnect workspace={ws} /></>;
 }
 
-export async function Impact({ws, q}: {ws: string; q: Query}) {
-  if (q.activity && !/^[1-9]\d{0,18}$/.test(q.activity)) return <ErrorState page code="invalid" />;
+export async function Impact({ws, q, embedded=false}: {ws: string; q: Query; embedded?:boolean}) {
+  if (q.activity && !/^[1-9]\d{0,18}$/.test(q.activity)) return <ErrorState page={!embedded} code="invalid" />;
   const activity = await safe(pilotGet(`/workspaces/${ws}/recommendation-activity${q.activity ? '?cursor=' + q.activity : ''}`, isActivity));
-  if (!activity.ok) return <ErrorState page code={activity.code} />;
+  if (!activity.ok) return <ErrorState page={!embedded} code={activity.code} />;
   return <>
-    <PageHead title="Эффект" sub="Подтверждённый результат отделяется от потенциального." />
+    {!embedded&&<PageHead title="Эффект" sub="Подтверждённый результат отделяется от потенциального." />}
     <div className="ix-grid ix-split">
       <div className="ix-card"><h2>Замеры после ручных изменений</h2><ActivityPanel data={activity.data} workspace={ws} /></div>
       <div className="ix-card"><h2>Экономический эффект</h2><div className="ix-value" style={{fontSize: 22, fontWeight: 700}}>Недостаточно данных</div>
@@ -57,10 +57,10 @@ export async function Impact({ws, q}: {ws: string; q: Query}) {
     </div></>;
 }
 
-export async function Reports({ws, expanded=false}: {ws: string; q: Query; expanded?:boolean}) {
+export async function Reports({ws, expanded=false, embedded=false}: {ws: string; q: Query; expanded?:boolean; embedded?:boolean}) {
   const report = await safe(pilotGet(`/workspaces/${ws}/weekly-report`, isWeeklyReport));
   return <>
-    <PageHead title="Отчёты" sub="Факты, источники и решения за выбранный период." actions={<LinkBtn variant="primary" href={`/workspace/reports/weekly?workspace=${ws}#weekly-report`}>Недельный отчёт</LinkBtn>} />
+    {!embedded&&<PageHead title="Отчёты" sub="Факты, источники и решения за выбранный период." actions={<LinkBtn variant="primary" href={`/workspace/reports/weekly?workspace=${ws}#weekly-report`}>Недельный отчёт</LinkBtn>} />}
     <section className="ix-card ix-report-list" aria-label="Доступные отчёты и данные">
       {[
         ['Недельный сводный','7 завершённых дней · факты и ограничения','reports/weekly','TXT'],
@@ -87,13 +87,13 @@ export async function Alerts({ws}: {ws: string; q: Query}) {
     </div></>;
 }
 
-export async function History({ws, q}: {ws: string; q: Query}) {
-  if (q.activity && !/^[1-9]\d{0,18}$/.test(q.activity)) return <ErrorState page code="invalid" />;
+export async function History({ws, q, embedded=false}: {ws: string; q: Query; embedded?:boolean}) {
+  if (q.activity && !/^[1-9]\d{0,18}$/.test(q.activity)) return <ErrorState page={!embedded} code="invalid" />;
   const activity = await safe(pilotGet(`/workspaces/${ws}/recommendation-activity${q.activity ? '?cursor=' + q.activity : ''}`, isActivity));
-  if (!activity.ok) return <ErrorState page code={activity.code} />;
+  if (!activity.ok) return <ErrorState page={!embedded} code={activity.code} />;
   const status: Record<string, string> = {applied: 'Проверка записана', postponed: 'Отложено', rejected: 'Отклонено', resolved: 'Проблема закрыта', new: 'Ожидает решения'};
   return <>
-    <PageHead title="История" sub="Неизменяемый журнал решений и проверок; автор и версия — в паспорте рекомендации." />
+    {!embedded&&<PageHead title="История" sub="Неизменяемый журнал решений и проверок; автор и версия — в паспорте рекомендации." />}
     <div className="ix-card">
       {activity.data.items.length ? activity.data.items.map(i => <RowLine key={i.id}><div><Link href={`/workspace/history/${i.id}?workspace=${ws}`}><b>{i.title}</b></Link><div className="ix-muted ix-mini">{stamp(i.updated_at)}{i.execution_mode === 'manual' ? ' · ручное выполнение заявлено, сверка ещё не подтверждена' : ''}</div></div><Tag tone="gray">{status[i.status] ?? 'Решение записано'}</Tag></RowLine>)
         : <p className="ix-muted">Записанных решений пока нет. Откройте рекомендацию и зафиксируйте результат проверки.</p>}

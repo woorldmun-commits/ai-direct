@@ -16,12 +16,14 @@
 | [SEO](seo.md) | Индексация, метаданные, скорость, доступность содержания | Проверки публичных страниц |
 | [Продукт и экономика](product-economics.md) | Сегменты, гипотезы, стоимость, метрики пользы | Решение с основаниями и неизвестными |
 | [QA](qa.md) | Негативные сценарии, регрессии и воспроизводимость | Протокол проверок точной версии |
+| [Data Contract QA](data-contract-qa.md) | Независимая сверка источника, расчётов, таблиц и графиков | Сверка и воспроизведение; только чтение |
+| [Runtime Reliability](runtime-reliability.md) | Очереди, свежесть, почта и восстановление | Эксплуатационная приёмка; только чтение |
 | [Релиз и эксплуатация](release-ops.md) | Сборка, CI, деплой, бэкапы, мониторинг, гигиена репозитория | Конфигурация и протокол проверки |
 | [Evidence Supervisor](supervisor.md) | Независимая проверка фактов, цифр и границ вывода | PASS / NEEDS_WORK / BLOCKED |
 
 ## Запуск в Claude Code
 
-Каждый профиль подключён как субагент в `.claude/agents/inrou/`: `inrou-backend-metrics`, `inrou-integrations-data`, `inrou-frontend`, `inrou-seo`, `inrou-security`, `inrou-legal`, `inrou-qa`, `inrou-product`, `inrou-release-ops` и главный `inrou-supervisor`. У каждого исполнителя своя зона записи (таблица — в `supervisor.md` агента); зоны не пересекаются. Общие файлы (`backend/db/schema.sql`, `backend/migrations/`, `auth/`, остальное `api/`, `tenancy.py`, lock-файлы) меняет только руководитель интеграции. Цикл: исполнитель → передача → `inrou-supervisor` → вердикт → владелец решает о коммите.
+Всего 12 профилей в `.claude/agents/inrou/`: `inrou-backend-metrics`, `inrou-integrations-data`, `inrou-frontend`, `inrou-seo`, `inrou-security`, `inrou-legal`, `inrou-qa`, `inrou-data-contract-qa`, `inrou-runtime-reliability`, `inrou-product`, `inrou-release-ops` и главный `inrou-supervisor`. У каждого исполнителя своя зона записи (таблица — в `supervisor.md` агента); зоны не пересекаются. Два новых проверяющих работают только на чтение. Общие файлы (`backend/db/schema.sql`, `backend/migrations/`, `auth/`, остальное `api/`, `tenancy.py`, lock-файлы) меняет только руководитель интеграции. Цикл: исполнитель → передача → `inrou-supervisor` → вердикт → владелец решает о коммите.
 
 ## Общие правила и формат передачи
 

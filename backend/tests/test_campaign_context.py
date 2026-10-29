@@ -10,7 +10,7 @@ import httpx
 import pytest
 
 from app.sources.campaigns import STRATEGY_ACTIONS, Strategy, get_campaign_contexts, parse_campaign
-from app.sources.direct import ConnectionUnavailable, DirectApiError, RetryLater
+from app.sources.direct import ConnectionUnavailable, DirectApi, DirectApiError, RetryLater
 
 
 def campaign(ctype="UNIFIED_CAMPAIGN", search=None, network=None, cid=101, **extra):
@@ -100,6 +100,27 @@ def test_own_account_sends_no_client_login():
         lambda r: seen.append(r) or httpx.Response(200, json={"result": {}})))
     assert get_campaign_contexts(http, "tok", None, [1]) == {}
     assert "Client-Login" not in seen[0].headers
+
+
+@pytest.mark.parametrize('currency', ['USD', None, ''])
+def test_live_snapshot_refuses_unconfirmed_ruble_currency(currency):
+    from app.sources.direct import UnsupportedCurrency
+    row = {**campaign(), 'Currency': currency}
+    with httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={'result': {'Campaigns': [row]}}))) as client:
+        with pytest.raises(UnsupportedCurrency):
+            DirectApi(client, 'synthetic-token', 'test-run').fetch_campaign_strategies('client-a', [101])
+
+
+def test_live_snapshot_requires_currency_context_for_every_campaign():
+    with httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={'result': {'Campaigns': []}}))) as client:
+        with pytest.raises(DirectApiError):
+            DirectApi(client, 'synthetic-token', 'test-run').fetch_campaign_strategies('client-a', [101])
+
+
+def test_non_moscow_targeting_timezone_does_not_change_report_currency():
+    row = {**campaign(), 'TimeZone': 'Asia/Yekaterinburg'}
+    with httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={'result': {'Campaigns': [row]}}))) as client:
+        assert DirectApi(client, 'synthetic-token', 'test-run').fetch_campaign_strategies('client-a', [101]) == {'101': 'manual_bidding'}
 
 
 def error(code):

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Query, Request
 
 from app.api.errors import not_found
 from app.auth.login import DOCUMENTS
-from app.legal.documents import UnknownDocument, text_path
+from app.legal.documents import VERSIONS, UnknownDocument, text_path
 
 router = APIRouter(prefix="/legal")
 PUBLIC_DOCUMENTS = DOCUMENTS | {"privacy", "cookies", "requisites"}
@@ -16,9 +16,11 @@ PUBLIC_DOCUMENTS = DOCUMENTS | {"privacy", "cookies", "requisites"}
 
 @router.get("/documents/{document}")
 def document_text(request: Request, document: str,
-                  version: Annotated[str, Query(max_length=32)], locale: Literal["ru-RU"] = "ru-RU"):
+                  version: Annotated[str | None, Query(max_length=32)] = None, locale: Literal["ru-RU"] = "ru-RU"):
     if document not in PUBLIC_DOCUMENTS:
         raise not_found()
+    if version is None:
+        version = VERSIONS[document][-1]
     try:
         raw = text_path(document, version, locale).read_bytes()
     except UnknownDocument:

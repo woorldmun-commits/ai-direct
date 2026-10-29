@@ -190,6 +190,16 @@ def test_placements_off_by_default(root):
     assert isinstance(snap, Snapshot) and not placement_rows(snap)
 
 
+@pytest.mark.parametrize('parts', [(('--', '0'), ('1', '0')), (('1', '0'), ('--', '0'))])
+def test_normalized_placement_duplicates_keep_unknown_conversions(root, parts):
+    write_placements(root, 'acc', placement_tsv((
+        ('www.avito.ru', '10', '100.00', parts[0]),
+        ('Avito.ru', '5', '50.00', parts[1]),
+    )))
+    snap = sync_account(DirectFixture(root.path), 'acc', GOALS, TO, placements=True)
+    assert placement_rows(snap) == [(CID, TO, 'avito.ru', 15, Decimal('150.00'), None)]
+
+
 def test_normalized_duplicates_are_merged_and_kept_per_campaign_and_day(root):
     day = TO - timedelta(1)
     write_placements(root, "acc", placement_tsv((

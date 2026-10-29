@@ -18,12 +18,14 @@ export async function generateMetadata({ params }: PageProps<"/legal/[slug]">): 
   return doc ? { title: doc.title, alternates: { canonical: `/legal/${slug}` }, robots: {index:false,follow:false} } : {};
 }
 
-export default async function LegalPage({ params }: PageProps<"/legal/[slug]">) {
+export default async function LegalPage({ params, searchParams }: PageProps<"/legal/[slug]">) {
   const { slug } = await params;
   const doc = LEGAL_DOCS.find((d) => d.slug === slug);
   if (!doc) notFound();
   const key = LEGAL_KEYS[slug as keyof typeof LEGAL_KEYS];
-  const published = key ? await legalDocument(key) : null;
+  const query = await searchParams;
+  const version = typeof query.version === 'string' ? query.version : undefined;
+  const published = key && !Array.isArray(query.version) ? await legalDocument(key, version) : null;
 
   return (
     <PublicFrame>
@@ -36,6 +38,7 @@ export default async function LegalPage({ params }: PageProps<"/legal/[slug]">) 
             <pre className="ix-legal-text">{published.text}</pre>
             <p className="ix-muted ix-mini" style={{overflowWrap: 'anywhere'}}>SHA256: {published.sha256}</p>
           </> : <><p className="font-semibold">Документ не утверждён или временно недоступен.</p>
+          {query.version && <p>Запрошенная редакция не доступна для согласия. Обновите страницу регистрации, чтобы проверить действующие документы.</p>}
           <p className="ix-muted">
             {slug === "requisites"
               ? "Данные оператора и исполнителя ещё не подтверждены. Реквизиты будут размещены после проверки владельцем и юристом."

@@ -23,6 +23,14 @@ def test_preflight_never_exposes_bad_configuration_values():
     assert not result['configuration_ready']
 
 
+def test_frontend_origin_must_match_https_application_at_build_time():
+    for site in ['', 'http://localhost:10000', 'https://other.example.test']:
+        assert not readiness.inspect({'INROU_APP_ORIGIN': 'https://example.test',
+            'NEXT_PUBLIC_SITE_URL': site})['checks']['frontend_build_origin_configuration']
+    assert readiness.inspect({'INROU_APP_ORIGIN': 'https://example.test',
+        'NEXT_PUBLIC_SITE_URL': 'https://example.test'})['checks']['frontend_build_origin_configuration']
+
+
 def test_signed_ip_preflight_rejects_chains_and_unconfigured_keys():
     for header, key in [('x-forwarded-for', 'x' * 32), ('x-real-ip', ''), ('bad\nheader', 'x' * 32)]:
         assert not readiness.inspect({'INROU_CLIENT_IP_HEADER': header,
