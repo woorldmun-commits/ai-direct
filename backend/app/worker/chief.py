@@ -26,7 +26,7 @@ def enqueue_recent(conn, now):
     return len(conn.execute("""
         INSERT INTO chief_analysis_jobs(workspace_id,audit_run_id)
         SELECT a.workspace_id,a.id FROM audit_runs a JOIN workspaces w ON w.id=a.workspace_id
-        WHERE a.task_key LIKE 'pilot-sync:%' AND a.created_at >= %s - interval '7 days'
+        WHERE a.task_key LIKE 'pilot-sync:%%' AND a.created_at >= %s - interval '7 days'
           AND w.status='active'
           AND EXISTS(SELECT 1 FROM audit_run_snapshots s WHERE s.audit_run_id=a.id)
         ON CONFLICT(audit_run_id) DO NOTHING RETURNING id
