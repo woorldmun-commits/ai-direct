@@ -9,7 +9,7 @@ Keep one writer per worktree and preserve changes owned by other tasks.
 
 ## Agent routing (2026-10-30)
 
-For Codex and any other IDE agent runner, use [the exact responsibility map](docs/AGENT_TEAM_AND_ROADMAP_2026-10-30.md), not a guessed list of installed workers. There are **14 development profiles (1 read-only Evidence Supervisor + 13 subagents)**. Separate from these are **13 proposed product roles (1 Chief Analyst + 12 specialists)** defined in `backend/app/intelligence/agent_control.py`; none of these 13 roles is thereby activated as an autonomous LLM process.
+For Codex and any other IDE agent runner, use [the exact responsibility map](docs/AGENT_TEAM_AND_ROADMAP_2026-10-30.md), not a guessed list of installed workers. There are **14 development profiles (1 read-only Evidence Supervisor + 13 subagents)**. Separate from these are **21 product roles (1 Chief Analyst + 20 specialists)** defined in `backend/app/intelligence/agent_control.py`. A limited Chief dispatcher and four specialist diagnostics now run on-demand; none is an autonomous LLM process. See `docs/CHIEF_EIGHT_SPECIALISTS_2026-10-30.md`.
 
 - Source/metrics changes: integration and backend-metrics implement; data-contract-qa plus finance-audit independently verify.
 - AI/agent behavior: integration owner implements, ai-safety independently checks model boundaries, provenance and prompt injection; supervisor makes a scoped verdict.
