@@ -8,7 +8,6 @@ is not trusted evidence. Its results never authorize a recommendation or ad edit
 from datetime import date
 from decimal import Decimal
 from statistics import median
-from typing import Any
 
 from app.intelligence.agent_control import INDEX
 from app.intelligence.contracts import AnalysisResult, decimal_number
@@ -52,6 +51,8 @@ def _safe_values(result: AnalysisResult, keys: tuple[str, ...]) -> bool:
 
 def _lead_quality(result: AnalysisResult) -> dict:
     role = "lead_quality"
+    if result.context.quality_status != "complete":
+        return _report(role, "blocked", reasons=("source_quality_not_complete",))
     keys = ("leads", "qualified_leads")
     if not _safe_values(result, keys):
         return _report(role, "unavailable", reasons=("qualified_lead_feed_required",))
@@ -86,7 +87,7 @@ def _anomaly_sentinel(result: AnalysisResult, daily: tuple[dict, ...]) -> dict:
         return _report(role, "blocked", reasons=("daily_limit_exceeded",))
     # Only consume the four allowlisted aggregate fields from the server. If a
     # day is missing or partial, do NOT replace it by zero or interpolate it.
-    costs: list[Decimal] = []
+    entries: list[tuple[date, Decimal]] = []
     dates: set[date] = set()
     for row in daily:
         day = date.fromisoformat(row["date"])
@@ -99,14 +100,15 @@ def _anomaly_sentinel(result: AnalysisResult, daily: tuple[dict, ...]) -> dict:
         value = decimal_number(metric["amount"])
         if value < 0:
             return _report(role, "blocked", reasons=("negative_daily_spend",))
-        costs.append(value)
-    if len(costs) < 6:
+        entries.append((day, value))
+    if len(entries) < 6:
         return _report(role, "unavailable", reasons=("six_complete_days_required",))
     if sorted(dates) != [
-        result.context.period_end.fromordinal(result.context.period_end.toordinal() - len(dates) + i)
+        date.fromordinal(result.context.period_end.toordinal() - len(dates) + i)
         for i in range(len(dates))
     ]:
         return _report(role, "unavailable", reasons=("daily_calendar_gaps",))
+    costs = [value for _, value in sorted(entries)]
     old = Decimal(median(costs[-6:-3]))
     recent = Decimal(median(costs[-3:]))
     if old <= 0:
