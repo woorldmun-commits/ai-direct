@@ -19,11 +19,11 @@
 | [Data Contract QA](data-contract-qa.md) | Независимая сверка источника, расчётов, таблиц и графиков | Сверка и воспроизведение; только чтение |
 | [Runtime Reliability](runtime-reliability.md) | Очереди, свежесть, почта и восстановление | Эксплуатационная приёмка; только чтение |
 | [Релиз и эксплуатация](release-ops.md) | Сборка, CI, деплой, бэкапы, мониторинг, гигиена репозитория | Конфигурация и протокол проверки |
-| [Evidence Supervisor](supervisor.md) | Независимая проверка фактов, цифр и границ вывода | PASS / NEEDS_WORK / BLOCKED |
+| [Financial Evidence QA](finance-audit.md) | Независимо проверяет финансы, доказанность выручки, нулевые/неизвестные данные, оценочную экономию | Read-only вердикт и воспроизводимые расчёты |\n| [AI Safety QA](ai-safety.md) | Проверяет достоверность AI-выводов, границы tools/LLM, prompt injection, агенты без самоодобрения | Read-only veto и негативные сценарии |\n| [Evidence Supervisor](supervisor.md) | Независимая проверка фактов, цифр и границ вывода | PASS / NEEDS_WORK / BLOCKED |
 
 ## Запуск в Claude Code
 
-Всего 12 профилей в `.claude/agents/inrou/`: `inrou-backend-metrics`, `inrou-integrations-data`, `inrou-frontend`, `inrou-seo`, `inrou-security`, `inrou-legal`, `inrou-qa`, `inrou-data-contract-qa`, `inrou-runtime-reliability`, `inrou-product`, `inrou-release-ops` и главный `inrou-supervisor`. У каждого исполнителя своя зона записи (таблица — в `supervisor.md` агента); зоны не пересекаются. Два новых проверяющих работают только на чтение. Общие файлы (`backend/db/schema.sql`, `backend/migrations/`, `auth/`, остальное `api/`, `tenancy.py`, lock-файлы) меняет только руководитель интеграции. Цикл: исполнитель → передача → `inrou-supervisor` → вердикт → владелец решает о коммите.
+Всего 14 профилей в `.claude/agents/inrou/`: `inrou-backend-metrics`, `inrou-integrations-data`, `inrou-frontend`, `inrou-seo`, `inrou-security`, `inrou-legal`, `inrou-qa`, `inrou-data-contract-qa`, `inrou-runtime-reliability`, `inrou-product`, `inrou-release-ops`, `inrou-finance-audit`, `inrou-ai-safety` и главный `inrou-supervisor`. У каждого исполнителя своя зона записи (таблица — в `supervisor.md` агента); зоны не пересекаются. Независимые Data Contract QA, Runtime Reliability, Financial Evidence QA и AI Safety QA работают только на чтение. Общие файлы (`backend/db/schema.sql`, `backend/migrations/`, `auth/`, остальное `api/`, `tenancy.py`, lock-файлы) меняет только руководитель интеграции. Цикл: исполнитель → передача → `inrou-supervisor` → вердикт → владелец решает о коммите.
 
 ## Общие правила и формат передачи
 
@@ -49,3 +49,7 @@
 Запуск из `backend`: `python -m app.agents verify claims.json --evidence trusted-manifest.json`.
 
 JSON Schema: `python -c "import json; from app.agents.supervisor import Submission; print(json.dumps(Submission.model_json_schema()))"`; аналогично `Manifest`. Формат и доверительная граница — в [контракте](../handoffs/project-agents-contract.md).
+
+## Актуальная схема 30.10.2026
+
+14 IDE-профилей (1 Evidence Supervisor и 13 субагентов). Они **не равны** 13 целевым ролям AI-продукта (1 Chief Analyst и 12 специалистов): см. [реестр и последовательный план](../AGENT_TEAM_AND_ROADMAP_2026-10-30.md). Новые два проверяющих являются read-only; при работе с финансовыми или AI-изменениями их независимые вердикты необходимы. Наличие профиля не означает его фактический запуск.
