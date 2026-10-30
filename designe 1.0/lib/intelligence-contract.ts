@@ -72,3 +72,38 @@ export function isSnapshotAnalysis(v:unknown):v is SnapshotAnalysis {
   &&Array.isArray(v.provenance)&&v.provenance.length<=100&&v.provenance.every(p=>object(p)&&text(p.ad_account)&&text(p.snapshot_id)&&instant(p.sealed_at))
   &&strings(v.limitations)&&object(v.limits)&&v.limits.external_llm===false&&v.limits.external_execution===false;
 }
+
+export type ChiefSpecialistReport = {
+ role:string;status:'blocked'|'unavailable'|'review_required';
+ evidence_ids:string[];reason_codes:string[];observations:Record<string,unknown>;
+ external_llm:false;advertising_write_allowed:false;
+};
+export type ChiefReport = {available:false;reason:string}|{
+ available:true;chief:'chief_analyst';status:'blocked'|'review_required';
+ specialists:ChiefSpecialistReport[];
+ external_llm:false;publication_allowed:false;advertising_write_allowed:false;
+ independent_review_verified:false;reason_codes:string[];
+};
+export const CHIEF_AGENT_CODES = [
+ 'lead_quality','tracking_integrity','search_intent','landing_cro',
+ 'anomaly_sentinel','customer_value','knowledge_steward','recommendation_challenger',
+] as const;
+export function isChiefReport(v:unknown):v is ChiefReport {
+ if(!object(v)||typeof v.available!=='boolean')return false;
+ if(!v.available)return text(v.reason);
+ if(v.chief!=='chief_analyst'||!['blocked','review_required'].includes(String(v.status))
+  ||v.external_llm!==false||v.publication_allowed!==false||v.advertising_write_allowed!==false
+  ||v.independent_review_verified!==false||!strings(v.reason_codes)
+  ||!Array.isArray(v.specialists)||v.specialists.length!==8)return false;
+ const roles=new Set(CHIEF_AGENT_CODES);
+ const observed=new Set<string>();
+ for(const item of v.specialists){
+  if(!object(item)||typeof item.role!=='string'||!roles.has(item.role as typeof CHIEF_AGENT_CODES[number])
+    ||observed.has(item.role)||!['blocked','unavailable','review_required'].includes(String(item.status))
+    ||!strings(item.evidence_ids)||!strings(item.reason_codes)||!object(item.observations)
+    ||Object.keys(item.observations).length>8||item.external_llm!==false
+    ||item.advertising_write_allowed!==false)return false;
+  observed.add(item.role);
+ }
+ return true;
+}
