@@ -15,6 +15,7 @@ from app.sources.direct import DirectApi
 from app.sources.http import api_client
 from app.sources.metrika import MetrikaApi
 from app.tenancy import workspace_scope
+from app.worker.chief import enabled as chief_enabled, enqueue_recent as enqueue_chief, due as due_chief, process as process_chief
 from app.worker.audit import run_audit
 from app.worker.guard import Skip, Task, guard, load_state
 from app.worker.sync import Done, run_sync
@@ -100,6 +101,17 @@ def tick(queue, token_conn, *, provider, keys, release_id, http, now):
         except Exception as exc:
             queue.execute("UPDATE sync_runs SET available_at=%s + interval '60 seconds' WHERE id=%s", (now, run_id))
             log.error("run=%s failed type=%s", run_id, type(exc).__name__)
+    # Reconcile a crash between committed audit and job enqueue. All jobs are
+    # idempotent and read-only; flags must be explicitly approved for real data.
+    if chief_enabled():
+        enqueue_chief(queue, now)
+        for chief_id, chief_ws in due_chief(queue, now):
+            try:
+                process_chief(queue, chief_id, chief_ws, now)
+            except psycopg.OperationalError:
+                raise
+            except Exception as exc:
+                log.error("chief_job=%s error_type=%s", chief_id, type(exc).__name__)
     for measurement_id in due_measurements(queue, now.astimezone(DATA_TIMEZONE).date()):
         try:
             run_measurement(token_conn, measurement_id, release_id=release_id, now=now)
