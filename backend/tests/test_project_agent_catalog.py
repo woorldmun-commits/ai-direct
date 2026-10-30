@@ -62,5 +62,5 @@ def test_team_readme_explicitly_distinguishes_runtime_from_ide_profiles():
     for code in ("finance-audit", "ai-safety"):
         assert code in readme
     roster = (ROOT / "docs" / "AGENT_TEAM_AND_ROADMAP_2026-10-30.md").read_text(encoding="utf-8")
-    assert "1 Chief Analyst + 12" in roster
+    assert "1 Chief Analyst + 20" in roster
     assert "1 главный проверяющий + 13" in roster

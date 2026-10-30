@@ -14,6 +14,17 @@ for(const method of ['POST','PUT','DELETE'])assert(!paths.workspacePath('/worksp
 assert(!paths.workspacePath('/workspaces/ws_1/subscription?payment_method_ref=x','GET'));
 for(const valid of ['campaign-stats?days=7','campaign-stats?days=30&ad_account=acc_12','campaign-stats?days=7&ad_account=acc_12&campaign_id=345'])assert(paths.workspacePath('/workspaces/ws_1/'+valid,'GET'));
 for(const invalid of ['campaign-stats?days=8','campaign-stats?days=7&campaign_id=1','campaign-stats?days=30&ad_account=acc_0','campaign-stats?days=30&url=https://evil.example'])assert(!paths.workspacePath('/workspaces/ws_1/'+invalid,'GET'));
+for(const allowed of [
+ '/workspaces/ws_1/intelligence/chief-analyst',
+ '/workspaces/ws_1/intelligence/chief-analyst?days=7',
+ '/workspaces/ws_1/intelligence/chief-analyst?days=30',
+])assert(paths.workspacePath(allowed,'GET'));
+for(const rejected of [
+ '/workspaces/ws_1/intelligence/chief-analyst?days=365',
+ '/workspaces/ws_1/intelligence/chief-analyst?workspace=ws_2',
+ '/workspaces/ws_1/intelligence/chief-analyst?days=7&url=https://evil.example',
+])assert(!paths.workspacePath(rejected,'GET'));
+assert(!paths.workspacePath('/workspaces/ws_1/intelligence/chief-analyst','POST'));
 const token='a'.repeat(43),base='https://inrou.example',path='/workspaces/ws_1/insights';
 const request=(method='GET',overrides={})=>new Request(base+'/api'+path,{method,headers:{Cookie:'unrelated=private; session='+token,...(method==='POST'?{Origin:base,'Content-Type':'application/json'}:{})},...(method==='POST'?{body:'{}'}:{}),...overrides});
 const oldApp=process.env.INROU_APP_ORIGIN;delete process.env.INROU_APP_ORIGIN;

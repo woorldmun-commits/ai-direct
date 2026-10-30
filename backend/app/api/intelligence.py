@@ -17,6 +17,7 @@ from app.insights import campaign_stats
 from app.intelligence.contracts import AnalysisContext, AnalysisResult, Period, SourceReference, decimal_number
 from app.intelligence.economics import INPUT_UNITS
 from app.intelligence.knowledge import industries
+from app.intelligence.specialist_runtime import chief_analyze
 from app.intelligence.profiles import BusinessFields
 from app.intelligence.tools import AudienceDiscoveryInput, CPAComparisonInput, MetricCalculationInput, RunBudget, ToolContext, invoke
 from app.worker.guard import load_state
@@ -377,6 +378,37 @@ def snapshot_analysis(request: Request, conn: Conn, ws: CurrentWorkspace, days: 
             'limitations': data['limitations']+['Расчёт по сохранённым снимкам, не новый запрос в Яндекс.',
                 'Причина изменения и экономия не доказаны; профиль бизнеса подтверждает пользователь.'],
             'limits': {'external_llm': False, 'external_execution': False}}
+
+
+@router.get('/workspaces/{workspace_id}/intelligence/chief-analyst')
+def chief_analyst_review(request: Request, conn: Conn, ws: CurrentWorkspace,
+                         days: Literal['7', '30'] = '30'):
+    """Read-only, deterministic specialist diagnostics from server-scoped snapshots.
+
+    No autonomous LLM, notifications, persisted agent runs or advertising writes.
+    Re-read daily observations only if sealed provenance is unchanged; fail
+    closed if a sync replaces the snapshot between the two reads.
+    """
+    prepared = snapshot_analysis(request, conn, ws, days=days)
+    if not prepared.get('available'):
+        return prepared
+    if prepared['verification']['status'] != 'pass':
+        raise ApiError(409, 'verification_blocked')
+    result = AnalysisResult.model_validate(prepared['result'])
+    current = campaign_stats.build(conn, ws.id, today_msk(), datetime.now(timezone.utc), days=int(days))
+    if (current['provenance'] != prepared['provenance']
+            or current['scope'] != prepared['scope']
+            or current['period']['from'] != result.context.period_start.isoformat()
+            or date.fromisoformat(current['period']['to']) + timedelta(days=1) != result.context.period_end
+            or any(decimal_number(current['summary'][key]['amount']) != result.metrics[key].value
+                   for key in ('cost', 'clicks', 'impressions', 'conversions'))):
+        raise ApiError(409, 'snapshot_changed', message='Снимок обновился. Повторите анализ.')
+    report = chief_analyze(result, daily=tuple(current['daily']), profile=prepared['profile'])
+    return {'available': True, **report,
+            'limitations': ['Только чтение агрегатов текущего workspace.',
+                            'Проверки выполнены локальным кодом, внешняя LLM не использовалась.',
+                            'Сверка из одного backend не подтверждает независимость reviewer.',
+                            'Отчёт не является разрешением на изменение рекламных кампаний.']}
 
 
 @router.get('/workspaces/{workspace_id}/intelligence/imports/{import_id}')

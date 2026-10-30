@@ -23,11 +23,11 @@
 | 12 | inrou-finance-audit | **Новый** независимый аудитор CPA/CAC/ROAS/прибыли и причинного эффекта | read-only |
 | 13 | inrou-ai-safety | **Новый** независимый AI auditor: источники, prompt injection, budget, tool/LLM safety | read-only |
 
-**Команда продукта для клиентов: целевая структура из 13 ролей = 1 Chief Analyst + 12 узких специалистов.** Это *архитектурные роли* в `backend/app/intelligence/agent_control.py`, а не 13 запущенных нейросетей. В runtime доступна только прежняя детерминированная инфраструктура и offline evidence gate. Большинство ролей требуют реализации и отдельного подключения.
+**Команда продукта для клиентов: целевая структура из 21 роли = 1 Chief Analyst + 20 специалистов.** Это *архитектурные роли* из `backend/app/intelligence/agent_control.py`, а не 21 запущенная нейросеть. В этой ветке добавлен ограниченный, read-only Chief dispatcher и структурные диагностики на запечатанных снимках. Фоновые AI/LLM, массовая оркестрация, live CRM/queries/CRO и независимая сертификация источника ещё не реализованы. См. `CHIEF_EIGHT_SPECIALISTS_2026-10-30.md`.
 
 | № | Код роли | Ответственность | Актуальный статус |
 |---:|---|---|---|
-| 0 | chief_analyst | Собрать проверенные сигналы, разрешить конфликты, отправить на human decision | planned |
+| 0 | chief_analyst | Ограниченный on-demand read-only dispatcher; не автономный LLM | on_demand_read_only |
 | 1 | data_health | Достоверность, полнота, актуальность, валюта источников | foundation_only |
 | 2 | direct_performance | CPA и расход, конверсии, расходы без результата, правила | foundation_only |
 | 3 | conversion_attribution | Сопоставление целей, счётчика, атрибуции, досчёта | foundation_only |
@@ -38,12 +38,20 @@
 | 8 | budget | Сценарии бюджетирования, без действий в Директе | planned |
 | 9 | creative | Анализ и генерация гипотез текстов/креативов из подтверждённого брифа | planned |
 | 10 | experiment | Планирование A/B, guardrails, критерии подтверждения эффекта | planned |
+| 13 | lead_quality | Проверяет долю квалифицированных лидов, если данные доступны | on_demand_read_only |
+| 14 | tracking_integrity | Выявляет отсутствие совместимых конверсий/неполные настройки | on_demand_read_only |
+| 15 | search_intent | Нужен безопасный источник тематик поисковых запросов | planned |
+| 16 | landing_cro | Нужны реальные этапы воронки посадочной страницы | planned |
+| 17 | anomaly_sentinel | Кандидат на изменение расходов по полным дням, не причинный вывод | on_demand_read_only |
+| 18 | customer_value | CRM cohorts/повторные продажи не подключены | planned |
+| 19 | knowledge_steward | Проверяет модель ниши и версию источников | on_demand_read_only |
+| 20 | recommendation_challenger | Блокирует неподтверждённые изменения и причинные обещания | on_demand_read_only |
 | 11 | evidence_verifier | Структурная независимая проверка источника/формул/снимка | foundation_only (offline) |
 | 12 | risk_guardian | Безопасность действий, совместимость стратегий, policy gates | foundation_only (policy) |
 
 `foundation_only` означает, что существует полезный код для этой задачи; это **не работающий автономный агент**.
 
-## Б. Кто проверяет кого — обязательно
+\n> **Актуализация:** роли 13–20 добавлены в новой ветке; ограничения и код реализации описаны в `CHIEF_EIGHT_SPECIALISTS_2026-10-30.md`. До подключения источников три новые роли возвращают `unavailable`, а не рекламные советы.\n\n## Б. Кто проверяет кого — обязательно
 
 1. Data Health проверяет source status/snapshot/currency/period/goal. При missing/partial/stale запрет категоричных решений.
 2. Direct Performance / Finance / другие специалисты формируют **только структурированные кандидаты** со ссылками на records. Тексты LLM не меняют числа и status.

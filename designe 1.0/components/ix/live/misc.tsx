@@ -6,7 +6,7 @@ import {isBillingCatalog,isBillingRecovery} from '@/lib/billing-contract';
 import {DirectConnect} from '@/components/workspace/direct-connect';
 import {IntelligencePanel} from '@/components/workspace/intelligence';
 import {isInsights} from '@/lib/insights-contract';
-import {isIntelligence,isSnapshotAnalysis} from '@/lib/intelligence-contract';
+import {isChiefReport,isIntelligence,isSnapshotAnalysis} from '@/lib/intelligence-contract';
 import {isSubscriptionRead} from '@/lib/subscription-contract';
 import {formatAmount} from '@/lib/value';
 import {isMembers, safe, stamp} from '@/lib/ix-live';
@@ -19,7 +19,7 @@ import {ThemeRow} from './theme-row';
 
 export async function Ai({ws, cursor}: {ws: string; cursor?: string}) {
   if (cursor && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cursor)) return <ErrorState page code="invalid" />;
-  const [intel, insights, snapshots, today] = await Promise.all([safe(pilotGet(`/workspaces/${ws}/intelligence${cursor ? '?cursor=' + cursor : ''}`, isIntelligence)), safe(pilotGet(`/workspaces/${ws}/insights`, isInsights)),safe(pilotGet(`/workspaces/${ws}/intelligence/snapshot-analysis`,isSnapshotAnalysis)),safe(pilotGet(`/workspaces/${ws}/today`,isToday))]);
+  const [intel, insights, snapshots, today, chief] = await Promise.all([safe(pilotGet(`/workspaces/${ws}/intelligence${cursor ? '?cursor=' + cursor : ''}`, isIntelligence)), safe(pilotGet(`/workspaces/${ws}/insights`, isInsights)),safe(pilotGet(`/workspaces/${ws}/intelligence/snapshot-analysis`,isSnapshotAnalysis)),safe(pilotGet(`/workspaces/${ws}/today`,isToday)),safe(pilotGet(`/workspaces/${ws}/intelligence/chief-analyst?days=30`,isChiefReport))]);
   return <>
     <PageHead title="AI-аналитик" sub="Объяснения только на основе проверенных данных и расчётов." />
     <Info>Анализ по данным пространства и вашим агрегатам. Внешняя языковая модель не подключена.</Info><Gap />
@@ -35,6 +35,20 @@ export async function Ai({ws, cursor}: {ws: string; cursor?: string}) {
       </>:<p>{snapshots.data.reason==='no_snapshot'?'Нет пригодных снимков выбранных аккаунтов. Проверьте подключение и период данных.':'Разбор подключённых данных откроется после допуска реальных источников. Синтетический пример доступен отдельно.'}</p>:<ErrorState code={snapshots.code}/>}
       {today.ok&&!!today.data.top?.length&&<><h3>Рекомендации последнего аудита</h3><p className="ix-muted ix-mini">Период аудита может отличаться от периода расчёта выше. Проверяйте дату и основания в паспорте.</p><ul>{today.data.top.map(rec=><li key={rec.id}><Link href={`/workspace/recommendations?workspace=${ws}&rec=${rec.id}`}>{rec.title}</Link></li>)}</ul></>}
     </Card><Gap />
+    {chief.ok&&chief.data.available&&<Card label="Главный аналитик"><h2>Chief Analyst · проверка 8 специалистов</h2>
+      <p className="ix-muted ix-mini">Автоматическая диагностика по сохранённым агрегатам. Это локальные правила, а не восемь запущенных нейросетей. Ни один вывод не разрешает менять рекламу; независимая проверка источников и причин пока не завершена.</p>
+      <p role="status">Статус: {chief.data.status==='blocked'?'Требуется устранить ограничения данных':'Нужна проверка человеком и независимым контролёром'}.</p>
+      <ul>{chief.data.specialists.map(agent=><li key={agent.role}>
+        <b>{{lead_quality:'Качество лидов',tracking_integrity:'Цели и конверсии',search_intent:'Поисковые намерения',landing_cro:'Конверсия посадочных',anomaly_sentinel:'Аномалии расходов',customer_value:'Ценность клиентов',knowledge_steward:'Отраслевые знания',recommendation_challenger:'Критическая проверка'}[agent.role as 'lead_quality']??agent.role}</b>
+        {' — '}{agent.status==='unavailable'?'Нужен дополнительный источник':agent.status==='blocked'?'Заблокировано до проверки':'Предварительная диагностика'}
+        {agent.role==='lead_quality'&&typeof agent.observations.qualified_lead_share_pct==='string'&&<span> · доля квалифицированных обращений: {agent.observations.qualified_lead_share_pct}%</span>}
+        {agent.role==='anomaly_sentinel'&&agent.observations.large_spend_change_candidate===true&&<span> · возможное изменение расходов: требует проверки</span>}
+      </li>)}</ul>
+      <p className="ix-muted ix-mini">При отсутствии CRM, данных по поисковым запросам или воронке агент честно сообщает о недоступном анализе. Причинный финансовый эффект не подтверждён.</p>
+    </Card>}
+    {chief.ok&&!chief.data.available&&<Info>Chief Analyst: анализ на реальных снимках пока недоступен. {chief.data.reason==='no_snapshot'?'Нет сохранённой статистики.':'Нужны допуск данных и активные подключения.'}</Info>}
+    {!chief.ok&&<Info warning>Не удалось проверить диагностические результаты Chief Analyst. Рекомендации на их основе не публикуются.</Info>}
+    <Gap />
     <details className="ix-card"><summary>Ручной импорт и отдельные расчёты</summary><p>Этот раздел не нужен для разбора подключённого Директа. Он работает с загруженными агрегатами; синтетические примеры не относятся к вашему кабинету.</p>{intel.ok ? <IntelligencePanel workspace={ws} data={intel.data} /> : <ErrorState code={intel.code} />}</details>
     <Gap /><details className="ix-card ix-analyst-method"><summary>Методика, факты и ограничения</summary>
       <p className="ix-muted ix-mini">Расчёты выполняет детерминированный код на сервере. Результат сохраняется с источниками и ограничениями. Уверенность зависит от полноты данных; при нехватке показано «Недостаточно данных».</p>
