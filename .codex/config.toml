@@ -1,0 +1,8 @@
+# INROU scoped REA MCP integration for trusted Codex projects.
+# Requires Node.js 22.23.4+, 24.22.1+, or 26.12.1+ and network access to npm.
+# Pin the tool version; review upgrades and run the upstream setup for the skill.
+[mcp_servers.rea]
+command = "npx"
+args = ["--yes", "rea-agents@6.8.0", "mcp"]
+startup_timeout_sec = 30
+tool_timeout_sec = 120

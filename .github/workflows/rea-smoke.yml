@@ -1,0 +1,42 @@
+name: REA CLI integration smoke
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".codex/config.toml"
+      - "docs/REA_CODEX_INROU.md"
+      - ".github/workflows/rea-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  rea-cli-smoke:
+    name: Verify REA 6.8.0 CLI on INROU JS scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.4"
+      - name: Verify runtime
+        run: |
+          node --version
+          npm --version
+      - name: Verify REA and run bounded static inspection
+        run: |
+          mkdir -p rea-evidence
+          npx --yes rea-agents@6.8.0 --version > rea-evidence/version.txt
+          npx --yes rea-agents@6.8.0 analyze-javascript-application "$GITHUB_WORKSPACE/designe 1.0/scripts" --json > rea-evidence/javascript-report.json
+          test -s rea-evidence/javascript-report.json
+      - name: Upload CLI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rea-cli-evidence
+          path: rea-evidence/
+          if-no-files-found: warn
+          retention-days: 7
