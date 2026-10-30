@@ -42,7 +42,9 @@ def test_one_job_per_audit_with_fenced_retry_and_history(rw, funded, insights_ap
     audit = audit_job(rw, funded)
     assert chief.enqueue_recent(rw, NOW) == 1
     assert chief.enqueue_recent(rw, NOW) == 0
-    job_id, ws = chief.due(rw, NOW)[0]
+    job_id = rw.execute("SELECT id FROM chief_analysis_jobs WHERE audit_run_id=%s",(audit,)).fetchone()[0]
+    ws = funded["ws"]
+    assert (job_id,ws) in chief.due(rw,NOW)
     assert ws == funded["ws"]
     monkeypatch.setattr(chief, "load_state", lambda *_: SimpleNamespace(
         workspace_status="active",has_analysis_access=True))
@@ -74,9 +76,11 @@ def test_job_is_tenant_scoped_and_cannot_be_created_by_client(db, rw, funded):
 
 
 def test_crashed_claim_is_recovered_without_duplicate(rw,funded):
-    audit_job(rw,funded)
+    audit=audit_job(rw,funded)
     chief.enqueue_recent(rw,NOW)
-    jid,ws=chief.due(rw,NOW)[0]
+    jid=rw.execute("SELECT id FROM chief_analysis_jobs WHERE audit_run_id=%s",(audit,)).fetchone()[0]
+    ws=funded["ws"]
+    assert (jid,ws) in chief.due(rw,NOW)
     assert chief.claim(rw,jid,ws,NOW)==1
     assert (jid,ws) not in chief.due(rw,NOW)
     assert chief.claim(rw,jid,ws,NOW+timedelta(minutes=4))==2
@@ -93,9 +97,11 @@ def test_wrong_workspace_audit_reference_is_blocked_by_db(rw,funded):
 
 def test_changed_selected_snapshot_cannot_be_silently_used(rw,funded,monkeypatch):
     rw.execute("SELECT start_registration_trial(%s,%s)",(funded["user"],funded["ws"]))
-    audit_job(rw,funded)
+    audit=audit_job(rw,funded)
     chief.enqueue_recent(rw,NOW)
-    jid,ws=chief.due(rw,NOW)[0]
+    jid=rw.execute("SELECT id FROM chief_analysis_jobs WHERE audit_run_id=%s",(audit,)).fetchone()[0]
+    ws=funded["ws"]
+    assert (jid,ws) in chief.due(rw,NOW)
     monkeypatch.setattr(chief, "load_state", lambda *_: SimpleNamespace(
         workspace_status="active",has_analysis_access=True))
     rw.execute("UPDATE direct_accounts SET is_selected=false WHERE id=%s",(funded["account"],))
