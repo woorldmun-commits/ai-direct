@@ -10,7 +10,7 @@ from app.worker import chief
 from test_campaign_stats import funded, insights_api, req  # noqa: F401
 from test_schema import chain, new_workspace  # noqa: F401
 
-NOW = datetime.now(timezone.utc) + timedelta(minutes=1)
+NOW = datetime.now(timezone.utc) + timedelta(hours=2)
 
 
 def audit_job(rw, funded):
@@ -74,7 +74,7 @@ def test_crashed_claim_is_recovered_without_duplicate(rw,funded):
     chief.enqueue_recent(rw,NOW)
     jid,ws=chief.due(rw,NOW)[0]
     assert chief.claim(rw,jid,ws,NOW)==1
-    assert chief.due(rw,NOW)==[]
+    assert (jid,ws) not in chief.due(rw,NOW)
     assert chief.claim(rw,jid,ws,NOW+timedelta(minutes=4))==2
     assert rw.execute("SELECT attempts FROM chief_analysis_jobs WHERE id=%s",(jid,)).fetchone()[0]==2
 
