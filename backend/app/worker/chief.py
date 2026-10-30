@@ -3,6 +3,7 @@ import json
 import os
 from datetime import datetime, timedelta
 
+import psycopg
 from psycopg.types.json import Jsonb
 
 from app.insights import campaign_stats
@@ -135,6 +136,8 @@ def process(conn, job_id, ws, now):
             AND status='running' AND attempts=%s""",
             (status, Jsonb(report), now, job_id, ws, attempt))
         return True
+    except psycopg.OperationalError:
+        raise
     except Exception:
         # No external source values, text or tokens in the error log or database.
         final = attempt >= 4
