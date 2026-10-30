@@ -40,6 +40,7 @@ CREATE POLICY chief_read ON chief_analysis_jobs TO app_rw
 CREATE POLICY chief_system ON chief_analysis_jobs TO app_system
  USING (true) WITH CHECK (true);
 REVOKE ALL ON chief_analysis_jobs FROM PUBLIC;
+REVOKE INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER ON chief_analysis_jobs FROM app_rw,app_token;
 GRANT SELECT ON chief_analysis_jobs TO app_rw;
 GRANT SELECT,INSERT,UPDATE(status,attempts,available_at,finished_at,error_code,report)
  ON chief_analysis_jobs TO app_system;
