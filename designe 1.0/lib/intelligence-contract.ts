@@ -107,3 +107,24 @@ export function isChiefReport(v:unknown):v is ChiefReport {
  }
  return true;
 }
+
+
+export type ChiefHistoryItem = {
+ id:string;audit_run_id:string;status:'queued'|'running'|'completed'|'blocked'|'failed'|'skipped';
+ attempts:number;created_at:string;finished_at:string|null;error_code:string|null;
+ report:Record<string,unknown>|null;
+};
+export type ChiefHistory = {enabled:boolean;mode:'read_only';external_llm:false;
+ advertising_write_allowed:false;items:ChiefHistoryItem[]};
+export function isChiefHistory(v:unknown):v is ChiefHistory {
+ return object(v)&&typeof v.enabled==='boolean'&&v.mode==='read_only'
+  &&v.external_llm===false&&v.advertising_write_allowed===false
+  &&Array.isArray(v.items)&&v.items.length<=10&&v.items.every(i=>object(i)
+    &&typeof i.id==='string'&&/^[1-9]\d{0,18}$/.test(i.id)
+    &&typeof i.audit_run_id==='string'&&/^[1-9]\d{0,18}$/.test(i.audit_run_id)
+    &&['queued','running','completed','blocked','failed','skipped'].includes(String(i.status))
+    &&integer(i.attempts)&&i.attempts<=4&&instant(i.created_at)
+    &&(i.finished_at===null||instant(i.finished_at))
+    &&(i.error_code===null||text(i.error_code))
+    &&(i.report===null||object(i.report)));
+}
