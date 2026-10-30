@@ -380,6 +380,23 @@ def snapshot_analysis(request: Request, conn: Conn, ws: CurrentWorkspace, days: 
             'limits': {'external_llm': False, 'external_execution': False}}
 
 
+@router.get('/workspaces/{workspace_id}/intelligence/chief-history')
+def chief_history(conn: Conn, ws: CurrentWorkspace):
+    """Tenant-scoped automatic diagnostics; historical results never authorize a change."""
+    rows = conn.execute("""
+       SELECT id,audit_run_id,status,attempts,created_at,finished_at,error_code,report
+       FROM chief_analysis_jobs WHERE workspace_id=%s
+       ORDER BY created_at DESC,id DESC LIMIT 10
+    """, (ws.id,)).fetchall()
+    return {"enabled": True, "mode": "read_only",
+            "external_llm": False, "advertising_write_allowed": False,
+            "items": [{"id": str(item[0]), "audit_run_id": str(item[1]),
+                       "status": item[2], "attempts": item[3],
+                       "created_at": item[4].isoformat(),
+                       "finished_at": item[5].isoformat() if item[5] else None,
+                       "error_code": item[6], "report": item[7]} for item in rows]}
+
+
 @router.get('/workspaces/{workspace_id}/intelligence/chief-analyst')
 def chief_analyst_review(request: Request, conn: Conn, ws: CurrentWorkspace,
                          days: Literal['7', '30'] = '30'):
