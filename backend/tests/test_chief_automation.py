@@ -37,17 +37,20 @@ def test_runtime_disabled_by_default_and_requiring_both_approvals():
                           "INROU_INTELLIGENCE_REAL_DATA_APPROVED":"1"}) is True
 
 
-def test_one_job_per_audit_with_fenced_retry_and_history(rw, funded, insights_api):
+def test_one_job_per_audit_with_fenced_retry_and_history(rw, funded, insights_api, monkeypatch):
     rw.execute("SELECT start_registration_trial(%s,%s)", (funded["user"],funded["ws"]))
     audit = audit_job(rw, funded)
     assert chief.enqueue_recent(rw, NOW) == 1
     assert chief.enqueue_recent(rw, NOW) == 0
     job_id, ws = chief.due(rw, NOW)[0]
     assert ws == funded["ws"]
+    monkeypatch.setattr(chief, "load_state", lambda *_: SimpleNamespace(
+        workspace_status="active",has_analysis_access=True))
     assert chief.process(rw, job_id, ws, NOW)
     status, attempts, payload = rw.execute(
         "SELECT status,attempts,report FROM chief_analysis_jobs WHERE id=%s",(job_id,)).fetchone()
-    assert status in ("completed","blocked","skipped")
+    assert status in ("completed","blocked")
+    assert len(payload["specialists"]) == 8
     assert attempts == 1
     assert payload["publication_allowed"] is False
     assert chief.process(rw,job_id,ws,NOW) is False
