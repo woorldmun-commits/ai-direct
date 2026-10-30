@@ -10,7 +10,7 @@ from app.worker import chief
 from test_campaign_stats import funded, insights_api, req  # noqa: F401
 from test_schema import chain, new_workspace  # noqa: F401
 
-NOW = datetime.now(timezone.utc)
+NOW = datetime.now(timezone.utc) + timedelta(minutes=1)
 
 
 def audit_job(rw, funded):
