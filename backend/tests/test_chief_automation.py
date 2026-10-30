@@ -93,7 +93,9 @@ def test_changed_selected_snapshot_cannot_be_silently_used(rw,funded,monkeypatch
     audit_job(rw,funded)
     chief.enqueue_recent(rw,NOW)
     jid,ws=chief.due(rw,NOW)[0]
-    monkeypatch.setattr(chief, "load_state", lambda *_: SimpleNamespace(\n        workspace_status="active",has_analysis_access=True))\n    rw.execute("UPDATE direct_accounts SET is_selected=false WHERE id=%s",(funded["account"],))
+    monkeypatch.setattr(chief, "load_state", lambda *_: SimpleNamespace(
+        workspace_status="active",has_analysis_access=True))
+    rw.execute("UPDATE direct_accounts SET is_selected=false WHERE id=%s",(funded["account"],))
     assert chief.process(rw,jid,ws,NOW)
     status, report = rw.execute("SELECT status,report FROM chief_analysis_jobs WHERE id=%s",(jid,)).fetchone()
     assert status=="blocked"
