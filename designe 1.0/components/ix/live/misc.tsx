@@ -6,7 +6,7 @@ import {isBillingCatalog,isBillingRecovery} from '@/lib/billing-contract';
 import {DirectConnect} from '@/components/workspace/direct-connect';
 import {IntelligencePanel} from '@/components/workspace/intelligence';
 import {isInsights} from '@/lib/insights-contract';
-import {isChiefReport,isIntelligence,isSnapshotAnalysis} from '@/lib/intelligence-contract';
+import {isChiefHistory,isChiefReport,isIntelligence,isSnapshotAnalysis} from '@/lib/intelligence-contract';
 import {isSubscriptionRead} from '@/lib/subscription-contract';
 import {formatAmount} from '@/lib/value';
 import {isMembers, safe, stamp} from '@/lib/ix-live';
@@ -19,7 +19,7 @@ import {ThemeRow} from './theme-row';
 
 export async function Ai({ws, cursor}: {ws: string; cursor?: string}) {
   if (cursor && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cursor)) return <ErrorState page code="invalid" />;
-  const [intel, insights, snapshots, today, chief] = await Promise.all([safe(pilotGet(`/workspaces/${ws}/intelligence${cursor ? '?cursor=' + cursor : ''}`, isIntelligence)), safe(pilotGet(`/workspaces/${ws}/insights`, isInsights)),safe(pilotGet(`/workspaces/${ws}/intelligence/snapshot-analysis`,isSnapshotAnalysis)),safe(pilotGet(`/workspaces/${ws}/today`,isToday)),safe(pilotGet(`/workspaces/${ws}/intelligence/chief-analyst?days=30`,isChiefReport))]);
+  const [intel, insights, snapshots, today, chief, chiefHistory] = await Promise.all([safe(pilotGet(`/workspaces/${ws}/intelligence${cursor ? '?cursor=' + cursor : ''}`, isIntelligence)), safe(pilotGet(`/workspaces/${ws}/insights`, isInsights)),safe(pilotGet(`/workspaces/${ws}/intelligence/snapshot-analysis`,isSnapshotAnalysis)),safe(pilotGet(`/workspaces/${ws}/today`,isToday)),safe(pilotGet(`/workspaces/${ws}/intelligence/chief-analyst?days=30`,isChiefReport)),safe(pilotGet(`/workspaces/${ws}/intelligence/chief-history`,isChiefHistory))]);
   return <>
     <PageHead title="AI-аналитик" sub="Объяснения только на основе проверенных данных и расчётов." />
     <Info>Анализ по данным пространства и вашим агрегатам. Внешняя языковая модель не подключена.</Info><Gap />
@@ -35,6 +35,14 @@ export async function Ai({ws, cursor}: {ws: string; cursor?: string}) {
       </>:<p>{snapshots.data.reason==='no_snapshot'?'Нет пригодных снимков выбранных аккаунтов. Проверьте подключение и период данных.':'Разбор подключённых данных откроется после допуска реальных источников. Синтетический пример доступен отдельно.'}</p>:<ErrorState code={snapshots.code}/>}
       {today.ok&&!!today.data.top?.length&&<><h3>Рекомендации последнего аудита</h3><p className="ix-muted ix-mini">Период аудита может отличаться от периода расчёта выше. Проверяйте дату и основания в паспорте.</p><ul>{today.data.top.map(rec=><li key={rec.id}><Link href={`/workspace/recommendations?workspace=${ws}&rec=${rec.id}`}>{rec.title}</Link></li>)}</ul></>}
     </Card><Gap />
+    {chiefHistory.ok&&<Card label="История автоматического анализа"><h2>Chief Analyst · фоновые запуски</h2>
+      {!chiefHistory.data.items.length&&<p>После успешного аудита здесь появятся результаты, если оператор включит автоматизацию.</p>}
+      {chiefHistory.data.items.map(item=><details key={item.id}><summary>Аудит {item.audit_run_id} · {stamp(item.created_at)} · {item.status}</summary>
+        <p>Статус: {item.status==='completed'?'Предварительный анализ':'Требуется проверка или данные недоступны'}.</p>
+        {item.error_code&&<p>Код ограничения: {item.error_code}</p>}
+      </details>)}
+      <p className="ix-muted ix-mini">История не является разрешением изменять кампании или подтверждением экономии.</p>
+    </Card>}
     {chief.ok&&chief.data.available&&<Card label="Главный аналитик"><h2>Chief Analyst · проверка 8 специалистов</h2>
       <p className="ix-muted ix-mini">Автоматическая диагностика по сохранённым агрегатам. Это локальные правила, а не восемь запущенных нейросетей. Ни один вывод не разрешает менять рекламу; независимая проверка источников и причин пока не завершена.</p>
       <p role="status">Статус: {chief.data.status==='blocked'?'Требуется устранить ограничения данных':'Нужна проверка человеком и независимым контролёром'}.</p>
