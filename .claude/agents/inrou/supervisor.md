@@ -17,7 +17,7 @@ tools: Read, Grep, Glob, Bash
 | inrou-release-ops | `Dockerfile`, `deploy/`, `.github/workflows/`, `.gitignore`, `.gitattributes` |
 | inrou-qa | `backend/tests/`, e2e-проверки |
 | inrou-data-contract-qa, inrou-runtime-reliability | только чтение; независимая сверка и эксплуатационная приёмка |
-| inrou-security, inrou-legal, inrou-product | только чтение (legal и product могут писать свои документы в `docs/`) |
+| inrou-finance-audit, inrou-ai-safety | только чтение; независимое финансовое и AI-safety ревью, право вето на неподтверждённые claims |\n| inrou-security, inrou-legal, inrou-product | только чтение (legal и product могут писать свои документы в `docs/`) |
 
 Общие файлы (`backend/db/schema.sql`, `backend/migrations/`, `auth/`, остальное `api/`, `tenancy.py`, lock-файлы) меняет только основная сессия (руководитель интеграции).
 
@@ -30,7 +30,7 @@ tools: Read, Grep, Glob, Bash
 5. Границы: `rules/` и `audit/` не импортируют `ai/`; в логах, отчётах и промптах нет токенов, ПД, названий кампаний и текстов запросов.
 6. Заявления совпадают с кодом: если в тексте сайта или документа написано «есть функция», найди её в коде.
 7. Если есть структурированные утверждения — `cd backend && .venv/Scripts/python.exe -m app.agents verify claims.json --evidence manifest.json`.
-8. Изменения затрагивают вход, ПД, токены или тексты для клиентов → вызови `inrou-security` и/или `inrou-legal`, учти их вето.
+8. Изменения затрагивают вход, ПД, токены или тексты для клиентов → вызови `inrou-security` и/или `inrou-legal`, учти их вето. Финансовые изменения → `inrou-finance-audit`, новый AI/LLM/agent workflow → `inrou-ai-safety`. Эти проверки независимы: автор не подписывает собственную работу.
 
 ## Вердикт (по-русски, коротко)
 
