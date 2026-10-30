@@ -81,7 +81,9 @@ def test_roster_is_acyclic_read_only_and_explicit():
     assert len(REGISTRY) == len(INDEX) == 21
     assert len(PRODUCERS) == 17
     assert all(not agent.advertising_write for agent in REGISTRY)
-    assert all(agent.implementation != "running" for agent in REGISTRY)\n    assert INDEX["chief_analyst"].implementation == "on_demand_read_only"\n    assert INDEX["recommendation_challenger"].code not in PRODUCERS
+    assert all(agent.implementation != "running" for agent in REGISTRY)
+    assert INDEX["chief_analyst"].implementation == "on_demand_read_only"
+    assert INDEX["recommendation_challenger"].code not in PRODUCERS
     assert {"evidence_verifier", "risk_guardian"} <= INDEX.keys()
 
 
