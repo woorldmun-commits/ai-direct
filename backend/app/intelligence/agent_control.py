@@ -17,7 +17,7 @@ from app.agents.supervisor import Manifest, Submission, verify
 class AgentRole:
     code: str
     duty: str
-    implementation: Literal["foundation_only", "planned"]
+    implementation: Literal["foundation_only", "planned", "on_demand_read_only"]
     existing_basis: str | None = None
     depends_on: tuple[str, ...] = ()
     advertising_write: bool = False
@@ -25,7 +25,7 @@ class AgentRole:
 
 CHIEF = AgentRole(
     "chief_analyst", "Координация анализа, выявление конфликтов и эскалация",
-    "planned", depends_on=("evidence_verifier", "risk_guardian"),
+    "on_demand_read_only", depends_on=("evidence_verifier", "risk_guardian", "recommendation_challenger"),
 )
 
 # IMPORTANT: a foundation is not an autonomous runtime agent. Names here document
@@ -53,6 +53,27 @@ SPECIALISTS: tuple[AgentRole, ...] = (
               "planned", depends_on=("industry",)),
     AgentRole("experiment", "Тесты, окна сравнения, достоверность эффекта",
               "planned", depends_on=("finance", "root_cause")),
+    # Newly scoped client-analysis roles. On-demand handlers live in specialist_runtime.py.
+    # "planned" means the provider/feed is NOT available in the live product.
+    AgentRole("lead_quality", "Качество лидов и квалификация без предположений о продажах",
+              "on_demand_read_only", "app.intelligence.specialist_runtime",
+              ("conversion_attribution", "finance")),
+    AgentRole("tracking_integrity", "Диагностика целей и целостности измерений",
+              "on_demand_read_only", "app.intelligence.specialist_runtime",
+              ("data_health", "conversion_attribution")),
+    AgentRole("search_intent", "Поисковые запросы и гипотезы нецелевого спроса",
+              "planned", depends_on=("direct_performance", "data_health")),
+    AgentRole("landing_cro", "Посадочные страницы и подтверждённые этапы воронки",
+              "planned", depends_on=("conversion_attribution",)),
+    AgentRole("anomaly_sentinel", "Осторожная проверка резких изменений по полным дням",
+              "on_demand_read_only", "app.intelligence.specialist_runtime", ("data_health",)),
+    AgentRole("customer_value", "Когорты, повторные покупки, LTV при наличии CRM",
+              "planned", depends_on=("lead_quality", "finance")),
+    AgentRole("knowledge_steward", "Проверка версий и источников отраслевых моделей",
+              "on_demand_read_only", "app.intelligence.specialist_runtime", ("industry",)),
+    AgentRole("recommendation_challenger", "Отвергает непроверенные решения и причинные заявления",
+              "on_demand_read_only", "app.intelligence.specialist_runtime",
+              ("evidence_verifier", "risk_guardian")),
     AgentRole("evidence_verifier", "Независимая проверка структурированных evidence",
               "foundation_only", "app.agents.supervisor", ("data_health",)),
     AgentRole("risk_guardian", "Ограничение действий, стратегии, права и неизвестные риски",
@@ -62,13 +83,13 @@ REGISTRY: tuple[AgentRole, ...] = (CHIEF, *SPECIALISTS)
 INDEX = {agent.code: agent for agent in REGISTRY}
 PRODUCERS = frozenset(
     agent.code for agent in SPECIALISTS
-    if agent.code not in ("evidence_verifier", "risk_guardian")
+    if agent.code not in ("evidence_verifier", "risk_guardian", "recommendation_challenger")
 )
 
 
 def validate_registry() -> None:
     """Reject registry drift before any integration can rely on this metadata."""
-    if len(SPECIALISTS) != 12 or len(REGISTRY) != len(INDEX):
+    if len(SPECIALISTS) != 20 or len(REGISTRY) != len(INDEX):
         raise ValueError("invalid_agent_roster")
     if CHIEF.code != "chief_analyst":
         raise ValueError("chief_missing")
