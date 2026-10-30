@@ -26,14 +26,17 @@ def get_order(conn, workspace_id, order_id):
 
 def reserve(conn, ws, payload, config):
     workspace_exclusive(conn, ws.id)
-    existing = conn.execute('SELECT id,sku,terms_sha256 FROM billing_orders WHERE id=%s AND workspace_id=%s',
+    existing = conn.execute('SELECT id,sku,terms_sha256,amount_minor FROM billing_orders WHERE id=%s AND workspace_id=%s',
                             (payload.request_id, ws.id)).fetchone()
     if existing:
-        if existing[1:] != (payload.sku, payload.terms_sha256):
+        if existing[1:3] != (payload.sku, payload.terms_sha256) or (payload.expected_amount_minor is not None and existing[3] != payload.expected_amount_minor):
             raise ApiError(409, 'billing_idempotency_conflict')
         return get_order(conn, ws.id, payload.request_id)
     if payload.terms_sha256 != config.terms_sha256:
         raise ApiError(409, 'billing_terms_changed')
+    scope = conn.execute('SELECT * FROM billing_scope(%s)', (ws.id,)).fetchone()
+    if scope[0] != ws.id or (scope[1] > 1 and payload.sku != 'agency'):
+        raise ApiError(409, 'billing_bundle_managed', message='Подписка клиентского пакета оплачивается в основном пространстве по тарифу «Агентство».')
     state = load_state(conn, ws.id, None, datetime.now(timezone.utc))
     if state.workspace_status != 'active' or state.paid:
         raise ApiError(409, 'billing_existing_subscription', message='Новая покупка доступна после окончания текущего оплаченного доступа.')
@@ -41,6 +44,13 @@ def reserve(conn, ws, payload, config):
                     (ws.id,)).fetchone():
         raise ApiError(409, 'billing_order_pending', message='Сначала проверьте состояние предыдущего заказа.')
     plan = next(p for p in PLANS if p['id'] == payload.sku)
+    if payload.expected_amount_minor is not None:
+        remaining = conn.execute('SELECT founder_offer(%s,%s,%s,%s)',
+            (ws.actor.user_id, ws.id, config.test, payload.sku == 'control' and payload.expected_amount_minor == 199000)).fetchone()[0]
+        amount = 199000 if payload.sku == 'control' and remaining else plan['amount_minor']
+        if amount != payload.expected_amount_minor:
+            raise ApiError(409, 'billing_offer_changed', message='Цена предложения изменилась. Обновите тарифы перед оплатой.')
+        plan = dict(plan, amount_minor=amount)
     email = conn.execute('SELECT email FROM users WHERE id=%s AND status=\'active\'', (ws.actor.user_id,)).fetchone()
     if (not email or not email[0] or '@' not in email[0] or '\r' in email[0] or '\n' in email[0]
             or parseaddr(email[0])[1] != email[0]):

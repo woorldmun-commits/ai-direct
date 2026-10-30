@@ -9,6 +9,7 @@ export type PilotRecommendation = {
 };
 export type SourceFreshness = { status: string | null; data_to: string | null; last_success_at: string | null };
 export type PilotToday = {
+  audit_limitations?: {code:string;count:number}[];
   top?: PilotRecommendation[];
   audit_scope?: null|{rules:string[];period:{from:string;to:string};ad_accounts:{checked:number;excluded:number};campaigns:number};
   spent: Value; exposure: { total: Value }; counts: { active: number };
@@ -49,6 +50,8 @@ function source(v: unknown): v is SourceFreshness {
 export function isToday(v: unknown): v is PilotToday {
   return record(v) && isValue(v.spent) && record(v.exposure) && isValue(v.exposure.total)
     && record(v.counts) && Number.isSafeInteger(v.counts.active) && Number(v.counts.active) >= 0
+    && (v.audit_limitations===undefined||Array.isArray(v.audit_limitations)&&v.audit_limitations.length<=100
+      &&v.audit_limitations.every(x=>record(x)&&text(x.code)&&Number.isSafeInteger(x.count)&&Number(x.count)>0))
     && instant(v.last_audit_at) && enumValue(v.data_status, ['complete', 'partial'])
     && record(v.data_freshness) && source(v.data_freshness.yandex_direct) && source(v.data_freshness.yandex_metrika)
     &&(v.top===undefined||Array.isArray(v.top)&&v.top.length<=3&&isRecommendations({items:v.top,next_cursor:null}))

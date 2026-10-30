@@ -32,6 +32,10 @@ try{
   console.log(`${width} ${theme}`);
  }
  const wide=report.matrix.filter(x=>x.width>=1920&&x.theme==='light');assert.equal(wide[0].canvas,wide[1].canvas);
+ await check('homepage has its scoped theme tokens and visible primary CTA',async()=>{
+  const paint=await page.locator('.home-header .home-button-primary').evaluate(e=>({background:getComputedStyle(e).backgroundImage,color:getComputedStyle(e).color,tokens:getComputedStyle(e).getPropertyValue('--inrou-hairline')}));
+  assert.match(paint.background,/linear-gradient/);assert.ok(paint.tokens.trim());assert.notEqual(paint.color,'rgba(0, 0, 0, 0)');
+ });
  await check('project illustration loads with an intrinsic aspect ratio and accessible description',async()=>{
   const image=page.locator('.home-hero-visual img');
   assert.ok(await image.evaluate(e=>e.complete&&e.naturalWidth>0));
@@ -40,27 +44,28 @@ try{
   assert.match(await image.getAttribute('alt'),/Рекламные данные/);
  });
  await page.setViewportSize({width:1440,height:1000});await page.emulateMedia({colorScheme:'light'});await page.goto(base+'/',{waitUntil:'networkidle'});
- await check('product preview switches all three views by keyboard',async()=>{
+ await check('product preview switches all four views by keyboard',async()=>{
   await page.getByRole('button',{name:'Рекомендации',exact:true}).focus();await page.keyboard.press('Enter');
   await page.locator('.home-preview-recommendation').waitFor();
   assert.equal(await page.getByRole('button',{name:'Рекомендации',exact:true}).getAttribute('aria-pressed'),'true');
   await page.getByRole('button',{name:'Источники',exact:true}).click();await page.locator('.home-preview-sources').waitFor();
   assert.match(await page.locator('.home-preview-sources').textContent(),/Ваши аккаунты не подключены/);
   await page.getByRole('button',{name:'Расходы',exact:true}).click();await page.locator('.home-preview-cost').waitFor();
+  await page.getByRole('button',{name:'Бюджет и заявки',exact:true}).click();await page.locator('.home-metrics-preview').waitFor();
  });
  await check('subscription price and all in-page links are visible and valid',async()=>{
   for(const href of await page.locator('a[href^="#"]').evaluateAll(nodes=>nodes.map(n=>n.getAttribute('href'))))assert.ok(await page.locator(href).count(),href);
   await page.locator('.home-header-actions>a[href="#plans"]').click();
   await page.waitForFunction(()=>{const y=document.querySelector('#plans').getBoundingClientRect().top;return y>=-20&&y<innerHeight;});
-  assert.ok(await page.locator('.home-plan-price').isVisible());
-  assert.match(await page.locator('.home-plan-price').textContent(),/2\s*990/);
-  assert.match(await page.locator('.home-plan-card>small').textContent(),/Оплата пока не подключена/);
-  assert.equal(await page.locator('.home-plan-card a[href="/signup"]').count(),1);
+  assert.equal(await page.locator('.pricing-plan').count(),3);
+  assert.match(await page.locator('.pricing-amount').first().textContent(),/2\s*990/);
+  assert.match(await page.locator('.pricing-terms').last().textContent(),/Оплата пока не подключена/);
+  for(const link of await page.locator('.pricing-plan a.pricing-cta').all())assert.ok(['/signup','/#product-preview'].includes(await link.getAttribute('href'))||(await link.getAttribute('href')).startsWith('mailto:'));
   assert.equal(await page.locator('.home-redesign a[href^="/demo"]').count(),0,'Homepage preview must work when demo routes are disabled');
   await page.screenshot({path:path.join(out,'subscription-desktop.png'),animations:'disabled'});
  });
  await check('recommendation CTA selects the corresponding on-page demo view',async()=>{
-  await page.locator('.home-decision-copy a[href="#product-preview"]').click();
+  await page.locator('.home-feature-reason a[href="#product-preview"]').click();
   await page.locator('.home-preview-recommendation').waitFor();
   await page.waitForFunction(()=>{const y=document.querySelector('#product-preview').getBoundingClientRect().top;return y>=-20&&y<innerHeight;});
  });
@@ -79,7 +84,7 @@ try{
  });
  await check('mobile menu subscription link reaches subscription section',async()=>{
   await page.getByRole('button',{name:'Открыть меню'}).click();
-  await page.getByRole('dialog').getByRole('link',{name:'Подписка'}).click();
+  await page.getByRole('dialog').getByRole('link',{name:'Тарифы',exact:true}).click();
   await page.getByRole('dialog').waitFor({state:'detached'});
   await page.waitForFunction(()=>{const y=document.querySelector('#plans').getBoundingClientRect().top;return y>=-20&&y<innerHeight;});
  });

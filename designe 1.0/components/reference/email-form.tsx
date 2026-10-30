@@ -3,6 +3,10 @@ import {useEffect,useRef,useState,type FormEvent} from 'react';
 import {Eye,EyeOff} from 'lucide-react';
 import type {AcceptedDocuments} from '@/lib/legal-document';
 
+function RegistrationSteps({step}: {step: number}) {
+ return <ol className="ix-registration-steps" aria-label="Этапы регистрации">{['Данные', 'Письмо', 'Подтверждение'].map((label, index) => <li key={label} aria-current={index === step ? 'step' : undefined}><span aria-hidden>{index + 1}</span>{label}</li>)}</ol>;
+}
+
 export type EmailMode='login'|'signup'|'verify'|'forgot'|'reset';
 export function EmailForm({mode,enabled,acceptedDocuments=null,localPreview=false}:{mode:EmailMode;enabled:boolean;acceptedDocuments?:AcceptedDocuments|null;localPreview?:boolean}){
  const registrationReady=acceptedDocuments!==null;
@@ -27,13 +31,14 @@ export function EmailForm({mode,enabled,acceptedDocuments=null,localPreview=fals
   try{
    const response=await fetch('/api/auth/email/'+operation,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
    if(!response.ok)throw new Error(response.status===401?'Неверный email или пароль.':response.status===429?'Слишком много попыток. Подождите и попробуйте позже.':response.status===400?'Проверьте данные. Ссылка могла устареть или уже использована.':'Сервис входа или отправки писем временно недоступен. Попробуйте позже.');
-   if(mode==='login'||mode==='verify'){location.assign(new URL('/workspace',location.href).href);return;}
+   if(mode==='login'||mode==='verify'){location.assign(new URL(mode==='verify'?'/onboarding/organization':'/workspace',location.href).href);return;}
    setMessage(mode==='reset'?'Пароль изменён. Войдите с новым паролем.':mode==='forgot'?'Если для этого адреса есть аккаунт с паролем, вы получите письмо с инструкцией.':'Проверьте почту. Если регистрация для этого адреса возможна, вы получите ссылку подтверждения.');
   }catch(e){setError(e instanceof Error?e.message:'Не удалось завершить запрос.');}
   finally{active.current=false;setBusy(false);}
  }
- if(message)return <div className="ref-email-result" role="status"><p>{message}</p>{localPreview&&mode!=='reset'&&<a className="ref-button" href="http://127.0.0.1:3121/local-test/mail" target="_blank" rel="noreferrer">Открыть локальный почтовый ящик</a>}<a href={mode==='reset'?'/login':mode==='forgot'?'/forgot-password':'/signup'}>{mode==='reset'?'Войти':mode==='forgot'?'Запросить письмо повторно':'Другой адрес или повторная отправка'}</a></div>;
+ if(message)return <div className="ref-email-result" role="status">{mode==='signup'&&<RegistrationSteps step={1}/>}<p>{message}</p>{localPreview&&mode!=='reset'&&<a className="ref-button" href="http://127.0.0.1:3121/local-test/mail" target="_blank" rel="noreferrer">Открыть локальный почтовый ящик</a>}<a href={mode==='reset'?'/login':mode==='forgot'?'/forgot-password':'/signup'}>{mode==='reset'?'Войти':mode==='forgot'?'Запросить письмо повторно':'Другой адрес или повторная отправка'}</a></div>;
  return <form className="ref-email-form" onSubmit={submit}>
+  {(mode==='signup'||mode==='verify')&&<RegistrationSteps step={mode==='verify'?2:0}/>}
   {localPreview&&<p className="ref-email-local">Локальная проверка: используйте адрес вида name@example.test. Письма доступны в локальном ящике, во внешнюю почту не отправляются. Документы тестовые.</p>}
   {!enabled&&<p className="ref-auth-note ref-email-unavailable" role="status">Вход и регистрация по почте готовятся к запуску. Отправка писем пока не настроена.</p>}
   {mode==='signup'&&!registrationReady&&<p role="status">Регистрация откроется после утверждения и публикации документов.</p>}

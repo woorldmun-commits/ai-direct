@@ -144,7 +144,8 @@ async function httpChecks(base) {
       if (!pageHtml.includes('name="email"') || !pageHtml.includes('name="password"') || !pageHtml.includes('Войти по email')) fail(`${url}: email account entry missing`);
       if (pageHtml.includes('ref-auth-alternative')) fail(`${url}: legacy account entry must be opt-in`);
     }
-    if (p === "/" && ["home-hero", "home-benefit-grid", "home-plans", "home-workflow"].some(marker => !pageHtml.includes(marker))) fail(`${url}: home offer sections missing`);
+    if (p === "/" && (!/<main\b/.test(pageHtml) || !/<h1\b/.test(pageHtml)
+        || ['product-preview','plans','workflow'].some(id => !pageHtml.includes(`id="${id}"`)))) fail(`${url}: home content or navigation targets missing`);
     if (nonce) nonces.add(nonce);
   }
   if (nonces.size !== PAGES.length) fail(`nonces must be unique per response, got ${nonces.size} for ${PAGES.length} pages`);

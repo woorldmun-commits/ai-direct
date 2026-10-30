@@ -64,6 +64,8 @@ def _reference(rule: Rule, snap: SnapshotView, settings: AuditSettings, days, ev
     if any(d.conversions is None for d in days if d.date in baseline):
         return Reason.BASELINE_DATA_INSUFFICIENT
     base_cost, base_conv = _sum(days, baseline)
+    if settings.business_profile and base_conv < settings.business_profile['fields']['evaluation_policy']['minimum_conversions']:
+        return Reason.BASELINE_DATA_INSUFFICIENT
     quality = _baseline_quality(base_conv, rule.params)
     if quality is None:  # baseline_cpa = null, а не 0 и не бесконечность
         return Reason.BASELINE_DATA_INSUFFICIENT
@@ -88,6 +90,8 @@ def _evaluate_campaign(rule: Rule, snap: SnapshotView, settings: AuditSettings,
     cost, conv = _sum(days, evaluation)
     if conv == 0:  # CPA не существует; расход без конверсий ловит другое правило
         return NotEnoughData(rule.rule_version, Reason.NO_CONVERSIONS, "campaign", campaign_id)
+    if settings.business_profile and conv < settings.business_profile['fields']['evaluation_policy']['minimum_conversions']:
+        return NotEnoughData(rule.rule_version, Reason.VOLUME_INSUFFICIENT, "campaign", campaign_id)
     ref = _reference(rule, snap, settings, days, evaluation, baseline, account_history_from)
     if isinstance(ref, Reason):
         return NotEnoughData(rule.rule_version, ref, "campaign", campaign_id)

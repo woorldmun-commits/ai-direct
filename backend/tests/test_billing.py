@@ -29,7 +29,7 @@ def order():
 
 def payment(o):
     return dict(id=o['provider_payment_id'], status='succeeded', paid=True,
-                amount={'value': '2990.00', 'currency': 'RUB'}, test=True,
+                amount={'value': f"{o['amount_minor']/100:.2f}", 'currency': 'RUB'}, test=True,
                 recipient={'account_id': CONFIG.shop_id},
                 metadata={'order_id': str(o['id']), 'workspace_id': str(o['workspace_id'])})
 

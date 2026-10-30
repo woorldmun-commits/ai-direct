@@ -13,7 +13,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from app.billing.catalog import account_limit, selected_accounts
+from app.billing.catalog import account_limit
 from app.api.deps import Conn, CurrentActor, CurrentWorkspace, Workspace, require_manager
 from app.api.errors import ApiError
 from app.api.active import today_msk
@@ -72,7 +72,7 @@ def _cipher(provider):
 
 def _access(conn, workspace_id):
     state = load_state(conn, workspace_id, None, datetime.now(timezone.utc))
-    if state.workspace_status != 'active' or not state.has_analysis_access:
+    if state.workspace_status != 'active' or not (state.has_analysis_access or state.trial_pending):
         raise ApiError(403, "pilot_access_required", message="Для подключения и анализа нужен действующий пробный, пилотный или оплаченный доступ.")
 
 
@@ -113,8 +113,9 @@ def _save(conn, request, flow, tokens):
     conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (f"pilot-sync:{flow.workspace_id}",))
     state = load_state(conn, flow.workspace_id, None, datetime.now(timezone.utc))
     limit = account_limit(state)
-    if selected_accounts(conn, flow.workspace_id, flow.login) >= limit:
-        raise ApiError(409, "pilot_account_limit", message=f"Лимит тарифа: {limit} рекламных аккаунтов на пространство.")
+    scope = conn.execute('SELECT * FROM billing_scope(%s,%s,true)', (flow.workspace_id, flow.login)).fetchone()
+    if scope[2] >= limit:
+        raise ApiError(409, "pilot_account_limit", message=f"Лимит тарифа: {limit} рекламных аккаунтов суммарно в подписке.")
     busy = conn.execute("""SELECT 1 FROM sync_runs WHERE workspace_id=%s
         AND status IN ('queued','running','waiting_report')""", (flow.workspace_id,)).fetchone()
     if busy:
@@ -215,9 +216,11 @@ def status(request: Request, conn: Conn, ws: CurrentWorkspace):
     reconfigure = conn.execute('''SELECT 1 FROM direct_accounts a JOIN direct_connections c ON c.id=a.direct_connection_id
         WHERE c.workspace_id=%s AND c.status='connected' AND a.is_selected AND NOT a.metrika_configured LIMIT 1''',
         (ws.id,)).fetchone() is not None
+    state = load_state(conn, ws.id, None, datetime.now(timezone.utc))
     return {"enabled": request.app.state.settings.oauth_direct is not None,
             "manager": ws.role in ("owner", "admin"), "connected": connected,
-            "analysis_access": load_state(conn, ws.id, None, datetime.now(timezone.utc)).has_analysis_access,
+            "analysis_access": state.has_analysis_access,
+            "trial_pending": state.trial_pending,
             "reconfiguration_required": reconfigure,
             "run": {"id": row[0], "status": row[1], "error_code": row[2]} if row else None}
 

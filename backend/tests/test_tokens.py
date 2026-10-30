@@ -92,5 +92,9 @@ def test_security_definer_functions_have_fixed_search_path(rw):
                                           "purge_personal_data_before_email", "purge_billing_request_snapshots",
                                           "enqueue_email_reset_mail", "enqueue_email_verify_mail", "claim_email_reset_mail",
                                           "prepare_email_reset_mail", "finish_email_reset_mail", "purge_email_reset_mail",
-                                          "start_registration_trial", "workspace_trial"}
+                                          "start_registration_trial", "workspace_trial",
+                                          # Private billing ledgers: fixed search path and explicit workspace context.
+                                          "activate_first_data_trial", "billing_workspace", "effective_subscription",
+                                          "billing_scope", "create_agency_client", "agency_clients",
+                                          "founder_offer", "founder_payment", "product_email_recipients", "product_email_available"}
     assert all(cfg and any(c.startswith("search_path=") for c in cfg) for _, cfg in rows)

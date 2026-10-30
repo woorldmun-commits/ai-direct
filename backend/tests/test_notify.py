@@ -12,10 +12,17 @@ from test_schema import add_member, chain, one  # noqa: F401 — фикстур�
 NOW = datetime.now(timezone.utc) + timedelta(seconds=1)
 
 
+def verified_email(db, rw, workspace, user):
+    with db('app_migrator') as owner:
+        owner.execute('INSERT INTO email_credentials(user_id,email,password_hash) VALUES(%s,%s,%s) ON CONFLICT(user_id) DO NOTHING',
+                      (user, f'synthetic-{user}@example.test', 'synthetic-not-a-password'))
+    rw.execute('INSERT INTO workspace_email_preferences(workspace_id,user_id,enabled) VALUES(%s,%s,true)', (workspace,user))
+
+
 @pytest.fixture
-def ws(rw, chain):
+def ws(rw, chain, db):
     """Оплаченный workspace, у владельца (owner организации — пользователь цепочки) привязан Telegram."""
-    rw.execute("INSERT INTO telegram_links (user_id, chat_id) VALUES (%s, %s)", (chain["user"], 10_000 + chain["user"]))
+    verified_email(db, rw, chain['ws'], chain['user'])
     rw.execute("""INSERT INTO subscriptions (workspace_id, plan, status, price, current_period_start, current_period_end)
                   VALUES (%s, 'start', 'active', 4990, %s, %s)""", (chain["ws"], NOW - timedelta(10), NOW + timedelta(20)))
     return chain
@@ -40,8 +47,8 @@ def test_one_event_one_notification(rw, ws):
     e = event(rw, ws)
     Notifier(rw, NOW).publish(e)
     [(kind, channel, status, payload)] = notifications(rw, ws)
-    assert (kind, channel, status) == ("new_problem", "telegram", "queued")
-    assert payload == {"issue_id": ws["issue"], "recommendation_id": ws["rec"], "outbox_event_id": e.id}
+    assert (kind, channel, status) == ("new_problem", "email", "queued")
+    assert payload == {"recommendation_id": ws["rec"], "outbox_event_id": e.id}
 
 
 def test_redelivery_and_rerun_do_not_duplicate(rw, ws):
@@ -73,7 +80,7 @@ def test_same_object_same_day_is_deduplicated(rw, ws):
 
 @pytest.mark.parametrize("setup, reason", [
     ("UPDATE subscriptions SET status = 'expired' WHERE workspace_id = %(ws)s", "subscription_inactive"),
-    ("DELETE FROM telegram_links WHERE user_id = %(user)s", "no_recipient"),
+    ("UPDATE workspace_email_preferences SET enabled=false WHERE user_id = %(user)s", "no_recipient"),
 ])
 def test_not_sent_is_skipped_with_reason(rw, ws, setup, reason):
     rw.execute(setup, ws)
@@ -99,19 +106,19 @@ def test_outbox_event_is_delivered_whatever_the_decision(rw, ws):
 
 # --- получатели по модели доступа D3 -------------------------------------------------------------
 
-def member(rw, ws, ws_role=None) -> int:
+def member(rw, ws, db, ws_role=None) -> int:
     """Участник организации workspace (member) с Telegram; ws_role — ещё и участник самого workspace."""
     usr = one(rw, "INSERT INTO users (email) VALUES (%s) RETURNING id", f"m{ws['ws']}-{ws_role}@example.test")
     add_member(rw, ws["ws"], usr, "member", ws_role)
-    rw.execute("INSERT INTO telegram_links (user_id, chat_id) VALUES (%s, %s)", (usr, 20_000 + usr))
+    verified_email(db, rw, ws['ws'], usr)
     return usr
 
 
 @pytest.mark.parametrize("ws_role, status", [("viewer", "queued"),   # участник workspace — получатель
                                              (None, "skipped")])     # member без доступа к workspace — нет
-def test_recipients_are_users_with_access_to_workspace(rw, ws, ws_role, status):
-    rw.execute("DELETE FROM telegram_links WHERE user_id = %s", (ws["user"],))  # у owner Telegram нет
-    member(rw, ws, ws_role)
+def test_recipients_are_users_with_access_to_workspace(rw, ws, db, ws_role, status):
+    rw.execute('UPDATE workspace_email_preferences SET enabled=false WHERE user_id=%s', (ws['user'],))
+    member(rw, ws, db, ws_role)
     Notifier(rw, NOW).publish(event(rw, ws))
     [(_, _, got, payload)] = notifications(rw, ws)
     assert got == status and payload.get("skip_reason") == (None if ws_role else "no_recipient")

@@ -5,6 +5,7 @@ from decimal import Decimal
 from app.api.serialize import value_of
 from app.api.today import _freshness
 from app.contract import Value
+from app.insights import pacing
 
 CENT = Decimal('.01')
 LEAD_REASONS = {
@@ -138,6 +139,7 @@ def build(conn, ws, today, now, *, period=None, allow_partial=False):
     budget = {'plan': None if not plan else {'period': period, 'amount': format(plan[2], '.2f'), 'currency': 'RUB'},
               'actual': actual, 'variance': metric(variance, frm, to, source='yandex_direct+user_input',
                                                   formula='actual period spend - user budget', partial=actual['data_status']=='partial'), 'reason': reason}
+    budget['pacing'] = pacing.build(conn,ws,plan,accounts,today,now,spend)
     quality = lead_quality(conn, ws, frm, to, accounts)
     data_health = health(conn, ws, today, accounts)
     facts = [{'id': 'spent', 'label': 'Расход за период', 'value': actual,

@@ -5,6 +5,12 @@ from app.intelligence.contracts import AnalysisResult
 from test_campaign_stats import funded, insights_api, req  # noqa: F401
 from test_schema import chain  # noqa: F401
 from test_api_support import user
+from test_lifecycle import sync
+
+
+def start_trial_on_data(rw,funded):
+    rw.execute('SELECT start_registration_trial(%s,%s)', (funded['user'], funded['ws']))
+    sync(rw,funded['ws'],funded['account'],funded['release'],100)
 
 
 def test_snapshot_analysis_is_gated_and_scoped(insights_api, rw, funded, monkeypatch):
@@ -13,7 +19,7 @@ def test_snapshot_analysis_is_gated_and_scoped(insights_api, rw, funded, monkeyp
     insights_api.app.state.settings = replace(insights_api.app.state.settings, intelligence_enabled=True,
                                             intelligence_real_data_approved=True)
     assert req(insights_api, rw, funded, path).status_code == 403
-    rw.execute('SELECT start_registration_trial(%s,%s)', (funded['user'], funded['ws']))
+    start_trial_on_data(rw,funded)
     from datetime import datetime, timedelta
     from app.api import intelligence
     started = rw.execute('SELECT started_at FROM workspace_trial(%s)', (funded['ws'],)).fetchone()[0]
@@ -44,7 +50,7 @@ def test_snapshot_quality_preserves_missing_values_and_staleness(insights_api, r
     from app.api import intelligence
     insights_api.app.state.settings = replace(insights_api.app.state.settings, intelligence_enabled=True,
                                             intelligence_real_data_approved=True)
-    rw.execute('SELECT start_registration_trial(%s,%s)', (funded['user'], funded['ws']))
+    start_trial_on_data(rw,funded)
     data = intelligence.campaign_stats.build(rw, funded['ws'], intelligence.today_msk(), datetime.now(timezone.utc), days=7)
     data = deepcopy(data)
     for metric in data['summary'].values():
@@ -68,7 +74,7 @@ def test_snapshot_sealed_during_request_precedes_result_as_of(insights_api, rw, 
     from app.api import intelligence
     insights_api.app.state.settings = replace(insights_api.app.state.settings, intelligence_enabled=True,
                                             intelligence_real_data_approved=True)
-    rw.execute('SELECT start_registration_trial(%s,%s)', (funded['user'], funded['ws']))
+    start_trial_on_data(rw,funded)
     now = datetime.now(timezone.utc)+timedelta(minutes=1)
     data = intelligence.campaign_stats.build(rw, funded['ws'], intelligence.today_msk(), now, days=7)
     sealed = now+timedelta(milliseconds=1)

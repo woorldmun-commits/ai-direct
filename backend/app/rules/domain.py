@@ -69,12 +69,14 @@ class SnapshotView:
     campaign_days: tuple[CampaignDay, ...]
     placement_days: tuple[PlacementDay, ...] = ()  # пусто: отчёта площадок нет или у аккаунта нет расхода в сетях
     partial_from: date | None = None  # даты >= partial_from досчитываются; None — неизвестно, считать всё partial
+    conversion_definition: Mapping | None = None
 
 
 @dataclass(frozen=True)
 class AuditSettings:
     """Замороженная копия настроек workspace на момент аудита (audit_runs.settings)."""
     target_cpa: Decimal | None = None
+    business_profile: Mapping | None = None
 
     def __post_init__(self):
         if self.target_cpa is not None and self.target_cpa <= 0:  # то же, что CHECK в workspace_settings
@@ -106,6 +108,10 @@ class Reason(str, Enum):
     BASELINE_HISTORY_INSUFFICIENT = "baseline_history_insufficient"
     BASELINE_DATA_INSUFFICIENT = "baseline_data_insufficient"
     VOLUME_INSUFFICIENT = "volume_insufficient"  # расход/клики ниже порога «достаточного объёма» правила
+    BUSINESS_CONTEXT_REQUIRED = 'business_context_required'
+    GOAL_MISMATCH = 'goal_mismatch'
+    MATURITY_INSUFFICIENT = 'maturity_insufficient'
+    OUTCOME_DATA_REQUIRED = 'outcome_data_required'
 
 
 # Почему у числа нет значения — closed list, тот же, что contract.UNAVAILABLE_REASONS (сверяет tests/test_value_contract.py).
@@ -118,6 +124,10 @@ UNAVAILABLE_REASON_OF: Mapping[Reason, UnavailableReason] = MappingProxyType({
     Reason.BASELINE_HISTORY_INSUFFICIENT: "history_insufficient",
     Reason.BASELINE_DATA_INSUFFICIENT: "volume_insufficient",
     Reason.VOLUME_INSUFFICIENT: "volume_insufficient",
+    Reason.BUSINESS_CONTEXT_REQUIRED: 'source_missing',
+    Reason.GOAL_MISMATCH: 'source_missing',
+    Reason.MATURITY_INSUFFICIENT: 'history_insufficient',
+    Reason.OUTCOME_DATA_REQUIRED: 'source_missing',
 })
 
 
@@ -240,4 +250,17 @@ def run(rule: Rule, snapshot: SnapshotView, settings: AuditSettings) -> tuple[Ou
         return ()
     if not rule.required_sources <= snapshot.sources:
         return (NotEnoughData(rule.rule_version, Reason.SOURCE_MISSING),)
-    return rule.evaluate(rule, snapshot, settings)
+    if settings.business_profile is None:
+        return rule.evaluate(rule, snapshot, settings)
+    from dataclasses import replace
+    from app.rules.business import context_meta, prepare
+    mature = prepare(snapshot, settings.business_profile)
+    if isinstance(mature, Reason):
+        return (NotEnoughData(rule.rule_version, mature),)
+    outputs = []
+    for output in rule.evaluate(rule, mature, settings):
+        if isinstance(output, Finding):
+            output = replace(output, evidence_meta=frozen({**output.evidence_meta,
+                **context_meta(settings.business_profile, mature)}))
+        outputs.append(output)
+    return tuple(outputs)

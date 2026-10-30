@@ -24,7 +24,7 @@ export function validLegalDocument(value: unknown, key: string, version?: string
     && createHash('sha256').update(doc.text, 'utf8').digest('hex') === doc.sha256;
 }
 
-export async function legalDocument(key: string, version?: string): Promise<LegalDocument | null> {
+export async function legalDocument(key: string, version?: string, timeoutMs = 8000): Promise<LegalDocument | null> {
   if (!Object.values(LEGAL_KEYS).some(known => known === key)) return null;
   if (version !== undefined && !validVersion(version)) return null;
   const origin = apiOrigin();
@@ -33,7 +33,7 @@ export async function legalDocument(key: string, version?: string): Promise<Lega
     const url = new URL(`/api/v1/legal/documents/${key}?locale=ru-RU`, origin);
     if (version !== undefined) url.searchParams.set('version', version);
     const response = await fetch(url, {
-      cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(8000), headers: { Accept: 'application/json' },
+      cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(timeoutMs), headers: { Accept: 'application/json' },
     });
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json') || !response.body) return null;
     const reader = response.body.getReader();

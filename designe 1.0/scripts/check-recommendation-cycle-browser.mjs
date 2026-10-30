@@ -37,7 +37,8 @@ try{
  await page.setViewportSize({width:320,height:1000});
  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'preview overflow');
  await page.screenshot({path:path.join(out,'import-preview-320.png'),fullPage:true});
- await Promise.all([page.waitForNavigation({waitUntil:'networkidle'}),lead.getByRole('button',{name:'Подтвердить импорт'}).click()]);
+ await Promise.all([page.waitForResponse(r=>r.request().isNavigationRequest()&&new URL(r.url()).pathname==='/workspace/analysis'),lead.getByRole('button',{name:'Подтвердить импорт'}).click()]);
+ await page.waitForURL('**/workspace/analysis?**#lead-quality',{waitUntil:'networkidle'});
  data=await context.request.get(`${base}/api/workspaces/${workspace}/insights`);
  assert.equal((await data.json()).lead_quality.counts.total,1);
  await page.goto(`${base}/workspace/recommendations/${fixture.recommendation}?workspace=${workspace}`,{waitUntil:'networkidle'});
@@ -55,8 +56,10 @@ try{
   await page.screenshot({path:path.join(out,`effect-${width}.png`),fullPage:true});
  }
  await page.goto(`${base}/workspace?view=reports&workspace=${workspace}`,{waitUntil:'networkidle'});
- assert(await page.getByRole('heading',{name:'Недельный отчёт',exact:true}).isVisible());
- assert(await page.getByRole('heading',{name:'Решения за неделю'}).isVisible());
+ await page.getByRole('link',{name:'Недельный отчёт',exact:true}).click();
+ await page.waitForURL('**/workspace/reports/weekly?**');
+ await page.getByRole('heading',{name:'Недельный отчёт',exact:true}).waitFor();
+ await page.getByRole('heading',{name:'Решения за неделю'}).waitFor();
  const download=page.waitForEvent('download');await page.getByRole('button',{name:'Скачать недельный отчёт'}).click();
  const file=await download;await file.saveAs(path.join(out,'weekly-report.txt'));
  const report=await fs.readFile(path.join(out,'weekly-report.txt'),'utf8');

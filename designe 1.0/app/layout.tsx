@@ -12,10 +12,11 @@ import "@/components/midnight/compat.css";
 import "@/components/midnight/midnight.css";
 import "@/components/midnight/reference.css";
 import "@/components/midnight/site.css";
+import "@/components/ix/components-21st.css";
 
 const TITLE = "inrou — контроль кабинетов Яндекс Директа для агентств и директологов";
 const DESCRIPTION =
-  "inrou — аналитика Яндекс Директа и Метрики для директологов и агентств. Поймите, куда уходит рекламный бюджет: расходы, CPA и рекомендации с основаниями. Планируемая подписка от 2 990 ₽ в месяц.";
+  "inrou — аналитика Яндекс Директа и Метрики для директологов и агентств. Расходы, CPA, темп бюджета и рекомендации с основаниями. Подписка от 2 990 ₽ за 30 дней.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

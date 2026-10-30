@@ -2,7 +2,7 @@
 
 import {useEffect,useRef,useState,type FormEvent} from 'react';
 
-type State={enabled:boolean;manager:boolean;connected:boolean;analysis_access:boolean;reconfiguration_required?:boolean;run:null|{id:number;status:string;error_code:string|null}};
+type State={enabled:boolean;manager:boolean;connected:boolean;analysis_access:boolean;trial_pending?:boolean;reconfiguration_required?:boolean;run:null|{id:number;status:string;error_code:string|null}};
 const labels:Record<string,string>={queued:'В очереди',running:'Загрузка данных',waiting_report:'Яндекс формирует отчёт',succeeded:'Данные загружены',failed:'Загрузка не удалась',skipped:'Запуск пропущен'};
 
 export function DirectConnect({workspace}:{workspace:string}){
@@ -74,7 +74,8 @@ export function DirectConnect({workspace}:{workspace:string}){
   {statusError&&<p role="alert">Статус подключения временно недоступен. Повторяем запрос каждые 10 секунд. <button type="button" className="ref-button" onClick={()=>window.location.reload()}>Обновить страницу</button></p>}
   {!state?!statusError&&<p>Проверяем доступ…</p>:!state.manager?<p>Подключение доступно владельцу или администратору.</p>:
    !state.enabled?<p>Администратор ещё не настроил OAuth-приложение Директа.</p>:
-   !state.analysis_access?<p>Доступ к анализу завершён или ещё не предоставлен. Проверьте пробный период и подписку в разделе «Тарифы» либо обратитесь к оператору пилота.</p>:<>
+   !state.analysis_access&&!state.trial_pending?<p>Доступ к анализу завершён или ещё не предоставлен. Проверьте пробный период и подписку в разделе «Тарифы» либо обратитесь к оператору пилота.</p>:<>
+   {state.trial_pending&&<p role="status">Ваши 7 дней ещё не начались. Подключение доступно; отсчёт начнётся после первой успешной загрузки данных.</p>}
    {state.run&&<p role="status">Последняя загрузка: {labels[state.run.status]||'Статус неизвестен'}. {state.run.error_code==='unsupported_currency'?'Пилот поддерживает расходы в рублях. Валюта кампании не RUB или не подтверждена; снимок не сохранён. ':state.run.error_code&&'Код: '+state.run.error_code+'. '}После загрузки обновите страницу: аудит может занять дополнительное время.</p>}
    {state.reconfiguration_required&&<p role="status">Переподключите каждый ранее подключённый аккаунт: подтвердите его счётчик и цели либо работу без Метрики. Счётчик другого аккаунта не подставляется автоматически.</p>}
    {state.connected&&<button type="button" className="ref-button" onClick={sync} disabled={busy||state.reconfiguration_required||!!state.run&&['queued','running','waiting_report'].includes(state.run.status)}>Обновить данные и анализ</button>}

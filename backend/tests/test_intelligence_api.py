@@ -29,7 +29,9 @@ def payload(cost='10000', clicks='500', conversions='50', start='2026-10-01', en
 def intel(db, rw):
     owner = user(rw)
     ws = new_workspace(rw, user=owner)
-    rw.execute('SELECT start_registration_trial(%s,%s)', (owner, ws))
+    # Import-only analysis has paid access; an unstarted Direct trial is not an analysis grant.
+    rw.execute("""INSERT INTO subscriptions(workspace_id,plan,status,price,current_period_start,current_period_end)
+        VALUES(%s,'start','active',2990,now()-interval '1 second',now()+interval '30 days')""", (ws,))
     with client_for(create_app(settings(db, intelligence_enabled=True))) as client:
         client.owner_id = owner
         yield client, ws, {'Origin': 'https://app.example.test', **cookie(session(rw, owner))}
@@ -59,6 +61,35 @@ def test_profile_revision_and_provenance(intel):
     assert result['provenance']['name']['actor_id'] > 0
     assert client.post(route(ws, '/profile'), headers=headers, json=body).status_code == 409
     assert client.get(route(ws), headers=headers).json()['profile']['fields']['sales_cycle_days'] == 90
+
+
+def test_business_profile_available_without_import_analysis_feature(db,rw):
+    identity=user(rw)
+    workspace=new_workspace(rw,user=identity)
+    with client_for(create_app(settings(db))) as client:
+        headers={'Origin':'https://app.example.test',**cookie(session(rw,identity))}
+        response=client.post(route(workspace,'/profile'),headers=headers,json={'expected_revision':0,'fields':PROFILE})
+        assert response.status_code==200
+        data=client.get(route(workspace),headers=headers).json()
+        assert data['enabled'] is False and data['profile']['revision']==1 and data['industries']
+
+
+def test_legacy_profile_can_add_policy_without_fabricated_previous_confirmation(intel,rw):
+    from datetime import datetime,timezone
+    from psycopg.types.json import Jsonb
+    client,ws,headers=intel
+    stamp=datetime.now(timezone.utc).isoformat()
+    provenance={key:{'origin':'user_confirmed','actor_id':client.owner_id,'updated_at':stamp} for key in PROFILE}
+    rw.execute('INSERT INTO intelligence_profiles(workspace_id,revision,payload,created_by) VALUES(%s,1,%s,%s)',
+        (ws,Jsonb({'revision':1,'fields':PROFILE,'provenance':provenance}),client.owner_id))
+    policy={'counter_id':555,'goal_ids':[111],'attribution':'last','conversion_stage':'lead',
+            'conversion_lag_days':2,'minimum_conversions':5}
+    result=client.post(route(ws,'/profile'),headers=headers,json={'expected_revision':1,'fields':{**PROFILE,'evaluation_policy':policy}})
+    assert result.status_code==200,result.text
+    data=result.json()
+    assert data['provenance']['name']['updated_at']==stamp
+    assert data['fields']['evaluation_policy']==policy
+    assert data['provenance']['evaluation_policy']['actor_id']==client.owner_id
 
 
 @pytest.mark.parametrize('question', ['metrics', 'audiences'])
@@ -188,7 +219,9 @@ def test_foreign_import_cannot_be_used_and_idempotency_key_is_bound(intel, rw):
                        json={**request, 'question': 'audiences'}).status_code == 409
     owner = user(rw)
     foreign = new_workspace(rw, user=owner)
-    rw.execute('SELECT start_registration_trial(%s,%s)', (owner, foreign))
+    # Reach the foreign-import boundary with valid paid access, not a pending trial.
+    rw.execute("""INSERT INTO subscriptions(workspace_id,plan,status,price,current_period_start,current_period_end)
+        VALUES(%s,'start','active',2990,now()-interval '1 second',now()+interval '30 days')""", (foreign,))
     other_headers = {'Origin': 'https://app.example.test', **cookie(session(rw, owner))}
     client.post(route(foreign, '/profile'), headers=other_headers, json={'expected_revision': 0, 'fields': PROFILE})
     assert client.post(route(foreign, '/analyze'), headers=other_headers,
@@ -212,7 +245,7 @@ def test_profile_edit_invalidates_pending_decision(intel):
     assert response.status_code == 409
 
 
-def test_verifier_blocks_tampered_result_before_run_is_saved(intel, monkeypatch):
+def test_verifier_blocks_tampered_publication_and_records_failed_run(intel, monkeypatch):
     from app.api import intelligence
     client, ws, headers = intel
     client.post(route(ws, '/profile'), headers=headers, json={'expected_revision': 0, 'fields': PROFILE})
@@ -225,11 +258,16 @@ def test_verifier_blocks_tampered_result_before_run_is_saved(intel, monkeypatch)
         return result
 
     monkeypatch.setattr(intelligence, '_calculate', wrong)
-    response = client.post(route(ws, '/analyze'), headers=headers,
-                           json={'question': 'metrics', 'import_id': imported, 'idempotency_key': str(uuid4())})
+    request = {'question': 'metrics', 'import_id': imported, 'idempotency_key': str(uuid4())}
+    response = client.post(route(ws, '/analyze'), headers=headers, json=request)
     assert response.status_code == 409
     assert response.json()['error']['code'] == 'verification_blocked'
-    assert client.get(route(ws), headers=headers).json()['runs'] == []
+    runs = client.get(route(ws), headers=headers).json()['runs']
+    assert len(runs) == 1 and runs[0]['status'] == 'failed'
+    assert runs[0]['recommendations'] == [] and 'metrics' not in runs[0]['result']
+    repeated = client.post(route(ws, '/analyze'), headers=headers, json=request)
+    assert repeated.status_code == 409 and repeated.json()['run_id'] == response.json()['run_id']
+    assert len(client.get(route(ws), headers=headers).json()['runs']) == 1
 
 
 @pytest.mark.parametrize('revoke', ['approval', 'account'])

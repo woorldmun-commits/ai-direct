@@ -14,7 +14,7 @@ export function BillingCheckout({workspace,catalog,paid,recovered}:{workspace:st
   const response=await fetch(`/api/workspaces/${workspace}/billing/orders${path}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(15000)});
   if(!response.ok){
    if(response.status===409){const problem=await response.json().catch(()=>null);
-    if(problem?.error?.code==='billing_terms_changed'&&!path){sessionStorage.removeItem(key);setAttempt(null);throw new Error('Условия оплаты изменились. Обновите страницу, прочитайте и примите актуальную оферту. Заказ не создан.');}
+    if(['billing_terms_changed','billing_offer_changed'].includes(problem?.error?.code)&&!path){sessionStorage.removeItem(key);setAttempt(null);throw new Error('Цена или условия изменились. Обновите страницу и примите актуальное предложение. Заказ не создан.');}
     if(problem?.error?.code==='billing_order_pending'){window.location.reload();throw new Error('Восстанавливаем существующий заказ.');}
    }
    throw new Error(response.status===409?'Оплата требует проверки оператором. Не создавайте новый платёж.':response.status===403?'Оплата доступна владельцу и администратору.':response.status===503?'Платёжный сервис пока недоступен. Сохранённую операцию можно проверить повторно.':'Запрос не завершён. Повторите проверку сохранённой операции.');
@@ -25,7 +25,7 @@ export function BillingCheckout({workspace,catalog,paid,recovered}:{workspace:st
   if(active.current)return;active.current=true;setBusy(true);setError('');setMessage('');
   try{
    let current=attempt;
-   if(!current){if(!catalog.terms_sha256)throw new Error('Условия оплаты ещё не утверждены.');current={request_id:crypto.randomUUID(),sku,terms_sha256:catalog.terms_sha256};remember(current);}
+   if(!current){if(!catalog.terms_sha256)throw new Error('Условия оплаты ещё не утверждены.');current={request_id:crypto.randomUUID(),sku,terms_sha256:catalog.terms_sha256,expected_amount_minor:catalog.items.find(p=>p.id===sku)!.amount_minor};remember(current);}
    if(!current.id){const order=await post('',current);const next={...current,id:order.id};if(!isCheckoutAttempt(next)||order.sku!==current.sku)throw new Error('Ответ операции требует проверки.');current=next;remember(current);}
    const result=await post(`/${current.id}/${refresh?'refresh':'checkout'}`);
    if(result.status==='succeeded'){sessionStorage.removeItem(key);window.location.reload();return;}
@@ -37,10 +37,11 @@ export function BillingCheckout({workspace,catalog,paid,recovered}:{workspace:st
   }catch(e){setError(e instanceof Error?e.message:'Не удалось проверить оплату.');}finally{active.current=false;setBusy(false);}
  }
  function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();void run();}
- return <section className="ix-card"><h2>Оплата подписки</h2><p>30 дней доступа и 3 дня на продление. Без автосписаний. Тариф действует на одно рабочее пространство.</p>
+ return <section className="ix-card"><h2>Оплата подписки</h2><p>30 дней доступа и 3 дня на продление. Без автосписаний. «Контроль» и «Бизнес» — одно пространство; «Агентство» — до 5 пространств и 15 аккаунтов суммарно.</p>
+  {catalog.items[0].offer_periods_remaining!==undefined&&<p role="status">Пилот «Контроль»: 1 990 ₽ за период. Осталось периодов по этой цене: {catalog.items[0].offer_periods_remaining}; затем 2 990 ₽ за 30 дней. Место резервируется при создании заказа; цена проверяется повторно перед оплатой.</p>}
   {catalog.test&&<p role="status">Тестовый режим ЮKassa: реальная оплата не принимается.</p>}
   {!catalog.checkout_enabled?<p role="status">Приём платежей откроется после настройки провайдера и утверждения документов.</p>:paid&&!attempt?<p>Действует оплаченный доступ. Досрочное продление и смена тарифа пока недоступны.</p>:<form onSubmit={submit} className="workspace-form">
-   {!attempt&&<><label>Тариф<select value={sku} onChange={e=>setSku(e.target.value as typeof sku)} disabled={busy}>{catalog.items.map(p=><option key={p.id} value={p.id}>{p.name} · {p.amount_minor/100} ₽ · аккаунтов: {p.accounts}</option>)}</select></label><label className="workspace-checkbox"><input type="checkbox" required disabled={busy}/>Принимаю <a href="/legal/offer" target="_blank" rel="noreferrer">оферту</a> и условия выбранного тарифа. Оплата разовая.</label></>}
+   {!attempt&&<><label>Тариф<select value={sku} onChange={e=>setSku(e.target.value as typeof sku)} disabled={busy}>{catalog.items.map(p=><option key={p.id} value={p.id}>{p.name} · {p.amount_minor/100} ₽ / 30 дней · аккаунтов: {p.accounts} · пространств: {p.workspaces??1}</option>)}</select></label><label className="workspace-checkbox"><input type="checkbox" required disabled={busy}/>Принимаю <a href="/legal/offer" target="_blank" rel="noreferrer">оферту</a> и условия выбранного тарифа. Оплата разовая.</label></>}
    <button className="ix-btn ix-btn--primary" disabled={busy}>{busy?'Проверяем…':attempt?'Продолжить сохранённую оплату':'Перейти к оплате в ЮKassa'}</button>
    {attempt&&<button className="ix-btn" type="button" disabled={busy} onClick={()=>void run(true)}>Проверить оплату</button>}
    {attempt&&<p className="ix-muted ix-mini">Заказ сохраняется сервером и восстанавливается при открытии тарифов. Повтор использует тот же идентификатор. Статус доступа подтверждает сервер после сверки с провайдером.</p>}

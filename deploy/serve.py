@@ -16,7 +16,7 @@ def child_environment(env, role):
         allowed={'PATH','HOME','SYSTEMROOT','TEMP','TMP','TMPDIR','LANG','LC_ALL','NODE_ENV','NODE_OPTIONS',
                  'HOSTNAME','PORT','NEXT_TELEMETRY_DISABLED','INROU_API_URL','INROU_APP_ORIGIN',
                  'INROU_SESSION_COOKIE','INROU_CLIENT_IP_HEADER','API_PROXY_HMAC_KEY','INROU_DEMO',
-                 'INROU_LOCAL_PREVIEW','INROU_STAGING'}
+                 'INROU_LOCAL_PREVIEW','INROU_STAGING','INROU_PUBLIC_CONTACT_EMAIL'}
         return {key:value for key,value in shared.items() if key.upper() in allowed or key.startswith('NEXT_PUBLIC_')}
     if role=='api':
         return {key:value for key,value in shared.items() if key not in ('WORKER_DATABASE_URL','WORKER_QUEUE_DATABASE_URL','RETENTION_DATABASE_URL')}
@@ -28,11 +28,12 @@ def child_environment(env, role):
                  'PILOT_OPEN_ACCESS','PILOT_ACCESS_UNTIL','DIRECT_PLACEMENTS_REPORT'}
         return {key:value for key,value in shared.items() if key in allowed
                 or key.startswith('TOKEN_ENCRYPTION_KEY_') and key[len('TOKEN_ENCRYPTION_KEY_'):].isdigit()}
-    if role=='auth_mail':
+    if role in ('auth_mail','product_mail'):
         allowed={'PATH','HOME','SYSTEMROOT','TEMP','TMP','TMPDIR','LANG','LC_ALL','PYTHONUNBUFFERED',
                  'SSL_CERT_FILE','SSL_CERT_DIR','WORKER_QUEUE_DATABASE_URL','INROU_EMAIL_ENABLED',
                  'INROU_EMAIL_ORIGIN','INROU_AUTH_HMAC_KEY','INROU_MAIL_PROVIDER','INROU_MAIL_API_KEY',
-                 'INROU_SMTP_HOST','INROU_SMTP_PORT','INROU_SMTP_FROM','INROU_SMTP_USER','INROU_SMTP_PASSWORD'}
+                 'INROU_SMTP_HOST','INROU_SMTP_PORT','INROU_SMTP_FROM','INROU_SMTP_USER','INROU_SMTP_PASSWORD',
+                 'INROU_PRODUCT_EMAIL_ENABLED','PILOT_WORKSPACE_IDS','PILOT_OPEN_ACCESS','PILOT_ACCESS_UNTIL'}
         return {key:value for key,value in shared.items() if key in allowed}
     if role=='retention':
         allowed={'PATH','HOME','SYSTEMROOT','TEMP','TMP','TMPDIR','LANG','LC_ALL','PYTHONUNBUFFERED',
@@ -73,6 +74,9 @@ def main():
             env.setdefault('RELEASE_COMMIT_SHA',env.get('RENDER_GIT_COMMIT',''))
             env.setdefault('RELEASE_BUILD_ID',env.get('RENDER_GIT_COMMIT',''))
             children.append(subprocess.Popen([sys.executable,'-m','app.worker.runner'],cwd=ROOT/'backend',env=child_environment(env,'worker')))
+        if env.get('INROU_PRODUCT_EMAIL_ENABLED')=='1':
+            children.append(subprocess.Popen([sys.executable,'-m','app.worker.product_mail_runner'],
+                cwd=ROOT/'backend',env=child_environment(env,'product_mail')))
         if env.get('RETENTION_ENABLED')=='1':
             children.append(subprocess.Popen([sys.executable,'-m','app.worker.retention_runner'],cwd=ROOT/'backend',env=child_environment(env,'retention')))
         web_env={**child_environment(env,'web'),'HOSTNAME':'0.0.0.0','PORT':env.get('PORT','10000')}

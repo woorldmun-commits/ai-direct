@@ -7,18 +7,19 @@ from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, field_validator
 
 from app.api.deps import Conn, CurrentWorkspace
-from app.api.errors import ApiError, not_found
+from app.api.errors import ApiError, error_body, not_found
 from app.api.active import today_msk
 from app.insights import campaign_stats
 from app.intelligence.contracts import AnalysisContext, AnalysisResult, Period, SourceReference, decimal_number
 from app.intelligence.economics import INPUT_UNITS
-from app.intelligence.knowledge import industries
+from app.intelligence.knowledge import discover_audiences, industries
 from app.intelligence.profiles import BusinessFields
-from app.intelligence.tools import AudienceDiscoveryInput, CPAComparisonInput, MetricCalculationInput, RunBudget, ToolContext, invoke
+from app.intelligence.tools import AudienceDiscoveryInput, AudienceDiscoveryResult, CPAComparisonInput, MetricCalculationInput, RunBudget, ToolContext, invoke
 from app.worker.guard import load_state
 
 router = APIRouter()
@@ -88,8 +89,8 @@ class Decision(Body):
     idempotency_key: UUID
 
 
-def _enabled(request, *, write=False, ws=None):
-    if not request.app.state.settings.intelligence_enabled:
+def _enabled(request, *, write=False, ws=None, profile=False):
+    if not profile and not request.app.state.settings.intelligence_enabled:
         raise ApiError(403, 'feature_disabled', message='Аналитический сценарий пока выключен.')
     if write and ws.role not in ('owner', 'admin', 'approver', 'analyst'):
         raise ApiError(403, 'forbidden_role')
@@ -278,6 +279,22 @@ def _decorate(conn, ws, run):
                                       if rec['id'] in decisions else rec for rec in run['recommendations']]}
 
 
+def _failed_response(run, request):
+    result = run['result']
+    return JSONResponse({**error_body(result['error_code'], request.state.request_id,
+        reason=result['reason_code'], message='Расчёт не завершён; ошибка сохранена в истории. Проверьте данные перед новым запуском.'),
+        'run_id': run['id']}, status_code=409)
+
+
+def _verify_audiences(result, profile, workspace_id):
+    expected = AudienceDiscoveryResult(workspace_id=workspace_id, profile_revision=profile['revision'],
+                                       **discover_audiences(profile))
+    if result != expected:
+        raise ApiError(409, 'verification_blocked', 'audience_source_mismatch')
+    return {'status': 'pass', 'version': 'runtime_audience@1',
+            'limitations': ['Проверено соответствие сохранённому профилю и шаблону гипотез; эффективность аудитории не подтверждена.']}
+
+
 @router.get('/workspaces/{workspace_id}/intelligence')
 def overview(request: Request, conn: Conn, ws: CurrentWorkspace, cursor: UUID | None = None):
     settings = request.app.state.settings
@@ -287,7 +304,7 @@ def overview(request: Request, conn: Conn, ws: CurrentWorkspace, cursor: UUID | 
              'profile': None, 'industries': [], 'imports': [], 'runs': [], 'next_cursor': None,
              'limits': {'external_llm': False, 'external_execution': False, 'max_tool_calls': 8}}
     if not settings.intelligence_enabled:
-        return empty
+        return {**empty, 'profile': _profile(conn, ws), 'industries': industries()}
     approved = settings.intelligence_real_data_approved
     imports = conn.execute('''SELECT i.id,i.data_mode,i.created_at,i.payload->>'period_start',i.payload->>'period_end',i.payload
         FROM intelligence_imports i WHERE i.workspace_id=%s AND ''' + _import_access_sql('i') +
@@ -318,7 +335,7 @@ def overview(request: Request, conn: Conn, ws: CurrentWorkspace, cursor: UUID | 
 
 @router.post('/workspaces/{workspace_id}/intelligence/profile')
 def update_profile(body: ProfileUpdate, request: Request, conn: Conn, ws: CurrentWorkspace):
-    _enabled(request, write=True, ws=ws)
+    _enabled(request, write=True, ws=ws, profile=True)
     _lock(conn, ws)
     previous = _profile(conn, ws)
     revision = previous['revision'] if previous else 0
@@ -327,7 +344,7 @@ def update_profile(body: ProfileUpdate, request: Request, conn: Conn, ws: Curren
     _quota(conn, ws, 'profiles')
     fields = body.fields.model_dump(mode='json')
     now = datetime.now(timezone.utc).isoformat()
-    provenance = {key: previous['provenance'][key] if previous and previous['fields'].get(key) == value else
+    provenance = {key: previous['provenance'][key] if previous and key in previous['provenance'] and previous['fields'].get(key) == value else
                   {'origin': 'user_confirmed', 'actor_id': ws.actor.user_id, 'updated_at': now}
                   for key, value in fields.items()}
     result = {'revision': revision + 1, 'fields': fields, 'provenance': provenance}
@@ -437,7 +454,7 @@ def analyze(body: AnalysisRequest, request: Request, conn: Conn, ws: CurrentWork
             raise not_found()
         if previous[0] != digest:
             raise ApiError(409, 'idempotency_conflict')
-        return _decorate(conn, ws, previous[1])
+        return _failed_response(previous[1], request) if previous[1]['status'] == 'failed' else _decorate(conn, ws, previous[1])
     access = load_state(conn, ws.id, None, datetime.now(timezone.utc))
     if access.workspace_status != 'active' or not access.has_analysis_access:
         raise ApiError(403, 'analysis_access_required', message='Для нового расчёта нужен действующий пробный, пилотный или оплаченный доступ.')
@@ -450,33 +467,42 @@ def analyze(body: AnalysisRequest, request: Request, conn: Conn, ws: CurrentWork
         raise ApiError(409, 'profile_scope_changed', message='Определения конверсии профиля и импорта различаются.')
     identity = str(uuid4())
     context, budget, trace = _tool_context(request, conn, ws, identity), RunBudget(), []
-    after = _calculate(data, created_at, body.import_id, ws, context=context, budget=budget, trace=trace)
-    verification = _verify(after, data['values'])
-    result, status = after.model_dump(mode='json'), 'completed'
-    result['missing_inputs'] = [key for key in INPUT_UNITS if after.metrics[key].value is None]
-    publish_recommendation = any(metric.value is not None for key, metric in after.metrics.items() if key not in INPUT_UNITS)
-    title = 'Проверить определения и доступные метрики'
-    if body.question == 'why_cpa':
-        if body.before_import_id is None:
-            raise ApiError(400, 'invalid_request', 'baseline_required')
-        before_data, before_at = _import(conn, ws, body.before_import_id, request)
-        if before_data['data_mode'] != data['data_mode']:
-            raise ApiError(409, 'incompatible_data', 'different_data_modes')
-        before = _calculate(before_data, before_at, body.before_import_id, ws, context=context, budget=budget, trace=trace)
-        _verify(before, before_data['values'])
-        comparison = _invoke('cpa.compare', CPAComparisonInput(before=before, after=after), context, budget, trace)
-        _verify_comparison(comparison, before, after)
-        result = {'before': before.model_dump(mode='json'), 'after': result,
-                  'comparison': comparison.model_dump(mode='json')}
-        status = 'completed' if comparison.status == 'success' else 'partial'
-        publish_recommendation = comparison.status == 'success'
-        title = 'Проверить гипотезы изменения CPA'
-    elif body.question == 'audiences':
-        audiences = _invoke('audience.discover', AudienceDiscoveryInput(workspace_id=ws.id, profile=profile),
-                            context, budget, trace)
-        result = audiences.model_dump(mode='json')
-        publish_recommendation = bool(result['segments'])
-        title = 'Спланировать проверку аудитории'
+    try:
+        after = _calculate(data, created_at, body.import_id, ws, context=context, budget=budget, trace=trace)
+        verification = _verify(after, data['values'])
+        result, status = after.model_dump(mode='json'), 'completed'
+        result['missing_inputs'] = [key for key in INPUT_UNITS if after.metrics[key].value is None]
+        publish_recommendation = any(metric.value is not None for key, metric in after.metrics.items() if key not in INPUT_UNITS)
+        title = 'Проверить определения и доступные метрики'
+        if body.question == 'why_cpa':
+            if body.before_import_id is None:
+                raise ApiError(400, 'invalid_request', 'baseline_required')
+            before_data, before_at = _import(conn, ws, body.before_import_id, request)
+            if before_data['data_mode'] != data['data_mode']:
+                raise ApiError(409, 'incompatible_data', 'different_data_modes')
+            before = _calculate(before_data, before_at, body.before_import_id, ws, context=context, budget=budget, trace=trace)
+            _verify(before, before_data['values'])
+            comparison = _invoke('cpa.compare', CPAComparisonInput(before=before, after=after), context, budget, trace)
+            _verify_comparison(comparison, before, after)
+            result = {'before': before.model_dump(mode='json'), 'after': result,
+                      'comparison': comparison.model_dump(mode='json')}
+            status = 'completed' if comparison.status == 'success' else 'partial'
+            publish_recommendation = comparison.status == 'success'
+            title = 'Проверить гипотезы изменения CPA'
+        elif body.question == 'audiences':
+            audiences = _invoke('audience.discover', AudienceDiscoveryInput(workspace_id=ws.id, profile=profile),
+                                context, budget, trace)
+            verification = _verify_audiences(audiences, profile, ws.id)
+            result = audiences.model_dump(mode='json')
+            publish_recommendation = bool(result['segments'])
+            title = 'Спланировать проверку аудитории'
+    except ApiError as exc:
+        if exc.code not in ('analysis_unavailable', 'verification_blocked'):
+            raise
+        status, publish_recommendation = 'failed', False
+        result = {'error_code': exc.code, 'reason_code': exc.reason or 'verification_blocked'}
+        verification = {'status': 'blocked', 'version': 'runtime_financial@1'}
+        title = 'Расчёт не завершён'
     recommendation = {'id': f'{identity}:1', 'revision': 1, 'state_version': 0, 'status': 'requires_decision',
                       'title': title, 'facts': ['Профиль и источники сохранены в указанной версии.'],
                       'hypotheses': ['Причина изменения и эффективность аудитории требуют отдельной проверки.'],
@@ -494,7 +520,7 @@ def analyze(body: AnalysisRequest, request: Request, conn: Conn, ws: CurrentWork
         idempotency_key,request_hash,payload,created_by) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)''',
         (UUID(identity), ws.id, body.import_id, body.before_import_id, profile['revision'], body.idempotency_key,
          digest, Jsonb(run), ws.actor.user_id))
-    return run
+    return _failed_response(run, request) if status == 'failed' else run
 
 
 @router.post('/workspaces/{workspace_id}/intelligence/decisions')

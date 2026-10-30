@@ -14,6 +14,7 @@ rules.domain.windows), кабинеты и кампании со статист�
 не отдаются — в контракте они помечены «появится» (API_CONTRACT.md §8); вместо counts по статусам — counts.active."""
 
 from datetime import date
+from collections import Counter
 from decimal import Decimal
 
 import psycopg
@@ -119,7 +120,11 @@ def today(conn: Conn, ws: CurrentWorkspace):
     result, overlaps = with_exposure(conn, cards, as_of)
     top = [recommendation_item(c, overlaps[c.rec_id]) for c in sorted(cards, key=_priority)[:TOP_LIMIT]]
     scope, spent = _scope(conn, ws.id, as_of)
+    skipped = conn.execute('SELECT rules_skipped FROM audit_runs WHERE workspace_id=%s ORDER BY created_at DESC,id DESC LIMIT 1',
+                           (ws.id,)).fetchone()
+    limitations = Counter(item['reason'] for item in skipped[0]) if skipped else Counter()
     partial = spent.data_status == "partial" or any(c.lost.data_status == "partial" for c in cards)
     return {"last_audit_at": moment(last_audit_at), "audit_scope": scope, "spent": value_of(spent),
+            'audit_limitations': [{'code': code, 'count': count} for code, count in sorted(limitations.items())],
             "exposure": _exposure_json(result), "counts": {"active": len(cards)}, "top": top,
             "data_freshness": _freshness(conn, ws.id), "data_status": "partial" if partial else "complete"}

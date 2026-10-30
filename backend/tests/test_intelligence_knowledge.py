@@ -45,3 +45,12 @@ def test_unknown_industry_is_explicit_and_never_assigned_a_known_profile():
     assert result['segments'][0]['status'] == 'hypothesis'
     assert result['segments'][0]['source_refs'] == []
     assert source['fields']['industry_code'] == 'unknown'
+
+
+@pytest.mark.parametrize('code,stage,need', [('cosmetology', 'визит', 'загрузка'),
+                                          ('manufacturing', 'техническое соответствие', 'спецификация')])
+def test_specific_processes_do_not_claim_validated_market_knowledge(code, stage, need):
+    item = next(item for item in industries() if item['code'] == code)
+    assert stage in item['purchase_stages']
+    assert need in item['limitations'][0]
+    assert item['review_status'] == 'process_hypothesis'

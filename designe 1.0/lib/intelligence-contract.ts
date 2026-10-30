@@ -1,8 +1,11 @@
+export type EvaluationPolicy = {counter_id:number;goal_ids:number[];attribution:string;
+ conversion_stage:'lead'|'qualified_lead'|'appointment'|'visit'|'sale';conversion_lag_days:number;minimum_conversions:number};
 export type BusinessFields = {
  name:string; industry_code:string; business_model:'b2b'|'b2c'; products:string[]; geography:string[];
  currency:'RUB'; timezone:'Europe/Moscow'; goal:string; conversion_definition:string;
  average_order_value:string|null; gross_margin_pct:string|null; sales_cycle_days:number|null;
  budget_limit:string|null; seasonality:string|null; advantages:string[]; crm_available:boolean;
+ evaluation_policy?:EvaluationPolicy|null;
 };
 export type IntelligenceRecommendation = {id:string;title:string;status:'requires_decision'|'approved'|'postponed'|'rejected'|'cancelled';revision:1;state_version:number;facts:string[];hypotheses:string[];risks:string[];next_step:string};
 export type IntelligenceRun = {id:string;status:'completed'|'partial'|'failed';created_at:string;question:string;result:unknown;profile_revision:number|null;recommendations?:IntelligenceRecommendation[];data_mode?:'synthetic'|'imported'};
@@ -21,12 +24,21 @@ const integer=(v:unknown):v is number=>Number.isSafeInteger(v)&&Number(v)>=0;
 const instant=(v:unknown)=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}T/.test(v)&&Number.isFinite(Date.parse(v));
 const date=(v:unknown):v is string=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&Number.isFinite(Date.parse(v))&&new Date(v).toISOString().slice(0,10)===v;
 const decimal=(v:unknown)=>v===null||typeof v==='string'&&v.length<=100&&/^-?\d+(\.\d+)?$/.test(v);
+export function isEvaluationPolicy(v:unknown):v is EvaluationPolicy {
+ return object(v)&&integer(v.counter_id)&&v.counter_id>0&&Array.isArray(v.goal_ids)&&v.goal_ids.length>0&&v.goal_ids.length<=10
+  &&v.goal_ids.every((id,i,ids)=>integer(id)&&id>0&&(i===0||id>ids[i-1]))
+  &&['last','cross_device_last_significant','cross_device_first','automatic'].includes(String(v.attribution))
+  &&['lead','qualified_lead','appointment','visit','sale'].includes(String(v.conversion_stage))
+  &&integer(v.conversion_lag_days)&&v.conversion_lag_days<=3650
+  &&integer(v.minimum_conversions)&&v.minimum_conversions>=1&&v.minimum_conversions<=1000;
+}
 export function isBusinessFields(v:unknown):v is BusinessFields {
  return object(v)&&['name','industry_code','goal','conversion_definition'].every(k=>text(v[k]))
   &&['b2b','b2c'].includes(String(v.business_model))&&strings(v.products)&&strings(v.geography)&&strings(v.advantages)
   &&v.currency==='RUB'&&v.timezone==='Europe/Moscow'&&typeof v.crm_available==='boolean'
   &&decimal(v.average_order_value)&&decimal(v.gross_margin_pct)&&decimal(v.budget_limit)
-  &&(v.sales_cycle_days===null||integer(v.sales_cycle_days))&&(v.seasonality===null||text(v.seasonality));
+  &&(v.sales_cycle_days===null||integer(v.sales_cycle_days))&&(v.seasonality===null||text(v.seasonality))
+  &&(v.evaluation_policy===undefined||v.evaluation_policy===null||isEvaluationPolicy(v.evaluation_policy));
 }
 function recommendation(v:unknown):v is IntelligenceRecommendation {
  return object(v)&&text(v.id)&&text(v.title)&&['requires_decision','approved','postponed','rejected','cancelled'].includes(String(v.status))

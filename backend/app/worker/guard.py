@@ -44,6 +44,7 @@ class State:
     subscription_auto_renew: bool | None = None
     trial_started_at: datetime | None = None
     trial_ends_at: datetime | None = None
+    trial_pending: bool = False
 
     @property
     def trial_active(self) -> bool:
@@ -97,6 +98,7 @@ def _direct_detail(s: State) -> str:
 
 _ACTIVE = Check("workspace_inactive", lambda s: s.workspace_status == "active", lambda s: s.workspace_status)
 _PAID = Check("subscription_inactive", lambda s: s.has_analysis_access, lambda s: s.subscription_status or "none")
+_SYNC_ACCESS = Check("subscription_inactive", lambda s: s.has_analysis_access or s.trial_pending, lambda s: s.subscription_status or "none")
 _DIRECT = Check("direct_unavailable", lambda s: s.direct_status == "connected" and s.direct_account_status == "active",
                 _direct_detail)
 # recheck нужен именно недоступному аккаунту; не поможет только отсутствию токена — там нужен новый OAuth
@@ -105,7 +107,7 @@ _HAS_TOKEN = Check("direct_unavailable", lambda s: s.direct_status not in (None,
 _NOT_DELETED = Check("workspace_deleted", lambda s: s.workspace_status is not None)
 
 RULES: dict[Task, tuple[Check, ...]] = {
-    Task.SYNC: (_ACTIVE, _PAID, _DIRECT),
+    Task.SYNC: (_ACTIVE, _SYNC_ACCESS, _DIRECT),
     Task.RECHECK: (_ACTIVE, _HAS_TOKEN),
     Task.AUDIT: (_ACTIVE, _PAID),                     # аудит читает уже записанный снимок, API не трогает
     Task.MEASURE: (_ACTIVE, _PAID),                   # замер читает снимки, API не трогает
@@ -149,12 +151,7 @@ def load_state(conn: psycopg.Connection, workspace_id: int, direct_account_id: i
     trial = conn.execute('SELECT * FROM workspace_trial(%s)', (workspace_id,)).fetchone() if ws else None
     # Будущие периоды не дают доступ. Среди начавшихся: действующая > последняя по окончании.
     # «expired» и «none» — разные действия в UI («продлить» / «оформить»).
-    sub = conn.execute("""SELECT status, current_period_end, plan, price, current_period_start, auto_renew
-                          FROM subscriptions WHERE workspace_id = %s
-                          AND current_period_start <= %s
-                          ORDER BY (status IN ('active', 'past_due', 'canceled')) DESC,
-                                   current_period_end DESC, id DESC
-                          LIMIT 1""", (workspace_id, now)).fetchone()
+    sub = conn.execute('SELECT * FROM effective_subscription(%s,%s)', (workspace_id, now)).fetchone()
     direct = conn.execute("""SELECT c.status, a.status, a.unavailable_reason FROM direct_accounts a
                              JOIN direct_connections c ON c.id = a.direct_connection_id
                              WHERE a.id = %s AND c.workspace_id = %s""",
@@ -165,4 +162,5 @@ def load_state(conn: psycopg.Connection, workspace_id: int, direct_account_id: i
                  direct_unavailable_reason=direct[2] if direct else None, now=now,
                  subscription_plan=sub[2] if sub else None, subscription_price=sub[3] if sub else None,
                  subscription_period_start=sub[4] if sub else None, subscription_auto_renew=sub[5] if sub else None,
-                 trial_started_at=trial[0] if trial else None, trial_ends_at=trial[1] if trial else None)
+                 trial_started_at=trial[0] if trial else None, trial_ends_at=trial[1] if trial else None,
+                 trial_pending=bool(trial and trial[0] is None and trial[1] is None))
