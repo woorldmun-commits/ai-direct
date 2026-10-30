@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import psycopg
 import pytest
+from types import SimpleNamespace
 
 from app.insights import campaign_stats
 from app.tenancy import workspace_scope
@@ -87,12 +88,12 @@ def test_wrong_workspace_audit_reference_is_blocked_by_db(rw,funded):
                    " VALUES(%s,%s)",(other,audit))
 
 
-def test_changed_selected_snapshot_cannot_be_silently_used(rw,funded):
+def test_changed_selected_snapshot_cannot_be_silently_used(rw,funded,monkeypatch):
     rw.execute("SELECT start_registration_trial(%s,%s)",(funded["user"],funded["ws"]))
     audit_job(rw,funded)
     chief.enqueue_recent(rw,NOW)
     jid,ws=chief.due(rw,NOW)[0]
-    rw.execute("UPDATE direct_accounts SET is_selected=false WHERE id=%s",(funded["account"],))
+    monkeypatch.setattr(chief, "load_state", lambda *_: SimpleNamespace(\n        workspace_status="active",has_analysis_access=True))\n    rw.execute("UPDATE direct_accounts SET is_selected=false WHERE id=%s",(funded["account"],))
     assert chief.process(rw,jid,ws,NOW)
     status, report = rw.execute("SELECT status,report FROM chief_analysis_jobs WHERE id=%s",(jid,)).fetchone()
     assert status=="blocked"
