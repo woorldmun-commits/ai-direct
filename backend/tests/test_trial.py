@@ -9,24 +9,28 @@ from test_email_auth import browser, verified  # noqa: F401
 from test_schema import new_workspace, one
 
 
-def test_email_confirmation_grants_seven_days_without_payment(browser, db, monkeypatch):
+def test_email_confirmation_reserves_trial_then_server_reports_activation(browser, db, monkeypatch):
     verified(browser)
     workspace = browser.get('/api/v1/me').json()['organizations'][0]['workspaces'][0]['id']
     body = browser.get(f'/api/v1/workspaces/{workspace}/subscription').json()
     assert body['subscription'] is None and body['access']['paid'] is False
-    assert body['access']['basis'] == 'trial' and body['access']['analysis_allowed'] is True
-    trial = body['trial']
-    assert trial['active'] is True
-    start, end = (datetime.fromisoformat(trial[key]) for key in ('started_at', 'ends_at'))
-    assert end-start == timedelta(days=7)
+    assert body['access']['basis'] == 'none' and body['access']['analysis_allowed'] is False
+    assert body['trial_pending'] is True and body['trial'] is None
+    start=datetime.now(timezone.utc)-timedelta(seconds=1)
+    end=start+timedelta(days=7)
     uid = browser.get('/api/v1/me').json()['user']['id']
     with db('app_system') as conn:
         uid = int(uid.removeprefix('u_'))
         ws = int(workspace.removeprefix('ws_'))
         conn.execute('SELECT start_registration_trial(%s,%s)', (uid, ws))
+        assert conn.execute('SELECT * FROM workspace_trial(%s)', (ws,)).fetchone()==(None,None)
         other = new_workspace(conn, 'second', user=uid)
         conn.execute('SELECT start_registration_trial(%s,%s)', (uid, other))
         assert not load_state(conn, other, None, start+timedelta(days=1)).has_analysis_access
+    # Activation on a real sealed snapshot is covered in test_pricing_upgrade; seed only the clock here.
+    with db('app_migrator') as conn:
+        conn.execute('UPDATE registration_trials SET started_at=%s,ends_at=%s WHERE workspace_id=%s',(start,end,ws))
+    with db('app_system') as conn:
         assert load_state(conn, ws, None, end-timedelta(microseconds=1)).has_analysis_access
         assert not load_state(conn, ws, None, end).has_analysis_access
         assert not load_state(conn, ws, None, start-timedelta(microseconds=1)).has_analysis_access

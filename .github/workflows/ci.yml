@@ -89,6 +89,7 @@ jobs:
           npm run test:ix
           npm run test:remediation
           npm run test:deep-audit
+          npm run test:customer-journey
           node scripts/check-billing.mjs
           node --experimental-strip-types scripts/check-subscription.mjs
           node scripts/check-direct-proxy.mjs

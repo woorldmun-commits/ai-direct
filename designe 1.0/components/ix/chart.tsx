@@ -1,6 +1,6 @@
 'use client';
 import {useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode} from 'react';
-import {BASELINE, GRID, H, W, scaleFor, segments, xAt} from './geometry';
+import {BASELINE, GRID, H, W, pointExtrema, scaleFor, segments, xAt} from './geometry';
 import {Table} from './ui';
 import {ValueView} from '@/components/value-view';
 import type {Value} from '@/lib/value';
@@ -63,8 +63,10 @@ export function ChartPlot({points, showPrev, zoom = 100, seriesName, source, per
   const p = active === null ? null : points[active];
   const an = active === null ? undefined : anomalies.find(a => a.index === active);
   const pct = active === null ? 0 : Math.min(100, (xAt(active, n) / W) * 100 * (zoom / 100));
+  const bounds = series ? null : pointExtrema(points.filter(p => p.status !== 'unavailable'));
 
   return <>
+    {bounds && <dl className="ix-chart-bounds" aria-label={`Границы наблюдений: ${seriesName}`}>{([['Минимум', bounds.min], ['Максимум', bounds.max]] as const).map(([label, point]) => <div key={label}><dt>{label} <span>{point.label}</span></dt><dd>{point.evidence ? <ValueView v={point.evidence} hint={false}/> : point.display ?? 'Нет данных'}<small>{STATUS[point.status]}</small></dd></div>)}</dl>}
     {series && <><div className="ix-series-legend" aria-label="Ряды графика">{series.map(s => <button key={s.id} type="button" aria-pressed={!hidden.includes(s.id)} onClick={() => setHidden(h => h.includes(s.id) ? h.filter(id => id !== s.id) : [...h, s.id])}><i style={{background: s.color}} aria-hidden="true" />{s.name}</button>)}</div><details className="ix-muted ix-mini ix-chart-index"><summary>Индекс · единицы</summary>Первая положительная точка текущего ряда = 100. Единицы — в подсказке и таблице.</details>{!visible?.length && <p role="status">Все ряды скрыты. Выберите показатель в легенде.</p>}</>}
     {!series && <div className="ix-plot-key" aria-label="Обозначения графика"><span><i/>{seriesName}</span>{showPrev && <span><i className="is-previous"/>Предыдущий период</span>}</div>}
     <div ref={chart} className="ix-chartwrap" onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget)) setActive(null); }}>          <div className="ix-y-axis" aria-hidden="true">{GRID.map(y => <span key={y} style={{top: `${y / H * 100}%`}}>{new Intl.NumberFormat('ru-RU', {notation: 'compact', maximumFractionDigits: 1}).format((BASELINE - y) / scale)}</span>)}</div>

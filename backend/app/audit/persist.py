@@ -16,6 +16,7 @@ from app.audit.exposure import basis_meta
 from app.audit.policy import decide, decide_with_strategy
 from app.audit.templates import explain
 from app.audit.values import to_value
+from app.audit.verification import PublicationVerifier, VerificationBlocked
 from app.rules.domain import Finding, issue_key
 from app.worker.outbox import emit
 
@@ -32,7 +33,8 @@ class AccountResult:
     strategies: dict[str, str] = field(default_factory=dict)
 
 
-def _finding_row(f: Finding, snapshot_id: int, partial_from: date, strategy: str | None = None) -> tuple:
+def _finding_row(f: Finding, snapshot_id: int, partial_from: date, strategy: str | None = None,
+                 verification: str | None = None) -> tuple:
     def value(fact):
         return to_value(fact, snapshot_id, partial_from, f.rule_version).model_dump(mode="json")
     meta = {**f.evidence_meta, "reason_code": f.reason_code, "metric": f.metric, "reference_type": f.reference_type,
@@ -40,6 +42,8 @@ def _finding_row(f: Finding, snapshot_id: int, partial_from: date, strategy: str
             **basis_meta(f.exposure_basis)}  # основа exposure — для итога без двойного учёта (api/today.py)
     if strategy is not None:
         meta['campaign_strategy'] = strategy
+    if verification is not None:
+        meta['publication_verification'] = verification
     d = decide(f) if strategy is None else decide_with_strategy(f, strategy)
     return (f.rule_version, Jsonb(value(f.lost)), Jsonb(value(f.recoverable)), f.current_data_quality,
             Jsonb({k: value(x) for k, x in f.evidence.items()}), Jsonb(meta), Jsonb(dict(f.action)),
@@ -56,14 +60,18 @@ def _open_issue(conn: psycopg.Connection, workspace_id: int, account_id: int, f:
 
 
 def persist_finding(conn: psycopg.Connection, audit_run_id: int, workspace_id: int, release_id: int,
-                    result: AccountResult, f: Finding) -> None:
+                    result: AccountResult, f: Finding, *, verifier: PublicationVerifier | None = None) -> None:
+    verifier = verifier or PublicationVerifier(conn, audit_run_id)
+    if verifier.conn is not conn or verifier.audit_id != audit_run_id:
+        raise VerificationBlocked('verifier_scope_mismatch')
+    verification = verifier.verify(workspace_id, result.account_id, result.snapshot_id, f)
     issue_id = _open_issue(conn, workspace_id, result.account_id, f)
     finding_id = conn.execute(
         """INSERT INTO findings (audit_run_id, issue_id, rule_version, lost, recoverable, data_quality, evidence,
                                  evidence_meta, action, safety_policy, candidate_level, action_level, policy_reasons)
            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
         (audit_run_id, issue_id, *_finding_row(f, result.snapshot_id, result.partial_from,
-                                             result.strategies.get(str(f.object_id), 'unknown')))).fetchone()[0]
+                                             result.strategies.get(str(f.object_id), 'unknown'), verification))).fetchone()[0]
     explanation_id = conn.execute("""INSERT INTO explanations (finding_id, source, text, release_id)
                                      VALUES (%s, 'template', %s, %s) RETURNING id""",
                                   (finding_id, explain(f, decide_with_strategy(f, result.strategies.get(str(f.object_id), 'unknown'))), release_id)).fetchone()[0]

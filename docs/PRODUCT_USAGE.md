@@ -17,6 +17,6 @@ No user IDs, workspace IDs, recommendation IDs, payloads, email addresses or cli
 - `seen_again` is repeated rule detection, not a human view; it is intentionally omitted.
 - Zero means no retained matching records, not proven absence of usage. Outbox cleanup can limit historical lifecycle counts.
 
-Time to first audit is `null`: the activation start is not defined by these records.
+Time to first audit is measured as workspace creation → first recorded audit before `to-at`, including audits without findings. It is `null` before that audit. This is not time from the first user session or from a completed connection. The `activation.definition` field makes that denominator explicit.
 Registration/connection funnel, views of evidence, retention cohorts, free-to-paid conversion and usefulness require separately validated definitions.
 These counts neither establish causal savings nor measure advertising performance.

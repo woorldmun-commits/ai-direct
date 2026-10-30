@@ -4,7 +4,7 @@ import Link from 'next/link';
 import {BrandMark} from '@/components/brand-mark';
 import {usePathname} from 'next/navigation';
 import {createContext, useContext, useEffect, useRef, useState, type ReactNode} from 'react';
-import {Menu, X} from 'lucide-react';
+import {Menu, PanelLeftClose, PanelLeftOpen, X} from 'lucide-react';
 import {readTheme, type ThemePreference} from '@/lib/theme';
 import {NAV, CONTEXT_NAV} from './nav';
 import {cycleTheme} from './theme';
@@ -33,6 +33,7 @@ function ThemeButton() {
 export function IxShell({base, mode, workspace, workspaces = [], periodLabel, children}: {base: '/workspace' | '/demo'; mode: IxMode; workspace?: string; workspaces?: Workspace[]; periodLabel?: string; children: ReactNode}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const [query, setQuery] = useState('');
   const panel = useRef<HTMLElement>(null);
   const close = () => setOpen(false);
@@ -41,10 +42,16 @@ export function IxShell({base, mode, workspace, workspaces = [], periodLabel, ch
   if (lastPath !== pathname) { setLastPath(pathname); setOpen(false); }
   useEffect(() => {
     const media = matchMedia('(min-width:1024px)');
+    const restore = setTimeout(() => { try { setCollapsed(localStorage.getItem('inrou-sidebar-collapsed') === '1'); } catch {} }, 0);
     const sync = () => { if (media.matches) setOpen(false); };
     media.addEventListener('change', sync);
-    return () => media.removeEventListener('change', sync);
+    return () => { clearTimeout(restore); media.removeEventListener('change', sync); };
   }, []);
+  const toggleSidebar = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    try { localStorage.setItem('inrou-sidebar-collapsed', next ? '1' : '0'); } catch {}
+  };
   const active = pathname.startsWith(base + '/') ? pathname.slice(base.length + 1).split('/')[0] : '';
   const href = (slug: string) => `${base}/${slug}${mode === 'live' && workspace ? '?workspace=' + encodeURIComponent(workspace) : ''}`;
   const current = workspaces.find(w => w.id === workspace);
@@ -52,12 +59,13 @@ export function IxShell({base, mode, workspace, workspaces = [], periodLabel, ch
 
   return <div className="ix" lang="ru">
     <a className="ix-skip" href="#main-content">Перейти к содержимому</a>
-    <div className="ix-shell">
+    <div className={'ix-shell' + (collapsed ? ' is-collapsed' : '')}>
       <aside ref={panel} id="ix-sidebar" className={'ix-sidebar' + (open ? ' is-open' : '')} role={open ? 'dialog' : undefined} aria-modal={open || undefined} aria-label="Разделы кабинета"><div className="ix-sidebar-in">
-        <Link className="ix-logo" href="/" title="INROU — на главную"><BrandMark/>INROU<small>INTELLIGENCE ATELIER</small></Link>
+        <Link className="ix-logo" href="/" title="INROU — на главную" aria-label="INROU — на главную"><BrandMark/><span className="ix-brand-text">INROU<small>INTELLIGENCE ATELIER</small></span></Link>
+        <button type="button" className="ix-collapse" aria-label={collapsed ? 'Развернуть панель' : 'Свернуть панель'} aria-expanded={!collapsed} aria-controls="ix-primary-nav" onClick={toggleSidebar}>{collapsed ? <PanelLeftOpen size={18} aria-hidden/> : <PanelLeftClose size={18} aria-hidden/>}<span>{collapsed ? 'Развернуть' : 'Свернуть панель'}</span></button>
         <button type="button" className="ix-pill ix-menu" style={{alignSelf: 'flex-end', display: open ? 'inline-block' : 'none'}} aria-label="Закрыть меню" onClick={close}><X size={18} aria-hidden /></button>
-        <nav className="ix-nav" aria-label="Основная навигация">
-          {NAV.map(({slug, label, Icon}) => <Link key={slug} href={href(slug)} aria-current={active === slug ? 'page' : undefined} data-autofocus={active === slug ? '' : undefined}><Icon aria-hidden />{label}</Link>)}
+        <nav id="ix-primary-nav" className="ix-nav" aria-label="Основная навигация">
+          {NAV.map(({slug, label, Icon}) => <Link key={slug} href={href(slug)} aria-label={label} title={label} aria-current={active === slug ? 'page' : undefined} data-autofocus={active === slug ? '' : undefined}><Icon aria-hidden /><span className="ix-nav-label">{label}</span></Link>)}
         </nav>
         <div className="ix-sidefoot">{mode === 'demo'
           ? <>● Демонстрационный режим<br />Данные синтетические. Никаких изменений в рекламных кабинетах.</>

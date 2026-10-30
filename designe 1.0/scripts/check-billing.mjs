@@ -5,6 +5,11 @@ function load(file,dependencies={}){const exports={};new Function('exports','req
 const {isBillingCatalog,isCheckoutAttempt,isBillingRecovery,checkoutUrl}=load('../lib/billing-contract.ts');
 const catalog={items:[{id:'control',name:'Контроль',plan:'start',amount_minor:299000,accounts:1},{id:'business',name:'Бизнес',plan:'business',amount_minor:499000,accounts:5},{id:'agency',name:'Агентство',plan:'business_plus',amount_minor:999000,accounts:15}],unit:'workspace',currency:'RUB',period_days:30,grace_days:3,auto_renew:false,checkout_enabled:false,test:null,terms_sha256:null};
 assert(isBillingCatalog(catalog));
+assert(isBillingCatalog({...catalog,unit:'subscription',items:catalog.items.map(p=>({...p,workspaces:p.id==='agency'?5:1}))}));
+const founder={...catalog,items:catalog.items.map(p=>p.id==='control'?{...p,amount_minor:199000,regular_amount_minor:299000,offer_periods_remaining:3}:p)};
+assert(isBillingCatalog(founder));
+for(const n of [0,4,'3',-1])assert(!isBillingCatalog({...founder,items:founder.items.map(p=>p.id==='control'?{...p,offer_periods_remaining:n}:p)}));
+assert(!isBillingCatalog({...catalog,unit:['subscription']}));
 assert(!isBillingCatalog({...catalog,checkout_enabled:true}));
 assert(!isBillingCatalog({...catalog,items:[catalog.items[0],catalog.items[0],catalog.items[2]]}));
 assert(!isBillingCatalog({...catalog,items:catalog.items.map(p=>({...p,amount_minor:'299000'}))}));
@@ -16,6 +21,11 @@ assert.equal(checkoutUrl('https://yoomoney.ru/checkout/payments/v2/contract'), '
 for(const url of ['http://yoomoney.ru','https://yoomoney.ru.evil.test','https://user:pass@yoomoney.ru','javascript:alert(1)','https://yoomoney.ru:8443/'])assert.equal(checkoutUrl(url),null);
 const {workspacePath}=load('../lib/workspace-path.ts');
 assert(workspacePath('/billing/plans','GET'));
+assert(workspacePath('/workspaces/ws_1/billing/plans','GET'));
+assert(!workspacePath('/workspaces/ws_1/billing/plans','POST'));
+assert(workspacePath('/workspaces/ws_1/billing/clients','GET'));
+assert(workspacePath('/workspaces/ws_1/billing/clients','POST'));
+assert(!workspacePath('/workspaces/ws_1/billing/clients?workspace=ws_2','GET'));
 for(const method of ['POST','DELETE'])assert(!workspacePath('/billing/plans',method));
 for(const path of ['/workspaces/ws_1/billing/orders','/workspaces/ws_1/billing/orders/46a165c1-395c-4d8f-8770-4c974b711f64/checkout','/workspaces/ws_1/billing/orders/46a165c1-395c-4d8f-8770-4c974b711f64/refresh'])assert(workspacePath(path,'POST'));
 for(const path of ['/workspaces/ws_1/billing/orders?url=evil','/workspaces/ws_1/billing/orders/../../me','/workspaces/ws_1/billing/orders/46a165c1-395c-4d8f-8770-4c974b711f64/delete'])assert(!workspacePath(path,'POST'));

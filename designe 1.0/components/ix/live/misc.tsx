@@ -1,5 +1,8 @@
 /* eslint-disable react-hooks/purity -- серверные компоненты: «сейчас» фиксируется один раз на HTTP-запрос. */
 import Link from 'next/link';
+import {EmailPreferences} from '@/components/workspace/email-preferences';
+import {AgencyClientPanel} from '@/components/workspace/agency-clients';
+import {isAgencyClients} from '@/lib/agency-contract';
 import {ValueView} from '@/components/value-view';
 import {BillingCheckout} from '@/components/workspace/billing';
 import {isBillingCatalog,isBillingRecovery} from '@/lib/billing-contract';
@@ -35,7 +38,7 @@ export async function Ai({ws, cursor}: {ws: string; cursor?: string}) {
       </>:<p>{snapshots.data.reason==='no_snapshot'?'Нет пригодных снимков выбранных аккаунтов. Проверьте подключение и период данных.':'Разбор подключённых данных откроется после допуска реальных источников. Синтетический пример доступен отдельно.'}</p>:<ErrorState code={snapshots.code}/>}
       {today.ok&&!!today.data.top?.length&&<><h3>Рекомендации последнего аудита</h3><p className="ix-muted ix-mini">Период аудита может отличаться от периода расчёта выше. Проверяйте дату и основания в паспорте.</p><ul>{today.data.top.map(rec=><li key={rec.id}><Link href={`/workspace/recommendations?workspace=${ws}&rec=${rec.id}`}>{rec.title}</Link></li>)}</ul></>}
     </Card><Gap />
-    <details className="ix-card"><summary>Ручной импорт и отдельные расчёты</summary><p>Этот раздел не нужен для разбора подключённого Директа. Он работает с загруженными агрегатами; синтетические примеры не относятся к вашему кабинету.</p>{intel.ok ? <IntelligencePanel workspace={ws} data={intel.data} /> : <ErrorState code={intel.code} />}</details>
+    <details className="ix-card"><summary>Ручной импорт и отдельные расчёты</summary><p>Этот раздел не нужен для разбора подключённого Директа. Он работает с загруженными агрегатами; синтетические примеры не относятся к вашему кабинету.</p>{intel.ok ? <IntelligencePanel key={ws} workspace={ws} data={intel.data} /> : <ErrorState code={intel.code} />}</details>
     <Gap /><details className="ix-card ix-analyst-method"><summary>Методика, факты и ограничения</summary>
       <p className="ix-muted ix-mini">Расчёты выполняет детерминированный код на сервере. Результат сохраняется с источниками и ограничениями. Уверенность зависит от полноты данных; при нехватке показано «Недостаточно данных».</p>
       {insights.ok && <div><b>Факты за период</b>
@@ -49,8 +52,8 @@ export async function BusinessProfile({ws}: {ws: string}) {
   const intel = await safe(pilotGet(`/workspaces/${ws}/intelligence`, isIntelligence));
   return <>
     <PageHead title="Бизнес-профиль" sub="Контекст компании для корректного анализа рекомендаций." />
-    <Info warning>Поля подтверждает владелец. AI не переписывает подтверждённый профиль; предположения отделены от фактов.</Info><Gap />
-    {intel.ok ? <IntelligencePanel workspace={ws} data={intel.data} profileOnly /> : <ErrorState code={intel.code} />}</>;
+    <Info warning>Поля подтверждает уполномоченный участник. Автор и ревизия сохраняются. Предположения отделены от фактов.</Info><Gap />
+    {intel.ok ? <IntelligencePanel key={ws} workspace={ws} data={intel.data} profileOnly /> : <ErrorState code={intel.code} />}</>;
 }
 
 export async function Team({ws, id}: {ws: string; id?: string}) {
@@ -68,7 +71,7 @@ export async function Team({ws, id}: {ws: string; id?: string}) {
 }
 
 export async function Plans({ws}: {ws:string}) {
-  const [result,catalog,recovery]=await Promise.all([safe(pilotGet(`/workspaces/${ws}/subscription`,isSubscriptionRead)),safe(pilotGet('/billing/plans',isBillingCatalog)),safe(pilotGet(`/workspaces/${ws}/billing/orders/current`,isBillingRecovery))]);
+  const [result,catalog,recovery,clients]=await Promise.all([safe(pilotGet(`/workspaces/${ws}/subscription`,isSubscriptionRead)),safe(pilotGet(`/workspaces/${ws}/billing/plans`,isBillingCatalog)),safe(pilotGet(`/workspaces/${ws}/billing/orders/current`,isBillingRecovery)),safe(pilotGet(`/workspaces/${ws}/billing/clients`,isAgencyClients))]);
   if(!result.ok)return <><PageHead title="Тарифы" sub="Подписка и доступ рабочего пространства." />{result.code==='access'?<StateBlock kind="forbidden" title="Сведения о подписке доступны владельцу и администратору">Обратитесь к владельцу организации, чтобы уточнить тариф и доступ. Ваша роль не позволяет просматривать финансовые сведения.</StateBlock>:<ErrorState code={result.code}/>}</>;
   const {subscription:s,access,checked_at,workspace_status}=result.data;
   const names={start:'Контроль',business:'Бизнес',business_plus:'Агентство'};
@@ -87,7 +90,9 @@ export async function Plans({ws}: {ws:string}) {
       </Card>
       <Card label="Доступ к анализу"><div className="ix-eyebrow">Доступ</div><h2>{access.analysis_allowed?'Анализ доступен':'Анализ недоступен'}</h2>
         <RowLine><span>Основание</span><Tag tone={access.basis==='none'?'gray':undefined}>{{subscription:'Подписка',pilot:'Пилотный доступ',trial:'7 дней бесплатно',none:'Нет действующего доступа'}[access.basis]}</Tag></RowLine>
-        {result.data.limits&&<RowLine><span>Рекламные аккаунты пространства</span><span>{result.data.limits.accounts_used} / {result.data.limits.accounts}</span></RowLine>}
+        {result.data.limits&&<><RowLine><span>Аккаунты суммарно в подписке</span><span>{result.data.limits.accounts_used} / {result.data.limits.accounts}</span></RowLine><RowLine><span>Рабочие пространства</span><span>{result.data.limits.workspaces_used??1} / {result.data.limits.workspaces??1}</span></RowLine></>}
+        {result.data.billing_managed&&<p>Стоимость относится ко всему пакету агентства. Оплата выполняется в его основном пространстве.</p>}
+        {result.data.trial_pending&&<p role="status">7 дней ещё не начались. Подключите Директ: отсчёт начнётся после первой успешной загрузки данных.</p>}
         {access.paid_until&&<p>{s&&Date.parse(access.paid_until)>Date.parse(s.period_end)?'Доступ с учётом срока на продление':'Доступ по подписке'} — до {stamp(access.paid_until)}.</p>}
         {access.pilot_until&&<p>Пилот — до {stamp(access.pilot_until)}. Пилот не означает оплаченную подписку.</p>}
         {result.data.trial&&<p role="status">{result.data.trial.active?'Бесплатный период':'Бесплатный период завершён'}: {stamp(result.data.trial.started_at)} — {stamp(result.data.trial.ends_at)}. Без карты и автосписаний.{!result.data.trial.active&&!access.analysis_allowed&&' Для нового анализа нужен действующий доступ.'}</p>}
@@ -96,7 +101,8 @@ export async function Plans({ws}: {ws:string}) {
         <p className="ix-muted ix-mini">Проверено сервером: {stamp(checked_at)}. Доступ к данным также зависит от прав пользователя и состояния источников.</p>
       </Card>
     </div><Gap />
-    {catalog.ok&&recovery.ok?<BillingCheckout workspace={ws} catalog={catalog.data} paid={access.paid} recovered={recovery.data.order}/>:<ErrorState code={!catalog.ok?catalog.code:!recovery.ok?recovery.code:'unavailable'}/>}<Gap />
+    {!result.data.billing_managed&&(catalog.ok&&recovery.ok?<BillingCheckout workspace={ws} catalog={catalog.data} paid={access.paid} recovered={recovery.data.order}/>:<ErrorState code={!catalog.ok?catalog.code:!recovery.ok?recovery.code:'unavailable'}/>)}<Gap />
+    {clients.ok&&<AgencyClientPanel workspace={ws} data={clients.data} enabled={access.paid&&s?.plan==='business_plus'}/>}<Gap />
     <p className="ix-muted ix-mini">Рекламный бюджет оплачивается отдельно. Подписка не гарантирует экономию или рост заявок. Условия — в <Link href="/legal/offer" style={{textDecoration: 'underline'}}>договоре-оферте</Link>.</p></>;
 }
 
@@ -105,7 +111,7 @@ export function Settings({ws, name}: {ws: string; name?: string}) {
     <PageHead title="Настройки" sub="Профиль, безопасность, уведомления и оформление." actions={<LinkBtn href={`/workspace/business-profile?workspace=${ws}`}>Бизнес-профиль</LinkBtn>} />
     <div className="ix-grid ix-split">
       <div className="ix-card"><h2>Настройки интерфейса</h2><ThemeRow /><RowLine><span>Анимации</span><span className="ix-muted">С учётом настроек системы</span></RowLine>
-        <RowLine><span>Уведомления</span><Tag tone="gray">Недоступно: нет API</Tag></RowLine></div>
+        <EmailPreferences key={ws} workspace={ws}/></div>
       <div className="ix-card"><h2>Безопасность и документы</h2><p>Сессией управляет сервер; токены Яндекса и пароль в браузере не хранятся.</p>
         <p className="ix-muted">Пространство: {name ?? ws}</p>
         <div className="ix-actions"><LinkBtn href="/legal">Правовая информация</LinkBtn><LinkBtn href={`/workspace/data-health?workspace=${ws}`}>Качество данных</LinkBtn></div>

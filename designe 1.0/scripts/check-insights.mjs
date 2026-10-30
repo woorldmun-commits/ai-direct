@@ -8,11 +8,14 @@ function load(file, dependencies = {}) {
   return exports;
 }
 const base = load('../lib/pilot-contract.ts');
-const { isInsights, isPassport, isActivity, isMeasurement, isWeeklyReport } = load('../lib/insights-contract.ts', {'./pilot-contract':base});
+const pacing=load('../lib/budget-pacing.ts',{'./pilot-contract':base});
+const { isInsights, isPassport, isActivity, isMeasurement, isWeeklyReport } = load('../lib/insights-contract.ts', {'./pilot-contract':base,'./budget-pacing':pacing});
 const period = {from:'2026-09-01',to:'2026-09-07'};
 const value = {amount:null,unit:'rub',source:'yandex_direct',period,calculation_type:'unavailable',data_status:'complete',data_sufficiency:'insufficient',unavailable_reason:'no_data',rule_version:null,formula:null};
 const data = {period,ad_accounts:[{id:'acc_1'}],health:{checks:[]},budget:{plan:null,actual:value,variance:value},lead_quality:{counts:{total:0,qualified:0,unresolved:0,matched:0},coverage:{matched_pct:null,qualification_complete:false,cohort_complete:false},qcpl:value,reason:'no_imported_leads'},summary:{period,generated_at:'2026-09-08T12:00:00Z',delivery:'manual_pull',facts:[],limitations:[]}};
 assert(isInsights(data));
+assert(!isInsights({...data,budget:{...data.budget,pacing:{available:true}}}));
+assert(isInsights({...data,budget:{...data.budget,pacing:{available:false,reason:'no_plan',method:'linear_budget_pacing@1'}}}));
 assert(isInsights({...data,lead_quality:{...data.lead_quality,reason:null}}));
 assert(!isInsights({...data,budget:{...data.budget,actual:{...value,amount:0}}}));
 assert(!isInsights({...data,period:{from:'2026-02-31',to:'2026-03-03'}}));

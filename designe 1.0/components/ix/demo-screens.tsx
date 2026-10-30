@@ -2,13 +2,16 @@
 import {useRouter, useSearchParams} from 'next/navigation';
 import {useState, type FormEvent} from 'react';
 import {ChartCard, ChartPlot, type SeriesPoint} from './chart';
-import {DEMO_ALERTS, DEMO_ANOMALY, DEMO_CAMPAIGNS, DEMO_DATA, DEMO_DAYS, DEMO_KPIS, DEMO_METRIC_SERIES, DEMO_PLANS, DEMO_PREV, DEMO_PROFILE, DEMO_RECS, DEMO_REPORTS, DEMO_SNAPSHOT, DEMO_SOURCES, DEMO_TEAM} from './demo-data';
+import {DEMO_ALERTS, DEMO_ANOMALY, DEMO_CAMPAIGNS, DEMO_DATA, DEMO_DAYS, DEMO_KPIS, DEMO_METRIC_SERIES, DEMO_PREV, DEMO_PROFILE, DEMO_RECS, DEMO_REPORTS, DEMO_SNAPSHOT, DEMO_SOURCES, DEMO_TEAM} from './demo-data';
 import {demoLabel, useDemo} from './demo-store';
 import {Drawer} from './drawer';
 import {DetailTabs} from './detail-tabs';
 import {useIxSearch} from './shell';
 import {DataHealth, Gap, Info, Kpi, LinkBtn, PageHead, RowLine, Spark, StateBlock, Table, Tag, btnClass} from './ui';
 import {cycleTheme} from './theme';
+import {DemoMetrics} from './demo-metrics';
+import {DemoAgency} from './demo-agency';
+import {FilterList} from './live/filter-list';
 
 const EYEBROW = 'INROU / Демо';
 const HEALTH = <DataHealth>Яндекс Директ: синтетический снимок · {DEMO_SNAPSHOT} · Статус: демонстрация. Источники и расчёты не подтверждены реальными подключениями.</DataHealth>;
@@ -24,11 +27,11 @@ function RecList() {
   const router = useRouter();
   const items = DEMO_RECS.map((r, i) => ({r, i})).filter(({r}) => !q || r.title.toLowerCase().includes(q));
   if (!items.length) return <p className="ix-muted">По запросу ничего не найдено.</p>;
-  return <>{items.map(({r, i}) => <div className="ix-recommendation-row" key={i}><RowLine>
+  return <FilterList items={items.map(({r,i})=>({key:String(i),text:r.title,kind:i===2?'inspect_only':'review',computedAt:'2025-03-31T12:00:00Z',node:<div className="ix-recommendation-row"><RowLine>
     <div><div style={{fontWeight: 650}}>{r.icon} {r.title}</div><div className="ix-muted ix-mini">{r.note}</div></div>
     <div style={{textAlign: 'right'}}><div className={'ix-tag' + (i < 2 ? ' ix-tag--warn' : '')}>{demoLabel(recs[i]) ?? r.level}</div>
       <div><button type="button" className="ix-btn" style={{marginTop: 7}} onClick={() => router.push(`?rec=${i}`, {scroll: false})}>Подробнее →</button></div></div>
-  </RowLine></div>)}</>;
+  </RowLine></div>}))}/>;
 }
 
 function Passport({index}: {index: number}) {
@@ -64,7 +67,7 @@ function KpiRow({direct, week, insufficient, compare = true}: {direct: boolean; 
     if (!direct) return <Kpi key={k} label={k} value="Нет данных" tone="muted" foot="Источник не подтверждён как доступный" />;
     if (week) return <Kpi key={k} label={k} value="Недостаточно данных" tone="muted" foot="Недельные агрегаты не входят в демо-снимок" />;
     const s = DEMO_METRIC_SERIES[i];
-    return <div key={k} style={{'--ix-chart-line': s.color} as React.CSSProperties}><Kpi label={k} value={conv ? '—' : v} count={conv ? undefined : {amount: [248640, 1284, 194, 3842000][i], suffix: i === 1 ? '' : ' ₽'}} tone={d.startsWith('−') ? 'bad' : undefined} foot={conv ? 'Недостаточно данных' : compare ? `${d} к прошлому периоду` : 'Текущий период'} spark={conv ? undefined : <Spark data={s.values} prev={compare ? s.previous : undefined} label={`Демонстрационная динамика: ${k}`} />} /></div>;
+    return <div key={k} style={{'--ix-chart-line': s.color} as React.CSSProperties}><Kpi label={k} value={conv ? 'Недостаточно данных' : v} tone="muted" trend={!conv && compare ? {text: d, direction: d.startsWith('−') ? 'down' : 'up', tone: k === 'Расходы' ? 'neutral' : 'good'} : undefined} foot={conv ? 'Нужны подтверждённые конверсии' : compare ? 'К прошлому периоду · демо' : 'Текущий период · демо'} spark={conv ? undefined : <Spark data={s.values} prev={compare ? s.previous : undefined} label={`Демонстрационная динамика: ${k}`} />} /></div>;
   })}</div>;
 }
 
@@ -107,10 +110,11 @@ function Analysis() {
     {!direct && <Info warning role="status">Этот источник ещё не подтверждён как доступный. Реальные показатели отсутствуют.</Info>}
     <Gap h={12} />
     <KpiRow direct={direct} week={week} insufficient={insufficient} compare={compare} />
-    {direct && !insufficient && !week ? <ChartCard title="Динамика и аномалии" subtitle="Синтетические интервалы марта · пунктир: сравнение · точка: пример аномалии" zoom={zoom} onZoom={setZoom} points={points(from)} showPrev={compare} series={DEMO_METRIC_SERIES} {...SERIES}
+    {direct && !insufficient && !week ? <div className="metric-analysis-layout"><ChartCard title="Динамика и аномалии" subtitle="Синтетические интервалы марта · пунктир: сравнение · точка: пример аномалии" zoom={zoom} onZoom={setZoom} points={points(from)} showPrev={compare} series={DEMO_METRIC_SERIES} {...SERIES}
       anomalies={[{...DEMO_ANOMALY, index: DEMO_ANOMALY.index - from}].filter(a => a.index >= 0)} ariaLabel="Демонстрационный график расходов за март">
       <p className="ix-mini ix-muted">Аномалия — синтетический пример. Причина изменения CPA не утверждается.</p>
-    </ChartCard> : <StateBlock kind={direct ? 'insufficient' : 'empty'} title={direct ? 'Недостаточно данных для графика' : 'Нет данных источника'}>{direct ? 'Для построения графика не хватает подтверждённых конверсий. Линия не рисуется нулями.' : 'Источник не подключён: график и таблица не подменяются примерами.'}</StateBlock>}
+    </ChartCard><aside className="metric-analysis-aside"><span className="metric-label">Синтетический пример</span><h2 style={{marginTop:18}}>Перед сравнением</h2><dl><div><dt>Текущий период</dt><dd>Март 2025</dd></div><div><dt>Предыдущий период</dt><dd>{compare ? 'Учебный пример' : 'Скрыт'}</dd></div><div><dt>Достоверность</dt><dd>Не подтверждена</dd></div></dl><p className="metric-note">На графике — нормализованный индекс. Рубли и точные значения по интервалам доступны ниже, на отдельной шкале.</p><a href="#demo-budget">Смотреть бюджет и заявки →</a></aside></div> : <StateBlock kind={direct ? 'insufficient' : 'empty'} title={direct ? 'Недостаточно данных для графика' : 'Нет данных источника'}>{direct ? 'Для построения графика не хватает подтверждённых конверсий. Линия не рисуется нулями.' : 'Источник не подключён: график и таблица не подменяются примерами.'}</StateBlock>}
+    {direct && !week && <DemoMetrics compare={compare} unavailable={insufficient}/>}
     {direct && !insufficient && !week && <MetricDetails compare={compare} />}
     <div className="ix-analysis-bottom"><div className="ix-card"><h2>Кампании</h2>{week ? <StateBlock kind="insufficient" title="Нет недельного среза">Недельные агрегаты не входят в демо-снимок. Месячные значения не выдаются за недельные.</StateBlock> : <CampaignTable platform={platform} />}</div><aside className="ix-card"><h2>Демо срез кампаний</h2>{direct && !week && !insufficient ? <><div className="ix-source-donut" role="img" aria-label="Демонстрационный срез кампаний: Бренд 60 000, Каталог 40 000, Категории 80 000 рублей; всего 180 000 рублей." /><p className="ix-mini ix-muted">Бренд 33,3% · Каталог 22,2%<br />Категории 44,5% · всего 180 000 ₽</p><Tag>Синтетический снимок</Tag></> : <p className="ix-muted">Нет подтверждённого распределения.</p>}</aside><aside className="ix-card"><h2>Качество данных</h2><p className="ix-mini">Яндекс Директ · демо</p><Tag tone="gray">Не подтверждено</Tag><details><summary className="ix-mini">Источник и ограничения</summary>{HEALTH}</details><p className="ix-mini ix-muted">Период и источник проверяются перед решением. Доли доступны только при известном знаменателе.</p></aside></div>
   </>;
@@ -162,7 +166,7 @@ export function DemoScreen({section}: {section: string}) {
       case 'ai': return <Chat />;
       case 'history': return <>{head('История', 'Неизменяемый журнал действий, решений и проверок.')}<div className="ix-card" id="history">{events.map(e => <RowLine key={e.id}><span>{e.text}</span><Tag tone="gray">{e.tag}</Tag></RowLine>)}<RowLine><span>Создан демонстрационный снимок</span><Tag tone="gray">Демо</Tag></RowLine></div></>;
       case 'team': return <>{head('Команда', 'Участники, роли и права доступа.')}<div className="ix-card"><h2>Участники организации</h2>{DEMO_TEAM.map(([a, b]) => <RowLine key={a}><b>{a}</b><span className="ix-muted">{b}</span></RowLine>)}<p className="ix-muted ix-mini">Приглашения и права должны проверяться на сервере.</p></div></>;
-      case 'plans': return <>{head('Тарифы', 'Прозрачные условия без выдуманных возможностей.')}<div className="ix-grid ix-featuregrid">{DEMO_PLANS.map(([a, b, c]) => <div key={a} className="ix-card"><div className="ix-eyebrow">Тариф</div><h2>{a}</h2><div style={{fontSize: 25, fontWeight: 700}}>{b}</div><p className="ix-muted">{c}</p><Tag tone="gray">Без подключения оплаты</Tag></div>)}</div></>;
+      case 'plans': return <>{head('Тарифы и клиентские пространства', 'Демонстрация пакета без создания подписки или оплаты.')}<DemoAgency/></>;
       case 'settings': return <>{head('Настройки', 'Профиль, безопасность, уведомления и оформление.')}
         <div className="ix-grid ix-split"><div className="ix-card"><h2>Настройки интерфейса</h2><RowLine><span>Цветовая тема</span><button type="button" className={btnClass()} onClick={cycleTheme}>Переключить</button></RowLine><RowLine><span>Анимации</span><span className="ix-muted">С учётом настроек системы</span></RowLine></div>
           <div className="ix-card"><h2>Безопасность</h2><p>Доступы и сессии должны управляться сервером. В прототипе нет настоящих аккаунтов.</p></div></div></>;

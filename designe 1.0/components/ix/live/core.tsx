@@ -48,7 +48,7 @@ export async function Overview({ws, q}: {ws: string; q: Query}) {
     </div>
     <div className="ix-grid ix-split">
       <section className="ix-card"><h2>Приоритетные решения</h2>
-        {t.top?.length ? <FilterList items={t.top.map(r => ({key: r.id, text: r.title, node: <RecRow rec={r} ws={ws} />}))} /> : <p className="ix-muted">{t.last_audit_at ? 'Активных сигналов в проверенной области нет. Это не оценка всей рекламы.' : 'Аудит ещё не выполнен. Подключите источник и дождитесь данных.'}</p>}
+        {t.top?.length ? <FilterList items={t.top.map(r => ({key: r.id, text: r.title, kind:r.action_level, exposure:r.exposure, computedAt:r.computed_at, node: <RecRow rec={r} ws={ws} />}))} /> : <p className="ix-muted">{t.last_audit_at ? 'Активных сигналов в проверенной области нет. Это не оценка всей рекламы.' : 'Аудит ещё не выполнен. Подключите источник и дождитесь данных.'}</p>}
         {t.audit_scope && <p className="ix-muted ix-mini">Проверено аккаунтов: {t.audit_scope.ad_accounts.checked}, исключено: {t.audit_scope.ad_accounts.excluded}, кампаний: {t.audit_scope.campaigns}. Период: {formatPeriod(t.audit_scope.period)}.</p>}
       </section>
       <section className="ix-card ix-assistant-preview"><h2>AI-аналитик</h2><p>Разбор начинается с данных, источников и ограничений. Доступность расчётов определяется возможностями вашего пространства.</p><LinkBtn variant="primary" href={`/workspace/ai?workspace=${ws}`}>Открыть аналитика</LinkBtn></section>
@@ -71,7 +71,7 @@ export async function Recommendations({ws, q}: {ws: string; q: Query}) {
     <PageHead title="Рекомендации" sub="Приоритеты, доказательства, решения человека." />
     {today.ok && <HealthBanner ws={ws} today={today.data} checkedAt={checkedAt} />}<Gap h={14} />
     <div className="ix-card"><h2>Решения к рассмотрению</h2>
-      {list.data.items.length ? <FilterList items={list.data.items.map(r => ({key: r.id, text: r.title, node: <RecRow rec={r} ws={ws} pageCursor={q.cursor} />}))} />
+      {list.data.items.length ? <FilterList items={list.data.items.map(r => ({key: r.id, text: r.title, kind:r.action_level, exposure:r.exposure, computedAt:r.computed_at, node: <RecRow rec={r} ws={ws} pageCursor={q.cursor} />}))} />
         : <p className="ix-muted">{today.ok && today.data.last_audit_at ? 'Активных рекомендаций нет. Проверьте свежесть и полноту данных перед выводом об эффективности.' : 'Аудит ещё не выполнен. Отсутствие рекомендаций пока не означает отсутствие проблем.'}</p>}
       <p className="ix-muted ix-mini">Суммы по карточкам нельзя складывать: общий итог на «Обзоре» уже учитывает пересечения.</p>
       <div className="ix-actions">{q.cursor && <LinkBtn href={recommendationHref(ws)}>К началу списка</LinkBtn>}{list.data.next_cursor && <LinkBtn href={recommendationHref(ws, {cursor: list.data.next_cursor})}>Следующие рекомендации</LinkBtn>}</div>

@@ -49,3 +49,5 @@
 Запуск из `backend`: `python -m app.agents verify claims.json --evidence trusted-manifest.json`.
 
 JSON Schema: `python -c "import json; from app.agents.supervisor import Submission; print(json.dumps(Submission.model_json_schema()))"`; аналогично `Manifest`. Формат и доверительная граница — в [контракте](../handoffs/project-agents-contract.md).
+
+В runtime добавлен отдельный publication gate `app/audit/verification.py`: finding пересчитывается относительно запечатанного снимка и замороженных настроек до сохранения. Intelligence сохраняет отдельные проверки финансов/сопоставимости/гипотез аудиторий и failed-запуски. Это детерминированные функции с ограниченной ответственностью, не фоновые LLM-сотрудники. Внешний LLM и рекламные записи не включены.

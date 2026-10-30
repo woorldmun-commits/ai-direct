@@ -2601,3 +2601,232 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION workspace_trial(bigint) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION workspace_trial(bigint) TO app_rw;
+
+-- Keep consumed trials unchanged; new registrations reserve their trial until data arrives.
+ALTER TABLE registration_trials ALTER COLUMN started_at DROP NOT NULL;
+ALTER TABLE registration_trials ALTER COLUMN ends_at DROP NOT NULL;
+ALTER TABLE registration_trials ADD CHECK ((started_at IS NULL) = (ends_at IS NULL));
+CREATE OR REPLACE FUNCTION start_registration_trial(usr bigint,ws bigint) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN
+  IF workspace_role(usr,ws) IS DISTINCT FROM 'owner' THEN
+    RAISE EXCEPTION 'trial requires the workspace owner' USING ERRCODE='insufficient_privilege';
+  END IF;
+  INSERT INTO registration_trials(user_id,workspace_id) VALUES(usr,ws) ON CONFLICT(user_id) DO NOTHING;
+END $$;
+
+-- Use one timestamp: the duration is an exact contract, including at the microsecond boundary.
+CREATE FUNCTION activate_first_data_trial() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE started timestamptz := clock_timestamp();
+BEGIN
+  IF NEW.status='complete' AND OLD.status<>'complete' AND 'yandex_direct'=ANY(NEW.sources) THEN
+    UPDATE registration_trials SET started_at=started,ends_at=started+interval '168 hours'
+    WHERE workspace_id=NEW.workspace_id AND started_at IS NULL;
+  END IF;
+  RETURN NEW;
+END $$;
+REVOKE ALL ON FUNCTION activate_first_data_trial() FROM PUBLIC;
+CREATE TRIGGER first_data_trial AFTER UPDATE OF status ON snapshots FOR EACH ROW
+  EXECUTE FUNCTION activate_first_data_trial();
+
+-- Membership grants billing access only. It grants no membership in another client's organization.
+CREATE TABLE agency_workspaces (
+  workspace_id bigint PRIMARY KEY REFERENCES workspaces ON DELETE CASCADE,
+  billing_workspace_id bigint NOT NULL REFERENCES workspaces ON DELETE CASCADE,
+  request_id uuid UNIQUE,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+REVOKE ALL ON agency_workspaces FROM PUBLIC,app_rw,app_token,app_system,app_deleter;
+
+CREATE FUNCTION billing_workspace(ws bigint) RETURNS bigint
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN
+  IF session_user NOT IN ('app_system','app_migrator') AND app_workspace_id() IS DISTINCT FROM ws THEN
+    RAISE EXCEPTION 'billing requires workspace context' USING ERRCODE='insufficient_privilege';
+  END IF;
+  PERFORM require_workspace_context(ws);
+  RETURN coalesce((SELECT billing_workspace_id FROM agency_workspaces WHERE workspace_id=ws),ws);
+END $$;
+REVOKE ALL ON FUNCTION billing_workspace(bigint) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION billing_workspace(bigint) TO app_rw;
+
+CREATE FUNCTION effective_subscription(ws bigint,at_time timestamptz)
+RETURNS TABLE(status text,current_period_end timestamptz,plan text,price numeric,
+              current_period_start timestamptz,auto_renew boolean)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE root bigint := billing_workspace(ws);
+BEGIN
+  RETURN QUERY SELECT s.status,s.current_period_end,s.plan,s.price,s.current_period_start,s.auto_renew
+    FROM subscriptions s JOIN workspaces w ON w.id=s.workspace_id
+    WHERE s.workspace_id=root AND s.current_period_start<=at_time
+      AND (root=ws OR (w.status='active' AND s.plan='business_plus'))
+    ORDER BY (s.status IN ('active','past_due','canceled')) DESC,s.current_period_end DESC,s.id DESC LIMIT 1;
+END $$;
+REVOKE ALL ON FUNCTION effective_subscription(bigint,timestamptz) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION effective_subscription(bigint,timestamptz) TO app_rw;
+
+CREATE FUNCTION billing_scope(ws bigint,exclude_login text DEFAULT '',take_lock boolean DEFAULT false)
+RETURNS TABLE(billing_workspace_id bigint,workspaces_used bigint,accounts_used bigint)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE root bigint := billing_workspace(ws);
+BEGIN
+  IF take_lock THEN PERFORM pg_advisory_xact_lock(root); END IF;
+  RETURN QUERY SELECT root,
+    (SELECT count(*) FROM workspaces w WHERE w.id=root OR w.id IN
+      (SELECT a.workspace_id FROM agency_workspaces a WHERE a.billing_workspace_id=root)),
+    (SELECT count(DISTINCT (c.workspace_id,coalesce(a.client_login,c.yandex_login)))
+      FROM direct_accounts a JOIN direct_connections c ON c.id=a.direct_connection_id
+      WHERE (c.workspace_id=root OR c.workspace_id IN
+        (SELECT m.workspace_id FROM agency_workspaces m WHERE m.billing_workspace_id=root))
+      AND c.status<>'disconnected' AND a.is_selected
+      AND NOT(c.workspace_id=ws AND coalesce(a.client_login,c.yandex_login)=exclude_login));
+END $$;
+REVOKE ALL ON FUNCTION billing_scope(bigint,text,boolean) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION billing_scope(bigint,text,boolean) TO app_rw;
+
+CREATE FUNCTION create_agency_client(actor bigint,ws bigint,client_name text,operation uuid) RETURNS bigint
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE org bigint; client bigint; root bigint := billing_workspace(ws);
+BEGIN
+  IF root<>ws OR workspace_role(actor,ws) IS DISTINCT FROM 'owner' THEN
+    RAISE EXCEPTION 'only billing workspace owner can create clients' USING ERRCODE='insufficient_privilege';
+  END IF;
+  IF length(trim(client_name)) NOT BETWEEN 1 AND 120 THEN RAISE EXCEPTION 'invalid client name'; END IF;
+  PERFORM pg_advisory_xact_lock(root);
+  SELECT workspace_id INTO client FROM agency_workspaces WHERE request_id=operation AND billing_workspace_id=root;
+  IF client IS NOT NULL THEN RETURN client; END IF;
+  IF NOT EXISTS(SELECT 1 FROM effective_subscription(root,now()) s JOIN workspaces w ON w.id=root
+    WHERE w.status='active' AND s.plan='business_plus'
+      AND ((s.status IN ('active','past_due') AND now()<s.current_period_end+interval '3 days')
+        OR (s.status='canceled' AND now()<s.current_period_end))) THEN
+    RAISE EXCEPTION 'active agency subscription required' USING ERRCODE='check_violation';
+  END IF;
+  INSERT INTO agency_workspaces(workspace_id,billing_workspace_id) VALUES(root,root) ON CONFLICT DO NOTHING;
+  IF (SELECT count(*) FROM agency_workspaces WHERE billing_workspace_id=root)>=5 THEN
+    RAISE EXCEPTION 'agency workspace limit reached' USING ERRCODE='check_violation';
+  END IF;
+  org := create_organization(actor,trim(client_name),'business');
+  client := create_workspace(actor,org,trim(client_name));
+  INSERT INTO agency_workspaces(workspace_id,billing_workspace_id,request_id) VALUES(client,root,operation);
+  RETURN client;
+END $$;
+REVOKE ALL ON FUNCTION create_agency_client(bigint,bigint,text,uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION create_agency_client(bigint,bigint,text,uuid) TO app_rw;
+
+CREATE FUNCTION agency_clients(actor bigint,ws bigint)
+RETURNS TABLE(workspace_id bigint,name text,status text)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN
+  PERFORM require_workspace_context(ws);
+  IF billing_workspace(ws)<>ws OR workspace_role(actor,ws) IS DISTINCT FROM 'owner' THEN
+    RAISE EXCEPTION 'only billing owner can list clients' USING ERRCODE='insufficient_privilege';
+  END IF;
+  RETURN QUERY SELECT w.id,w.name,w.status FROM workspaces w WHERE w.id=ws OR w.id IN
+    (SELECT a.workspace_id FROM agency_workspaces a WHERE a.billing_workspace_id=ws) ORDER BY w.id;
+END $$;
+REVOKE ALL ON FUNCTION agency_clients(bigint,bigint) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION agency_clients(bigint,bigint) TO app_rw;
+
+-- Separate test/live capacity. Completed enrolments cannot be reset by deleting a workspace.
+CREATE TABLE founder_enrollments (
+  user_id bigint REFERENCES users ON DELETE SET NULL,
+  test boolean NOT NULL,
+  slot smallint NOT NULL CHECK(slot BETWEEN 1 AND 20),
+  workspace_id bigint REFERENCES workspaces ON DELETE SET NULL,
+  payments smallint NOT NULL DEFAULT 0 CHECK(payments BETWEEN 0 AND 3),
+  PRIMARY KEY(test,slot), UNIQUE(user_id,test)
+);
+REVOKE ALL ON founder_enrollments FROM PUBLIC,app_rw,app_token,app_system,app_deleter;
+
+CREATE FUNCTION founder_offer(actor bigint,ws bigint,is_test boolean,reserve_slot boolean DEFAULT false)
+RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE used integer; bound bigint; free_slot smallint;
+BEGIN
+  PERFORM billing_workspace(ws);
+  IF coalesce(workspace_role(actor,ws),'') NOT IN ('owner','admin') THEN
+    RAISE EXCEPTION 'billing manager required' USING ERRCODE='insufficient_privilege';
+  END IF;
+  IF reserve_slot THEN PERFORM pg_advisory_xact_lock(hashtextextended('inrou-founder:'||is_test::text,0)); END IF;
+  SELECT payments,workspace_id INTO used,bound FROM founder_enrollments WHERE user_id=actor AND test=is_test;
+  IF FOUND THEN RETURN CASE WHEN bound=ws THEN 3-used ELSE 0 END; END IF;
+  IF EXISTS(SELECT 1 FROM billing_orders WHERE actor_id=actor AND test=is_test AND status='succeeded') THEN RETURN 0; END IF;
+  SELECT n::smallint INTO free_slot FROM generate_series(1,20) n WHERE NOT EXISTS
+    (SELECT 1 FROM founder_enrollments f WHERE f.test=is_test AND f.slot=n) ORDER BY n LIMIT 1;
+  IF free_slot IS NULL THEN RETURN 0; END IF;
+  IF reserve_slot THEN
+    INSERT INTO founder_enrollments(user_id,test,slot,workspace_id) VALUES(actor,is_test,free_slot,ws);
+  END IF;
+  RETURN 3;
+END $$;
+REVOKE ALL ON FUNCTION founder_offer(bigint,bigint,boolean,boolean) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION founder_offer(bigint,bigint,boolean,boolean) TO app_rw;
+
+CREATE FUNCTION founder_payment() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN
+  IF NEW.status='succeeded' AND OLD.status<>'succeeded' AND NEW.sku='control' AND NEW.amount_minor=199000 THEN
+    UPDATE founder_enrollments SET payments=least(payments+1,3)
+    WHERE user_id=NEW.actor_id AND test=NEW.test AND workspace_id=NEW.workspace_id;
+  ELSIF NEW.status='canceled' AND OLD.status<>'canceled' THEN
+    DELETE FROM founder_enrollments WHERE user_id=NEW.actor_id AND test=NEW.test
+      AND workspace_id=NEW.workspace_id AND payments=0;
+  END IF;
+  RETURN NEW;
+END $$;
+REVOKE ALL ON FUNCTION founder_payment() FROM PUBLIC;
+CREATE TRIGGER founder_payment AFTER UPDATE OF status ON billing_orders FOR EACH ROW EXECUTE FUNCTION founder_payment();
+
+CREATE TABLE worker_heartbeats (
+  name text PRIMARY KEY CHECK (name ~ '^[a-z_]+$'),
+  started_at timestamptz NOT NULL DEFAULT now(),
+  heartbeat_at timestamptz NOT NULL,
+  last_success_at timestamptz,
+  phase text NOT NULL CHECK (phase IN ('idle','sync','measurement','verification','mail')),
+  last_error_code text CHECK (last_error_code ~ '^[a-z_]+$')
+);
+REVOKE ALL ON worker_heartbeats FROM PUBLIC, app_rw, app_token, app_deleter;
+GRANT SELECT, INSERT, UPDATE ON worker_heartbeats TO app_system;
+
+CREATE TABLE workspace_email_preferences (
+  workspace_id bigint NOT NULL REFERENCES workspaces ON DELETE CASCADE,
+  user_id bigint NOT NULL REFERENCES users ON DELETE CASCADE,
+  enabled boolean NOT NULL DEFAULT false,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (workspace_id,user_id)
+);
+ALTER TABLE workspace_email_preferences ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant ON workspace_email_preferences TO app_rw
+  USING (workspace_id=app_workspace_id()) WITH CHECK (workspace_id=app_workspace_id());
+CREATE POLICY system ON workspace_email_preferences TO app_system USING (true) WITH CHECK (true);
+GRANT SELECT,INSERT,UPDATE ON workspace_email_preferences TO app_rw;
+
+ALTER TABLE notifications ADD COLUMN recipient_user_id bigint REFERENCES users ON DELETE SET NULL;
+ALTER TABLE notifications ADD COLUMN available_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE notifications ADD COLUMN locked_until timestamptz;
+ALTER TABLE notifications ADD COLUMN lease_token uuid;
+ALTER TABLE notifications ADD COLUMN last_error_code text CHECK (last_error_code ~ '^[a-z_]+$');
+
+CREATE FUNCTION product_email_recipients(wid bigint)
+RETURNS TABLE(user_id bigint,email text) LANGUAGE sql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+ SELECT p.user_id,c.email FROM workspace_email_preferences p
+ JOIN effective_workspace_access a ON a.workspace_id=p.workspace_id AND a.user_id=p.user_id
+ JOIN users u ON u.id=p.user_id AND u.status='active'
+ JOIN email_credentials c ON c.user_id=p.user_id AND c.verified_at IS NOT NULL
+ JOIN workspaces w ON w.id=p.workspace_id AND w.status='active'
+ WHERE p.workspace_id=wid AND p.enabled
+$$;
+REVOKE ALL ON FUNCTION product_email_recipients(bigint) FROM PUBLIC,app_rw,app_token,app_deleter;
+GRANT EXECUTE ON FUNCTION product_email_recipients(bigint) TO app_system;
+
+CREATE FUNCTION product_email_available(actor bigint,wid bigint)
+RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN
+ IF app_workspace_id() IS DISTINCT FROM wid OR workspace_role(actor,wid) IS NULL THEN
+  RAISE EXCEPTION 'workspace unavailable' USING ERRCODE='insufficient_privilege';
+ END IF;
+ RETURN EXISTS(SELECT 1 FROM email_credentials c JOIN users u ON u.id=c.user_id
+               WHERE c.user_id=actor AND c.verified_at IS NOT NULL AND u.status='active');
+END $$;
+REVOKE ALL ON FUNCTION product_email_available(bigint,bigint) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION product_email_available(bigint,bigint) TO app_rw;

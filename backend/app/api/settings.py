@@ -56,6 +56,7 @@ class Settings:
     proxy_hmac_key: str = field(default='', repr=False)
     intelligence_enabled: bool = False
     intelligence_real_data_approved: bool = False
+    product_email_enabled: bool = False
 
     def __post_init__(self):
         if self.proxy_hmac_key and len(self.proxy_hmac_key) < 32:
@@ -118,6 +119,7 @@ class Settings:
             proxy_hmac_key=env.get('API_PROXY_HMAC_KEY',''),
             intelligence_enabled=_flag(env.get('INROU_INTELLIGENCE_ENABLED')),
             intelligence_real_data_approved=_flag(env.get('INROU_INTELLIGENCE_REAL_DATA_APPROVED')),
+            product_email_enabled=env.get('INROU_PRODUCT_EMAIL_ENABLED') == '1',
             oauth_direct=direct, token_keys=keys,
             database_url=env.get("API_DATABASE_URL", ""),
             allowed_origins=origins,

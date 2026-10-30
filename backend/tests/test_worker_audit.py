@@ -242,6 +242,56 @@ def test_not_enough_data_does_not_resolve(rw, ws):
         one(rw, "SELECT rules_skipped FROM audit_runs WHERE id = %s", second.audit_run_id)
 
 
+def test_global_business_policy_abstention_does_not_resolve_existing_issue(rw, ws):
+    from psycopg.types.json import Jsonb
+    from test_intelligence_api import PROFILE
+    from app.intelligence.profiles import BusinessFields
+    sync(rw, ws)
+    audit(rw, ws, 'before-profile')
+    before = open_issues(rw, ws)
+    assert before > 0
+    owner = one(rw, 'SELECT user_id FROM effective_workspace_access WHERE workspace_id=%s LIMIT 1', ws['ws'])
+    fields = BusinessFields.model_validate(PROFILE).model_dump(mode='json')
+    provenance = {key: {'origin': 'user_confirmed', 'actor_id': owner, 'updated_at': NOW.isoformat()} for key in fields}
+    rw.execute('INSERT INTO intelligence_profiles(workspace_id,revision,payload,created_by) VALUES(%s,1,%s,%s)',
+        (ws['ws'], Jsonb({'revision': 1, 'fields': fields, 'provenance': provenance}), owner))
+    after = audit(rw, ws, 'unconfirmed-policy')
+    assert open_issues(rw, ws) == before
+    assert events(rw, ws) == []
+    assert 'business_context_required' in str(one(rw, 'SELECT rules_skipped FROM audit_runs WHERE id=%s', after.audit_run_id))
+
+
+def test_small_sample_low_cpa_does_not_resolve_existing_issue(rw, ws):
+    from psycopg.types.json import Jsonb
+    from test_intelligence_api import PROFILE
+    from app.intelligence.profiles import BusinessFields
+    from app.sources.conversion import ConversionDefinition
+    snap_id = sync(rw, ws)
+    audit(rw, ws, 'before-small-sample')
+    before = open_issues(rw, ws)
+    assert before > 0
+    rows = rw.execute('''SELECT level,campaign_id,date,impressions,clicks,cost,conversions
+        FROM stat_rows WHERE snapshot_id=%s AND level='campaign' ''', (snap_id,)).fetchall()
+    stats = tuple(StatRow(level, cid, day, impr, clicks, Decimal('10'), Decimal('1'))
+        for level, cid, day, impr, clicks, cost, conv in rows)
+    snap = Snapshot('x', TO-timedelta(36), TO, TO-timedelta(2), frozenset({'yandex_direct'}), stats,
+        ConversionDefinition(555, (111, 222)), campaign_strategies={'12345': 'manual_bidding'})
+    run_id = one(rw, '''INSERT INTO sync_runs(workspace_id,direct_account_id,kind,status,started_at)
+        VALUES(%s,%s,'resync','running',now()) RETURNING id''', ws['ws'], ws['account'])
+    write_snapshot(rw, sync_run_id=run_id, workspace_id=ws['ws'], release_id=ws['release'], snapshot=snap,
+        data_until=DATA_UNTIL)
+    fields = BusinessFields.model_validate({**PROFILE, 'evaluation_policy': {'counter_id': 555,
+        'goal_ids': [111, 222], 'attribution': 'cross_device_last_significant', 'conversion_stage': 'lead',
+        'conversion_lag_days': 0, 'minimum_conversions': 100}}).model_dump(mode='json')
+    provenance = {key: {'origin': 'user_confirmed', 'actor_id': ws['user'], 'updated_at': NOW.isoformat()} for key in fields}
+    rw.execute('INSERT INTO intelligence_profiles(workspace_id,revision,payload,created_by) VALUES(%s,1,%s,%s)',
+        (ws['ws'], Jsonb({'revision': 1, 'fields': fields, 'provenance': provenance}), ws['user']))
+    after = audit(rw, ws, 'small-sample')
+    assert open_issues(rw, ws) == before
+    assert events(rw, ws) == []
+    assert 'volume_insufficient' in str(one(rw, 'SELECT rules_skipped FROM audit_runs WHERE id=%s', after.audit_run_id))
+
+
 def test_done_recommendation_is_left_for_measurement(rw, ws):
     rw.execute("INSERT INTO workspace_settings (workspace_id, target_cpa) VALUES (%s, 3000)", (ws["ws"],))  # review
     snap = sync(rw, ws)

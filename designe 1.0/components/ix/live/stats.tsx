@@ -7,6 +7,7 @@ import {StatsView} from './stats-view';
 import {ErrorState} from './parts';
 import type {Query} from './core';
 import Link from 'next/link';
+import {PeriodPicker} from '../period-picker';
 
 export async function LiveStats({ws, q, campaign, title='Анализ рекламы', compact=false}: {ws:string;q:Query;campaign?:string;title?:string;compact?:boolean}) {
   const days = q.days ?? '30';
@@ -22,7 +23,7 @@ export async function LiveStats({ws, q, campaign, title='Анализ рекла
   const stale=Date.now()-Date.parse(data.period.to+'T21:00:00Z')>72*3_600_000;
   return <>
     <div className="ix-stats-toolbar"><>{compact?<h2>{title}</h2>:<PageHead title={campaign?`Кампания ${campaign}`:title} sub="Яндекс Директ · выбранные аккаунты" />}</>
-    <form className="ix-actions ix-stats-filters" method="get"><input type="hidden" name="workspace" value={ws}/><label>Период <select name="days" className="ix-pill" defaultValue={days}><option value="7">7 дней</option><option value="30">30 дней</option></select></label><label>Аккаунт <select name="ad_account" className="ix-pill" defaultValue={q.ad_account??''} required={!!campaign}>{!campaign&&<option value="">Все выбранные</option>}{data.accounts.map(account=><option key={account} value={account}>{account}</option>)}</select></label><button type="submit" className="ix-btn">Показать</button></form></div>
+    <form className="ix-actions ix-stats-filters" method="get"><input type="hidden" name="workspace" value={ws}/><PeriodPicker days={days} period={data.period}/><label>Аккаунт <select name="ad_account" className="ix-pill" defaultValue={q.ad_account??''} required={!!campaign}>{!campaign&&<option value="">Все выбранные</option>}{data.accounts.map(account=><option key={account} value={account}>{account}</option>)}</select></label><button type="submit" className="ix-btn">Показать</button></form></div>
     <Info warning={!data.scope.complete||stale}>{stale&&'Данные требуют обновления · '}{data.period.from} — {data.period.to} · аккаунтов {data.scope.included}/{data.scope.selected}.{data.scope.excluded.length>0&&` Исключено: ${data.scope.excluded.map(x=>`${x.ad_account} (${x.reason})`).join(', ')}.`} <Link href={`/workspace/data-health?workspace=${ws}`}>Качество данных →</Link></Info>
     <div className="ix-stats-content"><StatsView data={data} ws={ws} days={days} detail={!!campaign} compact={compact}/></div>
     {!campaign&&!compact&&<div className="ix-actions" style={{marginTop:12}}>{q.offset&&<LinkBtn href={`?workspace=${ws}&days=${days}${q.ad_account?'&ad_account='+q.ad_account:''}`}>К началу</LinkBtn>}{data.next_offset!==null&&<LinkBtn href={`?workspace=${ws}&days=${days}${q.ad_account?'&ad_account='+q.ad_account:''}&offset=${data.next_offset}`}>Следующие кампании</LinkBtn>}<span className="ix-muted ix-mini">Всего кампаний: {data.campaign_count}. Поиск и сортировка — в текущей странице списка.</span></div>}

@@ -37,7 +37,9 @@ try {
  assert(await page.getByRole('heading',{name:'Решение человека'}).isVisible());
  await page.getByRole('tab',{name:'Обзор',exact:true}).click();
  assert(await page.getByRole('heading',{name:'Что проверить или изменить вручную'}).isVisible());
- assert.match(await page.locator('main').innerText(),/Автоматическая сверка пока недоступна/);
+ assert.match(await page.locator('main').innerText(),/Решение, ручное выполнение и проверка результата — отдельные шаги/);
+ assert.match(await page.locator('main').innerText(),/Автоматических изменений рекламы нет/);
+ assert.equal(await page.getByRole('button',{name:/Применить в Директе/}).count(),0);
  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
  await page.screenshot({path:path.join(out,'passport-320.png'),fullPage:true});
  assert.deepEqual(await page.evaluate(()=>window.__violations),[]);

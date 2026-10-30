@@ -47,13 +47,14 @@ const element = (tag, attributes = {}) => function MockElement({children}) {retu
 const mocks = {
   'next/link': {default: ({children, ...props}) => React.createElement('a', props, children)},
   '@/components/brand-mark': {BrandMark: () => null}, 'next/image': {default: () => null},
+  './product-tour': {ProductTour: () => null},
   'next/navigation': {notFound: () => {throw new Error('404');}, redirect: () => {throw new Error('redirect');}},
   '@/components/workspace/direct-connect': {}, '@/components/workspace/intelligence': {},
   '@/lib/intelligence-contract': {},
   '@/lib/ix-live': {resolveWorkspace: async () => ({ok: true, selected: {id: 1}, workspaces: []}),
     safe: async value => apiError ? {ok: false, code: 'unavailable'} : {ok: true, data: await value}, stamp: value => String(value)},
   '@/lib/pilot': {pilotGet: async () => today}, '@/lib/pilot-contract': {isToday: () => true},
-  './live/parts': {ErrorState: () => React.createElement('p', {role: 'alert'}, 'Unavailable'), sourceState: () => ({label: 'Source'})},
+  './live/parts': {AuditLimitations: () => null, ErrorState: () => React.createElement('p', {role: 'alert'}, 'Unavailable'), sourceState: () => ({label: 'Source'})},
   './ui': {Card: element('article'), LinkBtn: element('a'), RowLine: element('section', {'data-row': ''}),
     StateBlock: element('section'), Tag: element('span')},
 };

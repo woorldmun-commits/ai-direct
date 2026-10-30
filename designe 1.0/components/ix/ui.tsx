@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type {ReactNode} from 'react';
 import {GRID, H, W, scaleFor, segments, xAt} from './geometry';
 import {CountUp} from './count-up';
+import {MetricTrend} from '@/components/workspace/metric-cards';
 
 export const cx = (...parts: (string | false | null | undefined)[]) => parts.filter(Boolean).join(' ');
 export const btnClass = (variant?: 'primary' | 'wine') => cx('ix-btn', variant && `ix-btn--${variant}`);
@@ -32,11 +33,12 @@ export function Spark({data, prev, label}: {data: (number | null)[]; prev?: (num
   </svg>;
 }
 
-export function Kpi({label, value, foot, tone, spark, count}: {label: string; value: ReactNode; foot?: ReactNode; tone?: 'good' | 'bad' | 'muted'; spark?: ReactNode; count?: {amount: number; suffix?: string}}) {
+export function Kpi({label, value, foot, tone, spark, count, trend}: {label: string; value: ReactNode; foot?: ReactNode; tone?: 'good' | 'bad' | 'muted'; spark?: ReactNode; count?: {amount: number; suffix?: string}; trend?: {text: string; direction: 'up' | 'down'; tone?: 'good' | 'bad' | 'neutral'}}) {
   return <div className="ix-card ix-kpi">
     <div className="ix-muted ix-mini">{label}</div>
     <div className="ix-value">{count ? <CountUp {...count}>{value}</CountUp> : value}</div>
-    {foot && <span className={tone === 'bad' ? 'ix-bad' : tone === 'muted' ? 'ix-muted ix-mini' : 'ix-trend'}>{foot}</span>}
+    {trend && <div><MetricTrend {...trend}/></div>}
+    {foot && <span className={tone === 'bad' ? 'ix-bad ix-kpi-footer' : 'ix-kpi-footer'}>{foot}</span>}
     {spark}
   </div>;
 }

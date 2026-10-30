@@ -11,7 +11,8 @@
     "test:pilot": "node --experimental-strip-types scripts/check-pilot.mjs",
     "test:ix": "node scripts/check-ix.mjs",
     "test:remediation": "node scripts/check-remediation.mjs",
-    "test:deep-audit": "node scripts/check-deep-audit.mjs"
+    "test:deep-audit": "node scripts/check-deep-audit.mjs",
+    "test:customer-journey": "node scripts/check-customer-journey.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.49.0",

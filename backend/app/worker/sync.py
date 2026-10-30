@@ -77,6 +77,7 @@ class _Run:
     metrika_counter_id: int | None
     definition: ConversionDefinition | None
     definition_error: str | None = None  # настройки в БД не складываются в определение конверсии
+    history_days: int = 37
 
 
 def _load_run(conn: psycopg.Connection, sync_run_id: int) -> _Run | None:
@@ -93,11 +94,16 @@ def _load_run(conn: psycopg.Connection, sync_run_id: int) -> _Run | None:
     if row is None:
         return None
     *head, counter_id, goal_ids, attribution = row
+    from app.intelligence.profiles import BusinessProfile
+    from app.rules.business import history_days
+    profile = conn.execute('SELECT payload FROM intelligence_profiles WHERE workspace_id=%s ORDER BY revision DESC LIMIT 1',
+                           (head[1],)).fetchone()
+    days = history_days(BusinessProfile.model_validate(profile[0]).model_dump(mode='json') if profile else None)
     if not counter_id:
-        return _Run(*head, None)
+        return _Run(*head, None, history_days=days)
     # замораживается здесь: снимок получит определение, действовавшее в момент синхронизации
     try:
-        return _Run(*head, ConversionDefinition(counter_id, tuple(sorted(set(goal_ids))), attribution))
+        return _Run(*head, ConversionDefinition(counter_id, tuple(sorted(set(goal_ids))), attribution), history_days=days)
     except ValueError:  # > 10 целей, пустой список, неизвестная атрибуция — ошибка настроек, а не вечный повтор
         return _Run(*head, None, "invalid_conversion_definition")
 
@@ -139,7 +145,7 @@ def _retry(conn: psycopg.Connection, run: _Run, e: RetryLater, now: datetime) ->
 
 def _fetch(run: _Run, direct: DirectSource, metrika: MetrikaSource | None,
            period_to: date) -> Snapshot | SyncFailure:
-    snap = sync_account(direct, run.login, run.definition, period_to, placements=placements_report_enabled())
+    snap = sync_account(direct, run.login, run.definition, period_to, placements=placements_report_enabled(), history_days=run.history_days)
     if isinstance(snap, Snapshot) and run.definition is not None and metrika is not None:
         snap = with_metrika(snap, sync_metrika(metrika, run.definition, snap.period_from, snap.period_to))
     return snap

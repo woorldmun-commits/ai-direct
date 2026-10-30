@@ -18,6 +18,7 @@ from app.api.legal import router as legal_router
 from app.api.workspace_insights import router as insights_router
 from app.api.intelligence import router as intelligence_router
 from app.api.recommendation_flow import router as recommendation_flow_router
+from app.api.notification_preferences import router as notification_preferences_router
 from app.api.middleware import BoundaryMiddleware
 from app.api.routes import router
 from app.api.today import router as today_router
@@ -55,5 +56,6 @@ def create_app(settings: Settings | None = None, pool: ConnectionPool | None = N
     app.include_router(insights_router, prefix=PREFIX)
     app.include_router(intelligence_router, prefix=PREFIX)
     app.include_router(recommendation_flow_router, prefix=PREFIX)
+    app.include_router(notification_preferences_router, prefix=PREFIX)
     app.add_middleware(BoundaryMiddleware, settings=settings)
     return app

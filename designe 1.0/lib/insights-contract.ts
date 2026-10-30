@@ -1,10 +1,11 @@
 import {isValue} from './pilot-contract';
 import type {Value} from './value';
+import {isBudgetPacing,type BudgetPacing} from './budget-pacing';
 
 export type WorkspaceInsights={
  period:{from:string;to:string};ad_accounts?:{id:string}[];
  health:{checks:{id:string;status:'ok'|'attention'|'unavailable';reason:string;action:string}[]};
- budget:{plan:null|{period:{from:string;to:string};amount:string;currency:string};actual:Value;variance:Value};
+ budget:{plan:null|{period:{from:string;to:string};amount:string;currency:string};actual:Value;variance:Value;pacing?:BudgetPacing};
  lead_quality:{counts:{total:number;qualified:number;unresolved:number;matched:number};coverage:{matched_pct:string|null;qualification_complete:boolean;cohort_complete:boolean};qcpl:Value;reason:string|null};
  summary:{period:{from:string;to:string};generated_at:string;delivery:string;facts:{id:string;label:string;value:Value|null;detail:string}[];limitations:string[]};
 };
@@ -16,7 +17,7 @@ const count=(v:unknown)=>Number.isSafeInteger(v)&&Number(v)>=0;
 export function isInsights(v:unknown):v is WorkspaceInsights{
  if(!record(v)||!period(v.period)||!record(v.health)||!Array.isArray(v.health.checks)||v.health.checks.length>100
   ||!v.health.checks.every(c=>record(c)&&text(c.id)&&['ok','attention','unavailable'].includes(String(c.status))&&text(c.reason)&&text(c.action))
-  ||!record(v.budget)||!isValue(v.budget.actual)||!isValue(v.budget.variance))return false;
+  ||!record(v.budget)||!isValue(v.budget.actual)||!isValue(v.budget.variance)||(v.budget.pacing!==undefined&&!isBudgetPacing(v.budget.pacing)))return false;
  const plan=v.budget.plan;if(plan!==null&&(!record(plan)||!period(plan.period)||!text(plan.amount)||!/^\d{1,12}(\.\d{1,2})?$/.test(plan.amount)||plan.currency!=='RUB'))return false;
  const leads=v.lead_quality;
  if(!record(leads)||!record(leads.counts)||!['total','qualified','unresolved','matched'].every(k=>count((leads.counts as Record<string,unknown>)[k]))

@@ -1,6 +1,7 @@
 export type SubscriptionRead = {
   checked_at:string; workspace_status:'active'|'deactivated';
-  limits?:{unit:'workspace';accounts:number;accounts_used:number};
+  limits?:{unit:'workspace'|'subscription';accounts:number;accounts_used:number;workspaces?:number;workspaces_used?:number;shared?:boolean};
+  trial_pending?:boolean;billing_managed?:boolean;
   trial?:null|{started_at:string;ends_at:string;active:boolean};
   subscription:null|{plan:'start'|'business'|'business_plus';status:'active'|'past_due'|'canceled'|'expired';price_amount:string;currency:'RUB';period_start:string;period_end:string;auto_renew:boolean};
   access:{paid:boolean;analysis_allowed:boolean;basis:'subscription'|'pilot'|'trial'|'none';paid_until:string|null;pilot_until:string|null};
@@ -11,7 +12,13 @@ const optionalInstant=(v:unknown)=>v===null||instant(v);
 const oneOf=(v:unknown,options:string[])=>typeof v==='string'&&options.includes(v);
 export function isSubscriptionRead(v:unknown):v is SubscriptionRead {
   if(!record(v)||!instant(v.checked_at)||!oneOf(v.workspace_status,['active','deactivated'])||!record(v.access))return false;
-  if(v.limits!==undefined&&(!record(v.limits)||v.limits.unit!=='workspace'||!Number.isSafeInteger(v.limits.accounts)||Number(v.limits.accounts)<1||!Number.isSafeInteger(v.limits.accounts_used)||Number(v.limits.accounts_used)<0))return false;
+  if(v.trial_pending!==undefined&&typeof v.trial_pending!=='boolean'||v.billing_managed!==undefined&&typeof v.billing_managed!=='boolean')return false;
+  if(v.limits!==undefined&&(!record(v.limits)||!oneOf(v.limits.unit,['workspace','subscription'])||!Number.isSafeInteger(v.limits.accounts)||Number(v.limits.accounts)<1||!Number.isSafeInteger(v.limits.accounts_used)||Number(v.limits.accounts_used)<0))return false;
+  if(record(v.limits)){
+    for(const key of ['workspaces','workspaces_used'])if(v.limits[key]!==undefined&&(!Number.isSafeInteger(v.limits[key])||Number(v.limits[key])<1||Number(v.limits[key])>5))return false;
+    if(v.limits.shared!==undefined&&typeof v.limits.shared!=='boolean')return false;
+  }
+  if(v.trial_pending===true&&v.trial!==null&&v.trial!==undefined)return false;
   const a=v.access,s=v.subscription;
   if(typeof a.paid!=='boolean'||typeof a.analysis_allowed!=='boolean'||!oneOf(a.basis,['subscription','pilot','trial','none'])||!optionalInstant(a.paid_until)||!optionalInstant(a.pilot_until))return false;
   if(v.trial!==undefined&&v.trial!==null&&(!record(v.trial)||!instant(v.trial.started_at)||!instant(v.trial.ends_at)||typeof v.trial.active!=='boolean'

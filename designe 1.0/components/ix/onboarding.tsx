@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/purity -- серверный компонент: «сейчас» фиксируется один раз на HTTP-запрос. */
 import Link from 'next/link';
 import {BrandMark} from '@/components/brand-mark';
+import {ProductTour} from './product-tour';
 import Image from 'next/image';
 import {notFound, redirect} from 'next/navigation';
 import {DirectConnect} from '@/components/workspace/direct-connect';
@@ -11,13 +12,13 @@ import {pilotGet} from '@/lib/pilot';
 import {isToday} from '@/lib/pilot-contract';
 import './ix.css';
 import './public/public.css';
-import {ErrorState, sourceState} from './live/parts';
+import {AuditLimitations, ErrorState, sourceState} from './live/parts';
 import {Card, LinkBtn, RowLine, StateBlock, Tag} from './ui';
 
 export const STEPS = [
   {slug: 'organization', title: 'Организация', lead: 'Рабочее пространство, в котором будут расходы, источники и рекомендации.'},
   {slug: 'connect', title: 'Подключение источника', lead: 'Яндекс Директ подключается отдельно от входа через OAuth, доступ только для чтения.'},
-  {slug: 'business-profile', title: 'Бизнес-профиль', lead: 'Необязательный контекст для импортного анализа: отрасль, цель и определение конверсии. Можно пропустить и вернуться позже.'},
+  {slug: 'business-profile', title: 'Бизнес-профиль', lead: 'Отрасль, выбранный результат и задержка конверсий определяют допустимость рекомендаций. Неизвестные значения не угадываем; профиль можно дополнить позже.'},
   {slug: 'first-audit', title: 'Первый аудит', lead: 'Загрузка данных, проверка, снимок и рекомендации. Статусы — с сервера, без имитации прогресса.'},
 ] as const;
 
@@ -34,9 +35,9 @@ export async function Onboarding({step, workspace}: {step: string; workspace?: s
   let body;
   if (!sel.ok) body = <ErrorState code={sel.code} />;
   else if (!ws) body = <StateBlock level={1} kind="empty" title="Пока нет рабочих пространств">Обратитесь к администратору, чтобы получить доступ к проекту. Создание организации через API сейчас недоступно.</StateBlock>;
-  else if (step === 'organization') body = <><Card className="ix-welcome"><div><h2>Добро пожаловать в INROU!</h2><ul><li>Подключите рекламный кабинет</li><li>Заполните бизнес-профиль</li><li>Проверьте данные первого аудита</li><li>Получите первые рекомендации</li></ul><LinkBtn variant="primary" href={`/onboarding/connect${q}`}>Начать настройку</LinkBtn></div><Image src="/reference/inrou-process-glass-v1.png" alt="Архитектурная композиция из стекла и камня" width={256} height={320} /></Card><Card><h2>Ваши рабочие пространства</h2>{sel.workspaces.map(w => <RowLine key={w.id}><b>{w.name}</b>{w.id === ws.id ? <Tag>Выбрано</Tag> : <Link className="ix-btn" href={`/onboarding/organization?workspace=${w.id}`}>Выбрать</Link>}</RowLine>)}
-    <p className="ix-muted ix-mini">Организация создаётся при регистрации. Добавление организаций и приглашения появятся с расширением backend.</p></Card></>;
-  else if (step === 'business-profile') { const intel = await safe(pilotGet(`/workspaces/${ws.id}/intelligence`, isIntelligence)); body = intel.ok ? <IntelligencePanel workspace={ws.id} data={intel.data} profileOnly /> : <ErrorState code={intel.code} />; }
+  else if (step === 'organization') body = <><Card className="ix-welcome"><div><h2>Добро пожаловать в INROU!</h2><ul><li>Подключите рекламный кабинет</li><li>Заполните бизнес-профиль</li><li>Проверьте данные первого аудита</li><li>Получите первые рекомендации</li></ul><div className="ix-actions"><LinkBtn variant="primary" href={`/onboarding/connect${q}`}>Начать настройку</LinkBtn><ProductTour workspace={ws.id}/></div></div><Image src="/reference/inrou-process-glass-v1.png" alt="Архитектурная композиция из стекла и камня" width={256} height={320} /></Card><Card><h2>Ваши рабочие пространства</h2>{sel.workspaces.map(w => <RowLine key={w.id}><b>{w.name}</b>{w.id === ws.id ? <Tag>Выбрано</Tag> : <Link className="ix-btn" href={`/onboarding/organization?workspace=${w.id}`}>Выбрать</Link>}</RowLine>)}
+    <p className="ix-muted ix-mini">Первое пространство создаётся при регистрации. Владелец действующего агентского пакета добавляет клиентские пространства в разделе «Тарифы». Приглашения участников оформляет оператор.</p></Card></>;
+  else if (step === 'business-profile') { const intel = await safe(pilotGet(`/workspaces/${ws.id}/intelligence`, isIntelligence)); body = intel.ok ? <IntelligencePanel key={ws.id} workspace={ws.id} data={intel.data} profileOnly /> : <ErrorState code={intel.code} />; }
   else if (step === 'connect') body = <DirectConnect workspace={ws.id} />;
   else {
     const today = await safe(pilotGet(`/workspaces/${ws.id}/today`, isToday));
@@ -49,7 +50,12 @@ export async function Onboarding({step, workspace}: {step: string; workspace?: s
         ['Снимок и аудит выполнены', !!today.data.last_audit_at, `Последний аудит: ${stamp(today.data.last_audit_at)}`],
         ['Проверка рекомендаций', !!today.data.last_audit_at, today.data.last_audit_at ? `Активных рекомендаций: ${today.data.counts.active}. Аудит завершён и при отсутствии находок; это не гарантия отсутствия проблем.` : 'Дождитесь завершения первого аудита.'],
       ];
-      body = <Card><h2>Что уже сделано</h2>{phases.map(([t, ok, note]) => <RowLine key={t}><div><b>{t}</b><div className="ix-muted ix-mini">{note}</div></div><Tag tone={ok ? undefined : 'gray'}>{ok ? 'Готово' : 'Не выполнено'}</Tag></RowLine>)}</Card>;
+      const next = today.data.audit_limitations?.some(item=>['business_context_required','goal_mismatch','outcome_data_required'].includes(item.code)) ? [`/onboarding/business-profile${q}`, 'Уточнить цель и ограничения бизнеса']
+        : !phases[0][1] ? [`/onboarding/connect${q}`, 'Подключить источник и проверить загрузку']
+        : !phases[1][1] ? [`/workspace/data-health${q}`, 'Проверить качество данных']
+        : !phases[2][1] ? [`/workspace/connections${q}`, 'Проверить состояние первого аудита']
+        : [`/workspace/recommendations${q}`, 'Открыть рекомендации и основания'];
+      body = <Card><h2>Что уже сделано</h2>{phases.map(([t, ok, note]) => <RowLine key={t}><div><b>{t}</b><div className="ix-muted ix-mini">{note}</div></div><Tag tone={ok ? undefined : 'gray'}>{ok ? 'Готово' : 'Не выполнено'}</Tag></RowLine>)}<AuditLimitations today={today.data} ws={ws.id}/><div className="ix-actions"><LinkBtn variant="primary" href={next[0]}>{next[1]}</LinkBtn></div>{!today.data.last_audit_at&&<p>Первый аудит ещё не завершён. В кабинете доступны состояние подключения и проверка источников.</p>}</Card>;
     }
   }
   return <div className="ix ix-pub" lang="ru"><a className="ix-skip" href="#main-content">Перейти к содержимому</a>

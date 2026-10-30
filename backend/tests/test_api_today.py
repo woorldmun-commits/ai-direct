@@ -8,6 +8,7 @@ from decimal import Decimal
 
 import pytest
 
+from app.audit import verification
 from app.contract import UNAVAILABLE_REASONS
 from app.rules.domain import SPEND_CAMPAIGN, Fact, Finding, Rule, frozen, issue_key, windows
 from app.rules.zero_conv_campaign import CHECKS
@@ -90,6 +91,7 @@ def all_values(body: dict) -> list[dict]:
 def test_today_on_real_snapshot_dedups_overlapping_cards(api, rw, audited, monkeypatch):
     """Две карточки одной кампании: «весь расход» и высокий CPA. Итог — max, а не сумма; overlap — разница."""
     monkeypatch.setattr(audit_module, "RULES", audit_module.RULES + (SPEND_RULE,))
+    monkeypatch.setattr(verification, "RULES", verification.RULES + (SPEND_RULE,))
     audit(rw, audited)
     cards = lost_of(rw, audited["ws"])
     spend, high_cpa = Decimal(cards["spend_block"]["amount"]), Decimal(cards["high_cpa"]["amount"])
@@ -121,6 +123,7 @@ def test_today_on_real_snapshot_dedups_overlapping_cards(api, rw, audited, monke
 def test_persisted_findings_declare_exposure_basis(rw, audited, monkeypatch):
     """Основа exposure пишется в evidence_meta при сохранении вывода — итог не угадывает её по суммам."""
     monkeypatch.setattr(audit_module, "RULES", audit_module.RULES + (SPEND_RULE,))
+    monkeypatch.setattr(verification, "RULES", verification.RULES + (SPEND_RULE,))
     audit(rw, audited)
     metas = dict(rw.execute("""SELECT i.issue_type, f.evidence_meta FROM findings f JOIN issues i ON i.id = f.issue_id
                                WHERE i.workspace_id = %s AND i.closed_at IS NULL""", (audited["ws"],)).fetchall())
@@ -173,6 +176,7 @@ def test_today_audit_scope_and_spent(api, rw, audited):
 def test_top_items_carry_computed_at_and_action(api, rw, audited, monkeypatch):
     """computed_at — время расчёта текущей версии (findings.created_at); action — форма §5, execution = manual."""
     monkeypatch.setattr(audit_module, "RULES", audit_module.RULES + (SPEND_RULE,))
+    monkeypatch.setattr(verification, "RULES", verification.RULES + (SPEND_RULE,))
     audit(rw, audited)
     body = get_today(api, rw, audited["user"], audited["ws"]).json()
     created = dict(rw.execute("SELECT id, created_at FROM findings").fetchall())
@@ -201,6 +205,7 @@ def test_single_card_total_equals_card_and_overlap_is_zero(api, rw, audited):
 def test_decided_recommendation_leaves_today(api, rw, audited, monkeypatch):
     """«Не буду» — решение человека: рекомендация больше не активна, её сумма не входит в итог."""
     monkeypatch.setattr(audit_module, "RULES", audit_module.RULES + (SPEND_RULE,))
+    monkeypatch.setattr(verification, "RULES", verification.RULES + (SPEND_RULE,))
     audit(rw, audited)
     rec = one(rw, """SELECT r.id FROM recommendations r JOIN issues i ON i.id = r.issue_id
                      WHERE i.workspace_id = %s AND i.issue_type = 'spend_block'""", audited["ws"])
@@ -278,6 +283,7 @@ def test_today_requires_session(api, world):
 def test_foreign_workspace_cards_never_leak(api, rw, audited, monkeypatch):
     """Другой workspace с аудитом: его итог и рекомендации не видны владельцу первого и наоборот."""
     monkeypatch.setattr(audit_module, "RULES", audit_module.RULES + (SPEND_RULE,))
+    monkeypatch.setattr(verification, "RULES", verification.RULES + (SPEND_RULE,))
     audit(rw, audited)
     stranger = user(rw)
     other = new_workspace(rw, "other", user=stranger)

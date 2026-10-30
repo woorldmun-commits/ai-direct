@@ -4,6 +4,7 @@ import type { WorkspaceInsights } from '@/lib/insights-contract';
 import { formatPeriod } from '@/lib/value';
 import { BudgetForm, LeadImportForm } from './actions';
 import {WeeklyReport} from './weekly-report';
+import {BudgetPacingCard} from './budget-pacing';
 
 const reasons:Record<string,string>={no_imported_leads:'Заявки ещё не импортированы.',cohort_completeness_unverified:'Нужен полный набор заявок за период привлечения.',acquisition_date_missing:'Укажите дату привлечения для каждой заявки.',qualification_incomplete:'Завершите квалификацию новых заявок.',scope_or_period_unmatched:'Проверьте совпадение периода и рекламных аккаунтов.',no_qualified_leads:'За период нет квалифицированных заявок.',campaign_rows_missing:'В источнике отсутствуют данные по кампаниям.',no_selected_accounts:'Выберите рекламные аккаунты.'};
 export function InsightsPanel({ workspace, data }: { workspace: string; data: WorkspaceInsights }) {
@@ -12,6 +13,7 @@ export function InsightsPanel({ workspace, data }: { workspace: string; data: Wo
   return <section id="insights" className="workspace-insights">
     <div className="pilot-section-title"><h2>Контроль данных и бюджета</h2><span>{formatPeriod(data.period)}</span></div>
     <PeriodCharts data={data}/>
+    {data.budget.pacing&&<BudgetPacingCard data={data.budget.pacing}/>}
     <div className="pilot-grid">{data.health.checks.map(check => <article className="pilot-card" key={check.id}>
       <h3>{check.id === 'direct' ? 'Директ' : check.id === 'metrika' ? 'Метрика' : check.id === 'goals' ? 'Цели' : 'Свежесть данных'}</h3>
       <span className={check.status === 'ok' ? 'pilot-ok' : 'pilot-warning'}>{check.status === 'ok' ? 'Проверка пройдена' : check.status === 'attention' ? 'Требует внимания' : 'Нет данных для проверки'}</span>

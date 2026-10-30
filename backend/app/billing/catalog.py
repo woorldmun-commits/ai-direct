@@ -1,9 +1,9 @@
 """Canonical public SKUs; persisted legacy plan codes remain unchanged."""
 
 PLANS = (
-    {'id': 'control', 'name': 'Контроль', 'plan': 'start', 'amount_minor': 299000, 'accounts': 1},
-    {'id': 'business', 'name': 'Бизнес', 'plan': 'business', 'amount_minor': 499000, 'accounts': 5},
-    {'id': 'agency', 'name': 'Агентство', 'plan': 'business_plus', 'amount_minor': 999000, 'accounts': 15},
+    {'id': 'control', 'name': 'Контроль', 'plan': 'start', 'amount_minor': 299000, 'accounts': 1, 'workspaces': 1},
+    {'id': 'business', 'name': 'Бизнес', 'plan': 'business', 'amount_minor': 499000, 'accounts': 5, 'workspaces': 1},
+    {'id': 'agency', 'name': 'Агентство', 'plan': 'business_plus', 'amount_minor': 999000, 'accounts': 15, 'workspaces': 5},
 )
 
 

@@ -1,13 +1,14 @@
 """Two-step checkout: reserve commits before a provider request can begin."""
 
 import re
+import psycopg
 from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.api.deps import Conn, CurrentWorkspace, require_manager
 from app.api.errors import ApiError
@@ -26,6 +27,7 @@ class OrderInput(BaseModel):
     request_id: UUID
     sku: Literal['control', 'business', 'agency']
     terms_sha256: str = Field(pattern=r'^[a-f0-9]{64}$')
+    expected_amount_minor: int | None = Field(default=None, gt=0, le=999000)
 
 
 def _config(request):
@@ -38,9 +40,59 @@ def _config(request):
 @router.get('/billing/plans')
 def plans(request: Request):
     config = request.app.state.settings.billing
-    return {'items': PLANS, 'unit': 'workspace', 'currency': 'RUB', 'period_days': 30, 'grace_days': 3,
+    return {'items': PLANS, 'unit': 'subscription', 'currency': 'RUB', 'period_days': 30, 'grace_days': 3,
             'auto_renew': False, 'checkout_enabled': config is not None,
             'test': config.test if config else None, 'terms_sha256': config.terms_sha256 if config else None}
+
+
+@router.get('/workspaces/{workspace_id}/billing/plans')
+def workspace_plans(request: Request, conn: Conn, ws: CurrentWorkspace):
+    require_manager(ws)
+    result = plans(request)
+    config = request.app.state.settings.billing
+    remaining = conn.execute('SELECT founder_offer(%s,%s,%s,false)',
+        (ws.actor.user_id, ws.id, config.test if config else True)).fetchone()[0]
+    result['items'] = [dict(p, amount_minor=199000, regular_amount_minor=p['amount_minor'],
+        offer_periods_remaining=remaining) if p['id']=='control' and remaining else dict(p) for p in PLANS]
+    return result
+
+
+@router.get('/workspaces/{workspace_id}/billing/clients')
+def clients(conn: Conn, ws: CurrentWorkspace):
+    if ws.role != 'owner':
+        raise ApiError(403, 'forbidden_role')
+    scope = conn.execute('SELECT * FROM billing_scope(%s)', (ws.id,)).fetchone()
+    if scope[0] != ws.id:
+        return {'managed': True, 'items': []}
+    rows = conn.execute('SELECT * FROM agency_clients(%s,%s)', (ws.actor.user_id, ws.id)).fetchall()
+    return {'managed': False, 'items': [{'id': f'ws_{r[0]}', 'name': r[1], 'status': r[2]} for r in rows]}
+
+
+class ClientInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    name: str = Field(min_length=1,max_length=120)
+    request_id: UUID
+
+    @field_validator('name')
+    @classmethod
+    def client_name(cls,value):
+        if not value.strip():
+            raise ValueError('Client name must not be blank')
+        return value.strip()
+
+
+@router.post('/workspaces/{workspace_id}/billing/clients')
+def add_client(payload: ClientInput, conn: Conn, ws: CurrentWorkspace):
+    if ws.role != 'owner':
+        raise ApiError(403, 'forbidden_role')
+    try:
+        client = conn.execute('SELECT create_agency_client(%s,%s,%s,%s)',
+            (ws.actor.user_id, ws.id, payload.name, payload.request_id)).fetchone()[0]
+    except psycopg.errors.CheckViolation:
+        raise ApiError(409, 'agency_limit_or_access', message='Нужен действующий тариф «Агентство»; в пакете не больше 5 пространств, включая основное.') from None
+    except psycopg.errors.InsufficientPrivilege:
+        raise ApiError(403, 'forbidden_role') from None
+    return {'workspace': f'ws_{client}'}
 
 
 @router.post('/workspaces/{workspace_id}/billing/orders')

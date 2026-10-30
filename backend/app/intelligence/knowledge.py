@@ -1,8 +1,12 @@
 """Source-reviewed process models, not market benchmarks or validated audiences."""
 from copy import deepcopy
 
-VERSION = 'starter-2026-10-21'
+VERSION = 'starter-2026-10-29'
 _SOURCES = {
+    'cosmetology': [('Яндекс Метрика: CRM', 'https://yandex.ru/support/metrica/ru/crm/about'),
+                    ('Битрикс24: этапы воронки', 'https://www.bitrix24.ru/journal/kak-nastroit-voronku-prodazh/')],
+    'manufacturing': [('Яндекс Метрика: CRM', 'https://yandex.ru/support/metrica/ru/crm/about'),
+                      ('Битрикс24: этапы воронки', 'https://www.bitrix24.ru/journal/kak-nastroit-voronku-prodazh/')],
     'ecommerce': [('Яндекс Метрика: ecommerce', 'https://yandex.ru/support/metrica/ru/ecommerce/data'),
                   ('Shopify: order statuses', 'https://help.shopify.com/en/manual/fulfillment/managing-orders/order-status')],
     'services': [('Битрикс24: этапы воронки', 'https://www.bitrix24.ru/journal/kak-nastroit-voronku-prodazh/'),
@@ -15,6 +19,12 @@ _SOURCES = {
             ('Яндекс Метрика: CRM', 'https://yandex.ru/support/metrica/ru/crm/about')],
 }
 _PROFILES = {
+    'cosmetology': ('Косметология', ['обращение', 'квалификация', 'запись', 'визит', 'оплата', 'повтор'],
+                    'Гипотеза процесса: запись не равна визиту или оплате. Нужны услуга, география, отмены и загрузка; медицинские рекламные требования проверяются отдельно.',
+                    ['Выбор конкретной услуги в доступном регионе', 'Повторный визит по подтверждённой потребности']),
+    'manufacturing': ('Производство и заводы', ['запрос', 'квалификация', 'техническое соответствие', 'КП', 'договор', 'оплата'],
+                      'Гипотеза процесса: редкий запрос может иметь высокую ценность; незрелый договор не доказывает убыток. Нужны спецификация, партия, маржа и стадия закупки.',
+                      ['Техническая задача и соответствие спецификации', 'Закупка и сравнение условий поставки']),
     'ecommerce': ('Интернет-магазины', ['заказ', 'оплата', 'доставка', 'отмена', 'возврат'],
                   'Подтверждение заказа в ecommerce не доказывает оплату; возвраты и себестоимость нужны для прибыли.',
                   ['Товарное намерение', 'Повторная покупка']),
@@ -34,7 +44,7 @@ _PROFILES = {
 
 
 def industries():
-    return [{'code': code, 'name': name, 'version': VERSION, 'review_status': 'source_reviewed',
+    return [{'code': code, 'name': name, 'version': VERSION, 'review_status': 'process_hypothesis' if code in ('cosmetology', 'manufacturing') else 'source_reviewed',
              'reviewed_at': '2026-10-21', 'reviewer': 'codex-source-review',
              'sources': [{'title': title, 'url': url} for title, url in _SOURCES[code]],
              'purchase_stages': stages, 'limitations': [limitation, 'Модель процесса требует подтверждения бизнесом; рыночных средних нет.']}

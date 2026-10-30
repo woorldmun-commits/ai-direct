@@ -52,6 +52,21 @@ def send(config: EmailAuthConfig, recipient: str, purpose: str, url: str):
     message['Subject'] = 'inrou: подтверждение почты' if purpose == 'verify' else 'inrou: восстановление пароля'
     message.set_content(('Подтвердите email и повторно введите выбранный пароль: ' if purpose == 'verify'
                          else 'Установите новый пароль: ') + url + '\nЕсли вы не запрашивали это письмо, ничего не делайте.')
+    _deliver(config, recipient, message)
+
+
+def send_message(config: EmailAuthConfig, recipient: str, subject: str, text: str, message_id: str):
+    if (len(recipient) > 254 or any(c in recipient for c in '\r\n')
+            or parseaddr(recipient)[1] != recipient or '@' not in recipient):
+        raise ValueError('Invalid recipient')
+    message = EmailMessage()
+    message['From'], message['To'] = config.smtp_from, recipient
+    message['Subject'], message['Message-ID'] = subject, message_id
+    message.set_content(text)
+    _deliver(config, recipient, message)
+
+
+def _deliver(config, recipient, message):
     if config.provider == 'unisender':
         # A fixed Russian API endpoint avoids SMTP blocks and cannot redirect credentials.
         try:

@@ -32,6 +32,7 @@ function Result({value,workspace}:{value:unknown;workspace:string}){
 
 export function IntelligencePanel({workspace,data,error,profileOnly=false}:{workspace:string;data:IntelligenceData|null;error?:string;profileOnly?:boolean}){
  const [busy,setBusy]=useState(''),[failure,setFailure]=useState(''),[notice,setNotice]=useState('');
+ const [policyEnabled,setPolicyEnabled]=useState(!!data?.profile?.fields.evaluation_policy);
  const active=useRef<AbortController|null>(null),attempt=useRef<{payload:string;key:string}|null>(null);
  const [importText,setImportText]=useState('');
  async function send(action:string,body:Record<string,unknown>,idempotent=false){
@@ -47,12 +48,13 @@ export function IntelligencePanel({workspace,data,error,profileOnly=false}:{work
   finally{active.current=null;setBusy('');}
  }
  if(!data)return <section className="pilot-card" role="status"><h2>Аналитический контур</h2><p>{error??'Анализ временно недоступен. Обновите страницу.'}</p></section>;
- if(!data.enabled)return <section className="pilot-card" role="status"><h2>Аналитический контур выключен</h2><p>Функция ещё не включена для рабочего пространства. Внешняя AI-модель и исполнение рекламных действий выключены.</p></section>;
+ if(!data.enabled&&!profileOnly)return <section className="pilot-card" role="status"><h2>Аналитический контур выключен</h2><p>Импортный анализ ещё не включён. Бизнес-профиль доступен отдельно. Внешняя AI-модель и исполнение рекламных действий выключены.</p></section>;
  const disabled=!!busy||!data.can_write;
  function profile(event:FormEvent<HTMLFormElement>){
   event.preventDefault();if(!data)return;const form=new FormData(event.currentTarget);
   const text=(key:string)=>String(form.get(key)??'').trim(),list=(key:string)=>text(key).split('\n').map(v=>v.trim()).filter(Boolean);
   const fields:BusinessFields={name:text('name'),industry_code:text('industry_code'),business_model:text('business_model') as 'b2b'|'b2c',products:list('products'),geography:list('geography'),currency:'RUB',timezone:'Europe/Moscow',goal:text('goal'),conversion_definition:text('conversion_definition'),average_order_value:text('average_order_value')||null,gross_margin_pct:text('gross_margin_pct')||null,sales_cycle_days:text('sales_cycle_days')?Number(text('sales_cycle_days')):null,budget_limit:text('budget_limit')||null,seasonality:text('seasonality')||null,advantages:list('advantages'),crm_available:form.get('crm_available')==='on'};
+  fields.evaluation_policy=policyEnabled?{counter_id:Number(text('policy_counter_id')),goal_ids:text('policy_goal_ids').split(',').map(v=>Number(v.trim())),attribution:text('policy_attribution'),conversion_stage:text('policy_stage') as NonNullable<BusinessFields['evaluation_policy']>['conversion_stage'],conversion_lag_days:Number(text('conversion_lag_days')),minimum_conversions:Number(text('minimum_conversions'))}:null;
   void send('profile',{expected_revision:data.profile?.revision??0,fields});
  }
  const fields=data.profile?.fields;
@@ -69,7 +71,19 @@ export function IntelligencePanel({workspace,data,error,profileOnly=false}:{work
    <label>Бизнес-цель<input name="goal" required maxLength={500} defaultValue={fields?.goal}/></label><label>Что считается конверсией<input name="conversion_definition" required maxLength={100} defaultValue={fields?.conversion_definition??'lead'} placeholder="Например, квалифицированная заявка"/></label>
    <p>Валюта: RUB. Часовой пояс: Europe/Moscow. Неизвестные значения оставьте пустыми.</p>
    {(['average_order_value','gross_margin_pct','budget_limit'] as const).map(key=><label key={key}>{{average_order_value:'Средний чек, ₽',gross_margin_pct:'Валовая маржа, %',budget_limit:'Ограничение бюджета, ₽'}[key]}<input name={key} inputMode="decimal" pattern="[0-9]+([.][0-9]{1,6})?" defaultValue={fields?.[key]??''}/></label>)}
-   <label>Цикл сделки, дней<input name="sales_cycle_days" type="number" min="0" max="3650" step="1" defaultValue={fields?.sales_cycle_days??''}/></label><label>Сезонность<textarea name="seasonality" rows={2} maxLength={500} defaultValue={fields?.seasonality??''}/></label><label className="workspace-checkbox"><input name="crm_available" type="checkbox" defaultChecked={fields?.crm_available}/>CRM доступна — это не подключение и не разрешение передачи данных</label><button className="ref-button ref-primary">Сохранить профиль</button>
+   <label>Полный цикл сделки, дней<input name="sales_cycle_days" type="number" min="0" max="3650" step="1" defaultValue={fields?.sales_cycle_days??''}/></label><label>Сезонность<textarea name="seasonality" rows={2} maxLength={500} defaultValue={fields?.seasonality??''}/></label><label className="workspace-checkbox"><input name="crm_available" type="checkbox" defaultChecked={fields?.crm_available}/>Данные квалификации, визита или оплаты доступны и учтены выбранной целью — это не подключает CRM</label>
+   <p>Срок до договора отличается от задержки выбранной конверсии: заявка может появиться сегодня, а оплата — позднее.</p>
+   <label className="workspace-checkbox"><input type="checkbox" checked={policyEnabled} onChange={e=>setPolicyEnabled(e.target.checked)}/>Подтвердить цель и зрелость данных для рекламного аудита</label>
+   <fieldset disabled={disabled||!policyEnabled}><legend>Какой результат проверять</legend>
+    <p>Счётчик, цели и атрибуция должны совпадать с подключением Директа. Неизвестную задержку не заменяйте нулём.</p>
+    <label>Счётчик Метрики<input name="policy_counter_id" type="number" min="1" step="1" required={policyEnabled} defaultValue={fields?.evaluation_policy?.counter_id??''}/></label>
+    <label>ID целей через запятую, по возрастанию без повторов<input name="policy_goal_ids" required={policyEnabled} pattern="[0-9]+( *, *[0-9]+)*" maxLength={220} defaultValue={fields?.evaluation_policy?.goal_ids.join(', ')??''}/></label>
+    <label>Атрибуция<select name="policy_attribution" required={policyEnabled} defaultValue={fields?.evaluation_policy?.attribution??''}><option value="">Выберите модель из подключения</option><option value="last">Последний переход</option><option value="cross_device_last_significant">Последний значимый, все устройства</option><option value="cross_device_first">Первый переход, все устройства</option><option value="automatic">Автоматическая</option></select></label>
+    <label>Результат<select name="policy_stage" required={policyEnabled} defaultValue={fields?.evaluation_policy?.conversion_stage??''}><option value="">Выберите подтвержденный результат</option><option value="lead">Обращение</option><option value="qualified_lead">Квалифицированное обращение</option><option value="appointment">Запись</option><option value="visit">Состоявшийся визит</option><option value="sale">Оплаченная продажа</option></select></label>
+    <label>Задержка выбранной конверсии, дней<input name="conversion_lag_days" type="number" min="0" max="3650" step="1" required={policyEnabled} defaultValue={fields?.evaluation_policy?.conversion_lag_days??''}/></label>
+    <label>Минимум конверсий для сравнения CPA<input name="minimum_conversions" type="number" min="1" max="1000" step="1" required={policyEnabled} defaultValue={fields?.evaluation_policy?.minimum_conversions??''}/></label>
+    <p>Порог согласуется со специалистом и не является отраслевым нормативом. При подтверждённой задержке до 90 дней следующая загрузка запрашивает расширенную историю. Если зрелого периода недостаточно, экономическая рекомендация не формируется.</p>
+   </fieldset><button className="ref-button ref-primary">Сохранить профиль</button>
   </fieldset></form>{data.profile&&<details><summary>Происхождение полей и изменения</summary><ul>{Object.entries(data.profile.provenance).map(([name,p])=><li key={name}>{name}: подтверждено пользователем {p.actor_id} · {stamp(p.updated_at)}</li>)}</ul></details>}</section>
   <section className="pilot-card"><h3>Отраслевые основания</h3>{data.industries.length?data.industries.map(i=><details key={i.code}><summary>{i.name} · {i.version} · {i.review_status}</summary><ul>{i.sources.map((s,k)=><li key={k}><a href={s.url} target="_blank" rel="noopener noreferrer">{s.title}</a></li>)}</ul><ul>{i.limitations.map((v,k)=><li key={k}>{v}</li>)}</ul></details>):<p>Отраслевые материалы пока недоступны. Отраслевые выводы не формируются.</p>}</section>
   {!profileOnly&&<>

@@ -1,5 +1,6 @@
 'use client';
 import {createContext, useContext, useMemo, useState, type ReactNode} from 'react';
+import {StatusToast} from './status-toast';
 
 /** Состояние демо живёт только в памяти вкладки (как в эталоне): ничего не отправляется на сервер и не меняет рекламу. */
 export type DemoRec = {decision?: 'approved' | 'postponed' | 'rejected'; manual?: boolean; verify?: boolean};
@@ -16,8 +17,9 @@ export const demoLabel = (r?: DemoRec) => !r ? undefined : r.verify ? 'Ожид�
 export function DemoProvider({children}: {children: ReactNode}) {
   const [recs, setRecs] = useState<Record<number, DemoRec>>({});
   const [events, setEvents] = useState<DemoEvent[]>([]);
+  const [notice, setNotice] = useState('');
   const value = useMemo<Store>(() => {
-    const log = (text: string, tag: string) => setEvents(e => [{id: e.length + 1, text, tag}, ...e]);
+    const log = (text: string, tag: string) => { setEvents(e => [{id: e.length + 1, text, tag}, ...e]); setNotice(text); };
     return {
       recs, events,
       decide(i, title, d) { setRecs(r => ({...r, [i]: {...r[i], decision: d}})); log(`${DEMO_LABEL[d]}: ${title}`, 'Демо'); },
@@ -31,5 +33,5 @@ export function DemoProvider({children}: {children: ReactNode}) {
       },
     };
   }, [recs, events]);
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={value}>{children}<div className="ix ix-toast-region">{notice && <StatusToast title="Сохранено только в демо" message={`${notice}. После перезагрузки сбросится. Реклама не изменена.`} onDismiss={() => setNotice('')}/>}</div></Ctx.Provider>;
 }

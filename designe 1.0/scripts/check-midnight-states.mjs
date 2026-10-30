@@ -32,7 +32,7 @@ try{
   });
   await page.setViewportSize({width:1440,height:900});
   await page.goto(base+'/',{waitUntil:'networkidle'});await page.evaluate(()=>document.fonts.ready);
-  await capture('home-master-'+theme,'.ms-landing-master');
+  await capture('home-master-'+theme,'.home-hero');
   await page.goto(base+'/demo/analysis',{waitUntil:'networkidle'});
   await page.locator('.ix-hit').nth(8).focus();await page.locator('.ix-tooltip').waitFor();await capture('analysis-keyboard-tooltip-'+theme);
   await page.goto(base+'/demo/recommendations?rec=0',{waitUntil:'networkidle'});

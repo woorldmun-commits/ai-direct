@@ -11,7 +11,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.billing.catalog import account_limit, selected_accounts
+from app.billing.catalog import account_limit
 from app.api.deps import Conn, CurrentActor, CurrentWorkspace, require_manager
 from app.api.errors import not_found
 from app.api.active import active_cards, today_msk, with_exposure
@@ -129,11 +129,15 @@ def subscription(conn: Conn, ws: CurrentWorkspace):
         paid_until = state.subscription_period_end
         if state.subscription_status in ('active', 'past_due'):
             paid_until += RENEWAL_GRACE
+    scope = conn.execute('SELECT * FROM billing_scope(%s)', (ws.id,)).fetchone()
     return {'checked_at': now, 'workspace_status': state.workspace_status,
+            'trial_pending': state.trial_pending,
+            'billing_managed': scope[0] != ws.id,
             'trial': None if state.trial_started_at is None else {
                 'started_at': state.trial_started_at, 'ends_at': state.trial_ends_at, 'active': state.trial_active},
-            'limits': {'unit': 'workspace', 'accounts': account_limit(state),
-                       'accounts_used': selected_accounts(conn, ws.id)},
+            'limits': {'unit': 'subscription', 'accounts': account_limit(state),
+                       'accounts_used': scope[2], 'workspaces': 5 if state.paid and state.subscription_plan=='business_plus' else 1,
+                       'workspaces_used': scope[1], 'shared': scope[1]>1},
             'subscription': None if state.subscription_status is None else {
                 'plan': state.subscription_plan, 'status': state.subscription_status,
                 'price_amount': format(state.subscription_price, '.2f'), 'currency': 'RUB',

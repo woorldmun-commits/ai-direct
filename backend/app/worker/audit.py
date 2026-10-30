@@ -16,6 +16,7 @@ from app.audit.persist import AccountResult, persist_finding, resolve_disappeare
 from app.audit.selection import Included, Selection, select_accounts
 from app.rules import RULES
 from app.rules.domain import AuditSettings, Finding, run
+from app.intelligence.profiles import BusinessProfile
 from app.sync.store import load_view
 from app.tenancy import workspace_scope
 from app.worker.guard import Skip, Task, guard, load_state
@@ -41,7 +42,11 @@ def _settings(conn: psycopg.Connection, workspace_id: int) -> tuple[AuditSetting
                           FROM workspace_settings WHERE workspace_id = %s""", (workspace_id,)).fetchone()
     names = ("target_cpa", "avg_check", "lead_to_sale_rate", "notify_pct_threshold", "attribution_model")
     frozen = {n: (str(v) if isinstance(v, Decimal) else v) for n, v in zip(names, row or (None,) * len(names))}
-    return AuditSettings(target_cpa=row[0] if row else None), frozen
+    profile = conn.execute('SELECT payload FROM intelligence_profiles WHERE workspace_id=%s ORDER BY revision DESC LIMIT 1',
+                           (workspace_id,)).fetchone()
+    confirmed = BusinessProfile.model_validate(profile[0]).model_dump(mode='json') if profile else None
+    frozen['business_profile'] = confirmed
+    return AuditSettings(target_cpa=row[0] if row else None, business_profile=confirmed), frozen
 
 
 def _evaluate(conn: psycopg.Connection, workspace_id: int, inc: Included, settings: AuditSettings,
@@ -65,6 +70,8 @@ def _evaluate(conn: psycopg.Connection, workspace_id: int, inc: Included, settin
                 continue
             skipped.append({"account": inc.account_id, "rule": out.rule_version, "reason": out.reason.value,
                             "object_type": out.object_type, "object_id": out.object_id})
+            if out.object_id is None:
+                result.checked.get(rule.family, set()).difference_update(campaigns)
             if out.object_id is not None:
                 touch_key(result, workspace_id, rule.family, out.object_type, out.object_id)
     return result
@@ -83,9 +90,11 @@ def _write(conn: psycopg.Connection, workspace_id: int, task_key: str, release_i
     for inc in sel.included:
         conn.execute("INSERT INTO audit_run_snapshots (audit_run_id, direct_account_id, snapshot_id) VALUES (%s, %s, %s)",
                      (audit_run_id, inc.account_id, inc.snapshot_id))
+    from app.audit.verification import PublicationVerifier
+    verifier = PublicationVerifier(conn, audit_run_id)
     for result in results:
         for f in result.findings:
-            persist_finding(conn, audit_run_id, workspace_id, release_id, result, f)
+            persist_finding(conn, audit_run_id, workspace_id, release_id, result, f, verifier=verifier)
         resolve_disappeared(conn, workspace_id, result)
     return audit_run_id
 

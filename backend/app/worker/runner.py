@@ -78,14 +78,20 @@ def process(queue, token_conn, run_id, *, provider, keys, release_id, http, now)
                                metrika=MetrikaApi(http, metrika_access) if metrika_access is not None else None,
                                release_id=release_id, period_to=cutoff, now=now)
         if isinstance(outcome, Done):
+            with workspace_scope(token_conn, ws):
+                trial = token_conn.execute('SELECT * FROM workspace_trial(%s)', (ws,)).fetchone()
+            audit_now = max(now,trial[0]) if trial and trial[0] is not None else now
             run_audit(token_conn, workspace_id=ws, task_key=f"pilot-sync:{run_id}",
-                      data_cutoff=cutoff, release_id=release_id, now=now)
+                      data_cutoff=cutoff, release_id=release_id, now=audit_now)
         log.info("run=%s result=%s", run_id, type(outcome).__name__)
     finally:
         token_conn.execute("SELECT pg_advisory_unlock(hashtextextended(%s,0))", lock)
 
 
 def tick(queue, token_conn, *, provider, keys, release_id, http, now):
+    from app.worker.progress import record
+    record(queue)
+    failed = False
     schedule_syncs(queue, token_conn, now)
     rows = queue.execute("""SELECT r.id FROM sync_runs r WHERE r.runner_managed AND r.available_at<=%s
         AND (r.status IN ('queued','running','waiting_report') OR
@@ -93,28 +99,38 @@ def tick(queue, token_conn, *, provider, keys, release_id, http, now):
                 WHERE a.workspace_id=r.workspace_id AND a.task_key='pilot-sync:'||r.id::text)))
         ORDER BY r.available_at,r.id LIMIT 25""", (now,)).fetchall()
     for (run_id,) in rows:
+        record(queue, phase='sync')
         try:
             process(queue, token_conn, run_id, provider=provider, keys=keys, release_id=release_id, http=http, now=now)
+            record(queue, phase='sync', success=True)
         except psycopg.OperationalError:
             raise  # service supervisor restarts a worker with a broken DB connection
         except Exception as exc:
+            failed = True
             queue.execute("UPDATE sync_runs SET available_at=%s + interval '60 seconds' WHERE id=%s", (now, run_id))
             log.error("run=%s failed type=%s", run_id, type(exc).__name__)
     for measurement_id in due_measurements(queue, now.astimezone(DATA_TIMEZONE).date()):
+        record(queue, phase='measurement')
         try:
             run_measurement(token_conn, measurement_id, release_id=release_id, now=now)
+            record(queue, phase='measurement', success=True)
         except psycopg.OperationalError:
             raise
         except Exception as exc:
+            failed = True
             log.error("measurement=%s failed type=%s", measurement_id, type(exc).__name__)
     for job_id, workspace_id in due_verifications(queue, now):
+        record(queue, phase='verification')
         try:
             process_verification(token_conn, job_id, workspace_id, provider=provider, keys=keys,
                                  release_id=release_id, http=http, now=now)
+            record(queue, phase='verification', success=True)
         except psycopg.OperationalError:
             raise
         except Exception as exc:
+            failed = True
             log.error("verification=%s failed type=%s", job_id, type(exc).__name__)
+    record(queue, success=not failed, error='task_failed' if failed else None)
     return len(rows)
 
 
