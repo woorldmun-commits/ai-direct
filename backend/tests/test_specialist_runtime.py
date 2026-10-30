@@ -1,6 +1,5 @@
 """Chief routing fixtures: fabricated aggregates, never a customer report."""
 from datetime import date
-from decimal import Decimal
 
 import pytest
 
