@@ -115,3 +115,33 @@ def analyze(conn, ws, audit_id, now):
     report["limitations"] = ["Только проверка агрегатов", "Причинная экономия не доказана",
                              "Внешний LLM и изменение рекламы выключены"]
     return ("completed" if report["status"] == "review_required" else "blocked"), report
+
+
+def process(conn, job_id, ws, now):
+    """Lease + fencing attempt makes concurrent/restarted workers safe."""
+    attempt = claim(conn, job_id, ws, now)
+    if attempt is None:
+        return False
+    try:
+        row = conn.execute("SELECT audit_run_id FROM chief_analysis_jobs "
+                           "WHERE id=%s AND workspace_id=%s AND status='running' AND attempts=%s",
+                           (job_id, ws, attempt)).fetchone()
+        if row is None:
+            return False
+        with workspace_scope(conn, ws):
+            status, report = analyze(conn, ws, row[0], now)
+        conn.execute("""UPDATE chief_analysis_jobs SET status=%s,report=%s,finished_at=%s,
+            error_code=NULL WHERE id=%s AND workspace_id=%s
+            AND status='running' AND attempts=%s""",
+            (status, Jsonb(report), now, job_id, ws, attempt))
+        return True
+    except Exception:
+        # No external source values, text or tokens in the error log or database.
+        final = attempt >= 4
+        conn.execute("""UPDATE chief_analysis_jobs SET status=%s,finished_at=%s,
+            error_code='diagnostic_failed',available_at=%s
+            WHERE id=%s AND workspace_id=%s AND status='running' AND attempts=%s""",
+            ("failed" if final else "queued", now if final else None,
+             now + timedelta(seconds=min(600, 30 * (2 ** attempt))),
+             job_id, ws, attempt))
+        return False
